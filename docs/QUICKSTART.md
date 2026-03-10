@@ -58,4 +58,4 @@ dctl image build --all        # rebuild base images
 
 ## Full Documentation
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) and [DCTL-MIGRATION.md](DCTL-MIGRATION.md).
+See [ARCHITECTURE.md](ARCHITECTURE.md).
