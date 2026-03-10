@@ -13,6 +13,7 @@ setup() {
   export XDG_CONFIG_HOME="${TEST_TMPDIR}/xdg-config"
   mkdir -p "${XDG_CONFIG_HOME}/dctl"
   source_dctl_functions
+  # shellcheck disable=SC2329
   workspace_path() { echo "/test/workspace"; }
   unset TERM COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION 2>/dev/null || true
 }
@@ -158,7 +159,9 @@ teardown() {
 
 @test "collect_term_env includes remote env flags for set vars" {
   local -a args
+  # shellcheck disable=SC2034
   TERM=xterm-kitty
+  # shellcheck disable=SC2034
   COLORTERM=truecolor
   collect_term_env args
   [ "${#args[@]}" -eq 4 ]
@@ -212,7 +215,7 @@ teardown() {
   data_home="${TEST_TMPDIR}/data-home"
 
   run make install \
-    BIN_DIR="${bin_dir}" \
+    BIN_DIR="$bin_dir" \
     CONFIG_DIR="${config_home}/dctl" \
     DATA_DIR="${data_home}/dctl"
   [ "$status" -eq 0 ]
@@ -220,7 +223,7 @@ teardown() {
   [ -f "${config_home}/dctl/agents/Dockerfile" ]
   [ -f "${data_home}/dctl/templates/python/devcontainer.json" ]
 
-  run env XDG_CONFIG_HOME="${config_home}" HOME="${TEST_TMPDIR}/home" \
+  run env XDG_CONFIG_HOME="$config_home" HOME="${TEST_TMPDIR}/home" \
     "${bin_dir}/dctl" image list
   [ "$status" -eq 0 ]
   [[ "$output" == *"agents"* ]]
@@ -232,7 +235,7 @@ teardown() {
   systemd_dir="${TEST_TMPDIR}/systemd-user"
   bin_dir="${TEST_TMPDIR}/bin"
 
-  run make install-systemd BIN_DIR="${bin_dir}" SYSTEMD_DIR="${systemd_dir}"
+  run make install-systemd BIN_DIR="$bin_dir" SYSTEMD_DIR="$systemd_dir"
   [ "$status" -eq 0 ]
 
   run grep -F "ExecStart=${bin_dir}/dctl image build --all" \

@@ -8,7 +8,7 @@ INSTALL := install
 CONFIG_IMAGES := agents python-dev rust-dev zig-dev
 TEMPLATE_DIRS := python rust zig
 
-.PHONY: install uninstall install-systemd uninstall-systemd test lint
+.PHONY: install uninstall install-systemd uninstall-systemd test lint check
 
 install:
 	$(INSTALL) -d "$(BIN_DIR)"
@@ -59,7 +59,14 @@ uninstall-systemd:
 	systemctl --user daemon-reload >/dev/null 2>&1 || true
 
 test:
-	bats tests
+	pre-commit run bats-tests --all-files
 
 lint:
-	shellcheck bin/dctl install.sh uninstall.sh
+	pre-commit run shellcheck --all-files
+	pre-commit run shfmt --all-files
+	pre-commit run shellharden --all-files
+	pre-commit run bashate --all-files
+	pre-commit run typos --all-files
+
+check:
+	pre-commit run --all-files

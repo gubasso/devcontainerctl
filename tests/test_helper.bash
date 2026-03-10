@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-
 setup_test_fixtures() {
   TEST_TMPDIR="$(mktemp -d "${BATS_TEST_TMPDIR}/dctl.XXXXXX")"
   export TEST_TMPDIR
@@ -8,7 +6,7 @@ setup_test_fixtures() {
 }
 
 teardown_test_fixtures() {
-  rm -rf "${TEST_TMPDIR}"
+  rm -rf "$TEST_TMPDIR"
 }
 
 enable_mocks() {
