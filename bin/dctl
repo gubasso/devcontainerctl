@@ -1,0 +1,594 @@
+#!/usr/bin/env bash
+# Unified devcontainer workspace and image management CLI
+
+set -euo pipefail
+
+readonly DCTL_VERSION="dev"
+readonly WORKSPACE_FOLDER="."
+readonly IMAGES_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/dctl"
+
+usage() {
+  cat <<'EOF'
+Usage: dctl <command-group> <command> [options]
+
+Command groups:
+  workspace    Manage the current workspace's devcontainer lifecycle
+  image        Build and inspect devcontainer base images
+  help         Show this help text
+  version      Show dctl version
+
+Examples:
+  dctl workspace up
+  dctl workspace shell
+  dctl workspace run -- claude
+  dctl image build --all
+  dctl image list
+EOF
+}
+
+usage_workspace() {
+  cat <<'EOF'
+Usage: dctl workspace <command> [options]
+
+Commands:
+  up [-- <devcontainer up args...>]
+      Start or attach to the current workspace's devcontainer.
+
+  reup [-- <devcontainer up args...>]
+      Recreate the current workspace's devcontainer.
+
+  exec [-- <command...>]
+      Execute a command in the current workspace's devcontainer.
+      Defaults to: bash
+
+  shell [<command...>]
+      Open an interactive shell, or run a command in an interactive login shell.
+
+  run [--] <command...>
+      Execute a command via bash -lc inside the devcontainer.
+
+  status
+      Show devcontainer(s) associated with the current workspace.
+
+  down
+      Stop and remove devcontainer(s) associated with the current workspace.
+
+  help
+      Show this help text.
+
+Examples:
+  dctl workspace up
+  dctl workspace reup -- --build-no-cache
+  dctl workspace exec -- id
+  dctl workspace shell codex
+  dctl workspace run -- pytest -q
+EOF
+}
+
+usage_image() {
+  cat <<'EOF'
+Usage: dctl image <command> [options]
+
+Commands:
+  build [OPTIONS] [IMAGE...]
+      Build devcontainer base images from $XDG_CONFIG_HOME/dctl.
+      If no image is specified, launches interactive fzf selection.
+
+      Options:
+        --all              Build all discovered images
+        --full-rebuild     Rebuild all images from scratch
+        --refresh-agents   Cache-bust the agents CLI layer
+        --dry-run, -n      Show what would be built without building
+        --help, -h         Show build help
+
+  list
+      List available images and exit.
+
+  help
+      Show this help text.
+
+Examples:
+  dctl image build
+  dctl image build agents
+  dctl image build --all
+  dctl image build --full-rebuild
+  dctl image build --refresh-agents agents
+  dctl image build --dry-run
+  dctl image list
+EOF
+}
+
+log() {
+  printf '\033[1;34m==>\033[0m %s\n' "$1"
+}
+
+warn() {
+  printf '\033[1;33mWARN:\033[0m %s\n' "$1" >&2
+}
+
+err() {
+  printf '\033[1;31mERROR:\033[0m %s\n' "$1" >&2
+  exit 1
+}
+
+require_cmd() {
+  local cmd="$1"
+  command -v "$cmd" >/dev/null 2>&1 || err "Missing required command: $cmd"
+}
+
+workspace_path() {
+  pwd -P
+}
+
+workspace_label_filter() {
+  printf 'label=devcontainer.local_folder=%s' "$(workspace_path)"
+}
+
+list_workspace_containers() {
+  local filter
+  filter="$(workspace_label_filter)"
+  docker ps -a --filter "$filter" --format '{{.ID}}'
+}
+
+list_running_workspace_containers() {
+  local filter
+  filter="$(workspace_label_filter)"
+  docker ps --filter "$filter" --format '{{.ID}}'
+}
+
+ensure_workspace_container_running() {
+  require_cmd docker
+  require_cmd devcontainer
+
+  local running_ids
+  running_ids="$(list_running_workspace_containers)"
+  if [[ -n "$running_ids" ]]; then
+    return 0
+  fi
+
+  log "No running devcontainer for $(workspace_path); starting one now..."
+  cmd_workspace_up
+}
+
+collect_term_env() {
+  local -n out="$1"
+  out=()
+
+  local var_name
+  for var_name in TERM COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION; do
+    if [[ -n "${!var_name:-}" ]]; then
+      out+=(--remote-env "${var_name}=${!var_name}")
+    fi
+  done
+}
+
+devcontainer_exec() {
+  local -a term_args
+  collect_term_env term_args
+  devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" "${term_args[@]}" "$@"
+}
+
+cmd_workspace_up() {
+  require_cmd devcontainer
+  local args=("$@")
+  if [[ ${#args[@]} -gt 0 && ${args[0]} == "--" ]]; then
+    args=("${args[@]:1}")
+  fi
+
+  log "Starting devcontainer for $(workspace_path)"
+  devcontainer up --workspace-folder "$WORKSPACE_FOLDER" "${args[@]}"
+}
+
+cmd_workspace_reup() {
+  require_cmd devcontainer
+  local args=("$@")
+  if [[ ${#args[@]} -gt 0 && ${args[0]} == "--" ]]; then
+    args=("${args[@]:1}")
+  fi
+
+  log "Recreating devcontainer for $(workspace_path)"
+  devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --remove-existing-container "${args[@]}"
+}
+
+cmd_workspace_exec() {
+  ensure_workspace_container_running
+
+  local args=("$@")
+  if [[ ${#args[@]} -gt 0 && ${args[0]} == "--" ]]; then
+    args=("${args[@]:1}")
+  fi
+  if [[ ${#args[@]} -eq 0 ]]; then
+    args=(bash)
+  fi
+
+  devcontainer_exec "${args[@]}"
+}
+
+cmd_workspace_shell() {
+  ensure_workspace_container_running
+
+  if [[ $# -gt 0 ]]; then
+    devcontainer_exec bash -lic "$*"
+  else
+    devcontainer_exec bash
+  fi
+}
+
+cmd_workspace_run() {
+  ensure_workspace_container_running
+
+  if [[ ${1:-} == "--" ]]; then
+    shift
+  fi
+  [[ $# -gt 0 ]] || err "run requires a command. Example: dctl workspace run -- claude"
+
+  devcontainer_exec bash -lc "$*"
+}
+
+cmd_workspace_status() {
+  require_cmd docker
+
+  local filter
+  filter="$(workspace_label_filter)"
+
+  local ids
+  ids="$(list_workspace_containers)"
+  if [[ -z "$ids" ]]; then
+    warn "No devcontainer found for workspace: $(workspace_path)"
+    return 0
+  fi
+
+  docker ps -a \
+    --filter "$filter" \
+    --format 'table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.RunningFor}}'
+}
+
+cmd_workspace_down() {
+  require_cmd docker
+
+  local filter
+  filter="$(workspace_label_filter)"
+
+  local ids
+  ids="$(list_workspace_containers)"
+  if [[ -z "$ids" ]]; then
+    warn "No devcontainer to remove for workspace: $(workspace_path)"
+    return 0
+  fi
+
+  log "Removing devcontainer(s) for $(workspace_path)"
+  docker ps -aq --filter "$filter" | xargs -r docker rm -f
+}
+
+discover_image_targets() {
+  local targets=()
+  shopt -s nullglob
+  local dir
+  for dir in "$IMAGES_DIR"/*/; do
+    if [[ -f "${dir}Dockerfile" ]]; then
+      targets+=("$(basename "$dir")")
+    fi
+  done
+  shopt -u nullglob
+
+  printf '%s\n' "${targets[@]}"
+}
+
+get_image_tag() {
+  printf 'devimg/%s:latest\n' "$1"
+}
+
+select_image_targets() {
+  local available=()
+  mapfile -t available < <(discover_image_targets)
+
+  if [[ ${#available[@]} -eq 0 ]]; then
+    err "No images found in $IMAGES_DIR (no directories with Dockerfiles)"
+  fi
+  if ! command -v fzf >/dev/null 2>&1; then
+    err "fzf not found. Install fzf or specify targets explicitly."
+  fi
+  if [[ ! -t 0 ]]; then
+    err "Interactive mode requires a terminal. Use --all or specify targets explicitly."
+  fi
+
+  local selected
+  if ! selected=$(printf '%s\n' "${available[@]}" | fzf --multi \
+    --height=~50% \
+    --layout=reverse \
+    --border \
+    --prompt="Select images to build: " \
+    --header="TAB: multi-select, ENTER: confirm, ESC: cancel"); then
+    return 1
+  fi
+
+  printf '%s\n' "$selected"
+}
+
+ensure_image_dir_exists() {
+  if [[ ! -d "$IMAGES_DIR" ]]; then
+    log "Images directory not found: $IMAGES_DIR"
+    log "Deploy with: dots devcontainerctl"
+    return 1
+  fi
+}
+
+cmd_image_list() {
+  if ! ensure_image_dir_exists; then
+    return 0
+  fi
+
+  discover_image_targets
+}
+
+cmd_image_build() {
+  local all=false
+  local full_rebuild=false
+  local refresh_agents=false
+  local no_cache=false
+  local dry_run=false
+  local targets=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help)
+        usage_image
+        return 0
+        ;;
+      --all)
+        all=true
+        shift
+        ;;
+      --full-rebuild)
+        full_rebuild=true
+        shift
+        ;;
+      --refresh-agents)
+        refresh_agents=true
+        shift
+        ;;
+      --dry-run | -n)
+        dry_run=true
+        shift
+        ;;
+      --)
+        shift
+        while [[ $# -gt 0 ]]; do
+          targets+=("$1")
+          shift
+        done
+        ;;
+      *)
+        targets+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  if [[ "$full_rebuild" == true ]]; then
+    all=true
+    no_cache=true
+  fi
+
+  if [[ "$(id -u)" -eq 0 ]]; then
+    err "Do not run as root (would bake UID 0 into images)"
+  fi
+
+  if [[ ! -d "$IMAGES_DIR" ]]; then
+    if [[ "$dry_run" == true ]]; then
+      log "Images directory not found: $IMAGES_DIR"
+      log "Deploy with: dots devcontainerctl"
+      return 0
+    fi
+    printf 'Deploy with: dots devcontainerctl\n' >&2
+    err "Images directory not found: $IMAGES_DIR"
+  fi
+
+  if [[ "$dry_run" != true ]]; then
+    require_cmd docker
+    if ! docker info >/dev/null 2>&1; then
+      err "Docker daemon not running or not accessible"
+    fi
+    if ! docker buildx version >/dev/null 2>&1; then
+      err "docker buildx not found (required for BuildKit builds)"
+    fi
+  fi
+
+  if [[ "$all" == true ]]; then
+    mapfile -t targets < <(discover_image_targets)
+    if [[ ${#targets[@]} -eq 0 ]]; then
+      err "No images found in $IMAGES_DIR (no directories with Dockerfiles)"
+    fi
+  elif [[ ${#targets[@]} -eq 0 ]]; then
+    if ! mapfile -t targets < <(select_image_targets); then
+      return 0
+    fi
+    if [[ ${#targets[@]} -eq 0 ]]; then
+      return 0
+    fi
+  fi
+
+  local target
+  for target in "${targets[@]}"; do
+    if [[ ! -d "$IMAGES_DIR/$target" || ! -f "$IMAGES_DIR/$target/Dockerfile" ]]; then
+      printf '\033[1;31mERROR:\033[0m Unknown image: %s\n' "$target" >&2
+      printf 'Available images:\n' >&2
+      discover_image_targets | sed 's/^/  /' >&2
+      exit 1
+    fi
+  done
+
+  local username dotfiles_dir
+  username="${USER:-$(id -un)}"
+  dotfiles_dir="${DOT:-${HOME}/.dotfiles}"
+  local -a build_args
+  build_args=(--build-arg "USERNAME=${username}" --build-arg "USER_UID=$(id -u)" --build-arg "USER_GID=$(id -g)")
+
+  local -a failed
+  failed=()
+
+  cd "$IMAGES_DIR"
+
+  for target in "${targets[@]}"; do
+    local tag
+    tag="$(get_image_tag "$target")"
+
+    local -a extra_contexts
+    extra_contexts=()
+    if [[ "$target" == "agents" || "$target" == "zig-dev" ]]; then
+      if [[ -d "$dotfiles_dir" ]]; then
+        extra_contexts=(--build-context "dotfiles=${dotfiles_dir}")
+      elif [[ "$dry_run" == true ]]; then
+        warn "Dotfiles not found at ${dotfiles_dir} - agents/zig-dev build would fail"
+      else
+        err "Dotfiles not found at ${dotfiles_dir} - set DOT= or ensure ~/.dotfiles exists"
+      fi
+    fi
+
+    local -a refresh_flag
+    refresh_flag=()
+    if [[ "$target" == "agents" && "$refresh_agents" == true ]]; then
+      refresh_flag=(--build-arg "CACHEBUST_AGENTS=$(date +%s)")
+    fi
+
+    if [[ "$dry_run" == true ]]; then
+      log "[dry-run] Would build: $tag"
+      if [[ ${#extra_contexts[@]} -gt 0 ]]; then
+        log "[dry-run]   dotfiles context: $dotfiles_dir"
+      fi
+      if [[ "$full_rebuild" == true ]]; then
+        log "[dry-run]   flags: --no-cache (--pull applies to agents only)"
+      fi
+      if [[ ${#refresh_flag[@]} -gt 0 ]]; then
+        log "[dry-run]   flags: --refresh-agents (cache-bust agent CLI layers)"
+      fi
+      continue
+    fi
+
+    log "Building ${tag} from ./${target}/"
+
+    local -a pull_flag
+    pull_flag=()
+    if [[ "$target" == "agents" && "$all" == true ]]; then
+      pull_flag=(--pull)
+    fi
+
+    local -a no_cache_flag
+    no_cache_flag=()
+    if [[ "$no_cache" == true ]]; then
+      no_cache_flag=(--no-cache)
+    fi
+
+    if ! docker buildx build --load \
+      "${pull_flag[@]}" \
+      "${no_cache_flag[@]}" \
+      "${refresh_flag[@]}" \
+      "${extra_contexts[@]}" \
+      "${build_args[@]}" \
+      -t "$tag" \
+      "./${target}/"; then
+      warn "Failed to build: $target"
+      failed+=("$target")
+    fi
+  done
+
+  if [[ "$dry_run" == true ]]; then
+    log "Dry-run complete"
+    return 0
+  fi
+  if [[ ${#failed[@]} -gt 0 ]]; then
+    err "Failed to build: ${failed[*]}"
+  fi
+
+  log "Build complete"
+  docker images | grep -E '^devimg/' || true
+}
+
+main_workspace() {
+  local command="${1:-help}"
+
+  case "$command" in
+    up)
+      shift
+      cmd_workspace_up "$@"
+      ;;
+    reup)
+      shift
+      cmd_workspace_reup "$@"
+      ;;
+    exec)
+      shift
+      cmd_workspace_exec "$@"
+      ;;
+    shell)
+      shift
+      cmd_workspace_shell "$@"
+      ;;
+    run)
+      shift
+      cmd_workspace_run "$@"
+      ;;
+    status)
+      shift
+      cmd_workspace_status "$@"
+      ;;
+    down)
+      shift
+      cmd_workspace_down "$@"
+      ;;
+    help | -h | --help)
+      usage_workspace
+      ;;
+    *)
+      err "Unknown workspace command: $command"
+      ;;
+  esac
+}
+
+main_image() {
+  local command="${1:-help}"
+
+  case "$command" in
+    build)
+      shift
+      cmd_image_build "$@"
+      ;;
+    list)
+      shift
+      cmd_image_list "$@"
+      ;;
+    help | -h | --help)
+      usage_image
+      ;;
+    *)
+      err "Unknown image command: $command"
+      ;;
+  esac
+}
+
+# --- Main
+main() {
+  local command_group="${1:-help}"
+
+  case "$command_group" in
+    workspace)
+      shift
+      main_workspace "$@"
+      ;;
+    image)
+      shift
+      main_image "$@"
+      ;;
+    help | -h | --help)
+      usage
+      ;;
+    version | -v | --version)
+      printf 'dctl %s\n' "$DCTL_VERSION"
+      ;;
+    *)
+      err "Unknown command group: $command_group"
+      ;;
+  esac
+}
+
+main "$@"

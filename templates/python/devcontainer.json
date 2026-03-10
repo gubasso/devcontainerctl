@@ -1,0 +1,21 @@
+{
+  "name": "${localWorkspaceFolderBasename}-sandbox",
+  "image": "devimg/python-dev:latest",
+  "mounts": [
+    // python caches
+    {
+      "source": "mise-cache",
+      "target": "${localEnv:HOME}/.local/share/mise",
+      "type": "volume"
+    },
+    {
+      "source": "poetry-cache",
+      "target": "${localEnv:HOME}/.cache/pypoetry",
+      "type": "volume"
+    }
+  ],
+  "postCreateCommand": {
+    "python": "bash -ic dev-py",
+    "pre-commit": "pre-commit install"
+  }
+}

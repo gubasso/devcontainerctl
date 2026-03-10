@@ -1,0 +1,8 @@
+[Unit]
+Description=Rebuild dctl devcontainer base images
+# Script handles missing docker/images dir with clear error messages
+ConditionPathExists=%h/.config/dctl
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/dctl image build --all

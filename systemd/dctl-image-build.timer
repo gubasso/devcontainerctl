@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly rebuild of dctl devcontainer base images
+
+[Timer]
+# Friday at 18:00 local time
+OnCalendar=Fri *-*-* 18:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

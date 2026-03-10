@@ -1,0 +1,21 @@
+{
+  "name": "${localWorkspaceFolderBasename}-sandbox",
+  "image": "devimg/zig-dev:latest",
+  "mounts": [
+    // zig caches
+    {
+      "source": "zig-cache",
+      "target": "${localEnv:HOME}/.cache/zig",
+      "type": "volume"
+    },
+    {
+      "source": "zls-cache",
+      "target": "${localEnv:HOME}/.local/share/zls",
+      "type": "volume"
+    }
+  ],
+  "postCreateCommand": {
+    "zig-zls": "zig-zls-init --allow-unsigned || true",
+    "pre-commit": "pre-commit install"
+  }
+}

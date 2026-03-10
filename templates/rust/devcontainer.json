@@ -1,0 +1,26 @@
+{
+  "name": "${localWorkspaceFolderBasename}-sandbox",
+  "image": "devimg/rust-dev:latest",
+  "mounts": [
+    // rust caches
+    {
+      "source": "rustup-toolchains",
+      "target": "${localEnv:HOME}/.rustup",
+      "type": "volume"
+    },
+    {
+      "source": "cargo-registry",
+      "target": "${localEnv:HOME}/.cargo/registry",
+      "type": "volume"
+    },
+    {
+      "source": "cargo-git",
+      "target": "${localEnv:HOME}/.cargo/git",
+      "type": "volume"
+    }
+  ],
+  "postCreateCommand": {
+    "rust": "cargo build",
+    "pre-commit": "pre-commit install"
+  }
+}
