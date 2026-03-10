@@ -308,7 +308,7 @@ select_image_targets() {
 ensure_image_dir_exists() {
   if [[ ! -d "$IMAGES_DIR" ]]; then
     log "Images directory not found: $IMAGES_DIR"
-    log "Deploy with: dots devcontainerctl"
+    log "Install with: make install"
     return 1
   fi
 }
@@ -377,10 +377,10 @@ cmd_image_build() {
   if [[ ! -d "$IMAGES_DIR" ]]; then
     if [[ "$dry_run" == true ]]; then
       log "Images directory not found: $IMAGES_DIR"
-      log "Deploy with: dots devcontainerctl"
+      log "Install with: make install"
       return 0
     fi
-    printf 'Deploy with: dots devcontainerctl\n' >&2
+    printf 'Install with: make install\n' >&2
     err "Images directory not found: $IMAGES_DIR"
   fi
 

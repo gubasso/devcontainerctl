@@ -204,3 +204,38 @@ teardown() {
   [ "$status" -ne 0 ]
   [[ "$output" == *"Unknown image: unknown"* ]]
 }
+
+@test "make install puts Dockerfiles in CONFIG_DIR and installed dctl uses them" {
+  local bin_dir config_home data_home
+  bin_dir="${TEST_TMPDIR}/bin"
+  config_home="${TEST_TMPDIR}/config-home"
+  data_home="${TEST_TMPDIR}/data-home"
+
+  run make install \
+    BIN_DIR="${bin_dir}" \
+    CONFIG_DIR="${config_home}/dctl" \
+    DATA_DIR="${data_home}/dctl"
+  [ "$status" -eq 0 ]
+
+  [ -f "${config_home}/dctl/agents/Dockerfile" ]
+  [ -f "${data_home}/dctl/templates/python/devcontainer.json" ]
+
+  run env XDG_CONFIG_HOME="${config_home}" HOME="${TEST_TMPDIR}/home" \
+    "${bin_dir}/dctl" image list
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"agents"* ]]
+  [[ "$output" == *"python-dev"* ]]
+}
+
+@test "install-systemd writes a service with the selected BIN_DIR" {
+  local systemd_dir bin_dir
+  systemd_dir="${TEST_TMPDIR}/systemd-user"
+  bin_dir="${TEST_TMPDIR}/bin"
+
+  run make install-systemd BIN_DIR="${bin_dir}" SYSTEMD_DIR="${systemd_dir}"
+  [ "$status" -eq 0 ]
+
+  run grep -F "ExecStart=${bin_dir}/dctl image build --all" \
+    "${systemd_dir}/dctl-image-build.service"
+  [ "$status" -eq 0 ]
+}

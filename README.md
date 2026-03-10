@@ -15,20 +15,40 @@ Three-tier architecture on a shared foundation:
 
 Images provide tooling, not language runtime versions. Project runtime versions stay pinned in project config and are installed at container start.
 
+## Install
+
+```bash
+make install
+
+# Optional: install the weekly rebuild timer
+make install-systemd
+systemctl --user daemon-reload
+systemctl --user enable --now dctl-image-build.timer
+
+# Convenience wrapper
+./install.sh --systemd
+```
+
+`make install` installs:
+
+- `dctl` to `~/.local/bin/dctl`
+- image Dockerfiles to `~/.config/dctl/`
+- devcontainer templates to `~/.local/share/dctl/templates/`
+
+`~/.local/bin` must be in `PATH`. The installer warns if it is missing.
+
 ## Setup
 
 ```bash
-# Deploy package (symlinks Dockerfiles, dctl, and systemd units)
-dots devcontainerctl
-
 # Build all images (requires dotfiles at ~/.dotfiles or $DOT)
 dctl image build --all
 
-# Enable weekly rebuild timer (Friday 18:00)
-systemctl --user enable --now dctl-image-build.timer
-```
+# Inspect available images
+dctl image list
 
-Image definitions now live under `~/.config/dctl/` following the XDG Base Directory spec.
+# Scaffold a project from an installed template
+cp "$HOME/.local/share/dctl/templates/python/devcontainer.json" .devcontainer/devcontainer.json
+```
 
 ## CLI
 
@@ -71,6 +91,18 @@ A systemd user timer rebuilds all images weekly:
 | --- | --- |
 | `dctl-image-build.timer` | Fires Friday 18:00, `Persistent=true` |
 | `dctl-image-build.service` | Runs `dctl image build --all` |
+
+## Uninstall
+
+```bash
+make uninstall
+
+# Remove the user timer if installed
+make uninstall-systemd
+
+# Convenience wrapper
+./uninstall.sh --systemd
+```
 
 ## Further Reading
 
