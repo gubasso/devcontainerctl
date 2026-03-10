@@ -106,6 +106,5 @@ make uninstall-systemd
 
 ## Further Reading
 
-- [DCTL-MIGRATION.md](docs/DCTL-MIGRATION.md) — CLI migration and architecture spec
 - [QUICKSTART.md](docs/QUICKSTART.md) — Project setup templates and common commands
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) — Container/image architecture and troubleshooting
