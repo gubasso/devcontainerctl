@@ -13,15 +13,36 @@ source_dctl_functions() {
   source "${DCTL_LIB_DIR}/workspace.sh"
   # shellcheck source=/dev/null
   source "${DCTL_LIB_DIR}/image.sh"
+  # shellcheck source=/dev/null
+  source "${DCTL_LIB_DIR}/init.sh"
+  # shellcheck source=/dev/null
+  source "${DCTL_LIB_DIR}/test.sh"
+}
+
+create_template_fixture() {
+  local name="$1"
+  local image="$2"
+  mkdir -p "${XDG_DATA_HOME}/dctl/templates/${name}"
+  printf '{\n  "image": "%s"\n}\n' "$image" >"${XDG_DATA_HOME}/dctl/templates/${name}/devcontainer.json"
+}
+
+create_image_fixture() {
+  local name="$1"
+  mkdir -p "${XDG_DATA_HOME}/dctl/images/${name}"
+  touch "${XDG_DATA_HOME}/dctl/images/${name}/Dockerfile"
 }
 
 setup() {
   setup_test_fixtures
   export XDG_DATA_HOME="${TEST_TMPDIR}/xdg-data"
-  mkdir -p "${XDG_DATA_HOME}/dctl/images"
+  mkdir -p "${XDG_DATA_HOME}/dctl/images" "${TEST_TMPDIR}/workspace"
   source_dctl_functions
   # shellcheck disable=SC2329
   workspace_path() { echo "/test/workspace"; }
+  # shellcheck disable=SC2329
+  workspace_devcontainer_dir() { echo "${TEST_TMPDIR}/workspace/.devcontainer"; }
+  # shellcheck disable=SC2329
+  workspace_devcontainer_file() { echo "${TEST_TMPDIR}/workspace/.devcontainer/devcontainer.json"; }
   unset TERM COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION 2>/dev/null || true
 }
 
@@ -236,6 +257,132 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"agents"* ]]
   [[ "$output" == *"python-dev"* ]]
+}
+
+@test "discover_templates lists installed templates" {
+  create_template_fixture python "devimg/python-dev:latest"
+  create_template_fixture rust "devimg/rust-dev:latest"
+
+  run discover_templates
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"python"* ]]
+  [[ "$output" == *"rust"* ]]
+}
+
+@test "cmd_init with template creates devcontainer config and runs smoke test" {
+  create_template_fixture python "devimg/python-dev:latest"
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  run cmd_init --template python
+  [ "$status" -eq 0 ]
+  [ -f "$(workspace_devcontainer_file)" ]
+  grep -F '"image": "devimg/python-dev:latest"' "$(workspace_devcontainer_file)"
+  assert_mock_called "CMD_TEST_CALLED"
+}
+
+@test "cmd_init warns and preserves existing config without force" {
+  create_template_fixture python "devimg/python-dev:latest"
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{\n  "image": "existing-image"\n}\n' >"$(workspace_devcontainer_file)"
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  run cmd_init
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"skipping scaffold"* ]]
+  grep -F '"image": "existing-image"' "$(workspace_devcontainer_file)"
+  assert_mock_called "CMD_TEST_CALLED"
+}
+
+@test "cmd_init force overwrites existing config" {
+  create_template_fixture python "devimg/python-dev:latest"
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{\n  "image": "existing-image"\n}\n' >"$(workspace_devcontainer_file)"
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  run cmd_init --force --template python
+  [ "$status" -eq 0 ]
+  grep -F '"image": "devimg/python-dev:latest"' "$(workspace_devcontainer_file)"
+}
+
+@test "cmd_init rejects unknown templates" {
+  create_template_fixture python "devimg/python-dev:latest"
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  run cmd_init --template missing
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Unknown template: missing"* ]]
+  [[ "$output" == *"python"* ]]
+}
+
+@test "cmd_init without template fails non-interactively with available templates" {
+  create_template_fixture python "devimg/python-dev:latest"
+  enable_mocks
+  create_mock fzf 0 "python"
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  run cmd_init
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Pass --template"* ]]
+  [[ "$output" == *"python"* ]]
+}
+
+@test "cmd_test fails with init guidance when config is missing" {
+  run cmd_test
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Run dctl init first"* ]]
+}
+
+@test "cmd_test fails when devcontainer command is missing" {
+  create_image_fixture python-dev
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{\n  "image": "devimg/python-dev:latest"\n}\n' >"$(workspace_devcontainer_file)"
+  enable_mocks
+  create_mock docker 0 "container123"
+  PATH="${TEST_TMPDIR}/bin:/bin:/usr/bin" run cmd_test
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Missing required command: devcontainer"* ]]
+}
+
+@test "cmd_test builds managed images before starting the devcontainer" {
+  create_image_fixture python-dev
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{\n  "image": "devimg/python-dev:latest"\n}\n' >"$(workspace_devcontainer_file)"
+  enable_mocks
+  create_mock docker 0 "container123"
+  create_mock devcontainer 0 ""
+
+  run cmd_test
+  [ "$status" -eq 0 ]
+  assert_mock_called "docker buildx build"
+  assert_mock_called "devcontainer up --workspace-folder ."
+  assert_mock_called "devcontainer exec --workspace-folder . printf dctl-smoke"
+  assert_mock_called "docker rm -f"
+}
+
+@test "cmd_test skips managed image build for external images" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{\n  "image": "ghcr.io/acme/project:latest"\n}\n' >"$(workspace_devcontainer_file)"
+  enable_mocks
+  create_mock docker 0 "container123"
+  create_mock devcontainer 0 ""
+
+  run cmd_test
+  [ "$status" -eq 0 ]
+  assert_mock_not_called "docker buildx build"
+  assert_mock_called "devcontainer up --workspace-folder ."
+}
+
+@test "root help includes init and test commands" {
+  run env XDG_DATA_HOME="$XDG_DATA_HOME" HOME="${TEST_TMPDIR}/home" \
+    bash "${BATS_TEST_DIRNAME}/../bin/dctl" help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"init"* ]]
+  [[ "$output" == *"test"* ]]
 }
 
 @test "install-systemd writes a service with the selected BIN_DIR" {

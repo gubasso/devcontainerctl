@@ -8,12 +8,11 @@
 
 ## Setup
 
-1. Create `.devcontainer/` in your project root.
-2. Copy the template below into `.devcontainer/devcontainer.json`.
-3. Pick the right image.
-4. Add only project-specific mounts or cache volumes as needed.
-5. Start: `dctl workspace up`
-6. Attach: `dctl workspace shell`
+1. Run `dctl init --template <python|rust|zig>` in your project root.
+2. Add only project-specific mounts or cache volumes as needed.
+3. Start: `dctl workspace up`
+4. Attach: `dctl workspace shell`
+5. Re-run validation any time with `dctl test`
 
 ## Template
 

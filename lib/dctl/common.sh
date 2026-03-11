@@ -8,10 +8,12 @@ readonly _DCTL_COMMON_LOADED=1
 : "${DCTL_VERSION:=dev}"
 : "${WORKSPACE_FOLDER:=.}"
 : "${IMAGES_DIR:=${XDG_DATA_HOME:-$HOME/.local/share}/dctl/images}"
+: "${TEMPLATES_DIR:=${XDG_DATA_HOME:-$HOME/.local/share}/dctl/templates}"
 
 readonly DCTL_VERSION
 readonly WORKSPACE_FOLDER
 readonly IMAGES_DIR
+readonly TEMPLATES_DIR
 
 log() {
   printf '\033[1;34m==>\033[0m %s\n' "$1"
@@ -33,6 +35,14 @@ require_cmd() {
 
 workspace_path() {
   pwd -P
+}
+
+workspace_devcontainer_dir() {
+  printf '%s/.devcontainer\n' "$WORKSPACE_FOLDER"
+}
+
+workspace_devcontainer_file() {
+  printf '%s/devcontainer.json\n' "$(workspace_devcontainer_dir)"
 }
 
 workspace_label_filter() {

@@ -47,11 +47,31 @@ dctl image build --all
 # Inspect available images
 dctl image list
 
-# Scaffold a project from an installed template
-cp "$HOME/.local/share/dctl/templates/python/devcontainer.json" .devcontainer/devcontainer.json
+# Scaffold a project from an installed template and validate it
+dctl init --template python
+
+# Re-run the setup smoke test later
+dctl test
 ```
 
 ## CLI
+
+### `dctl init`
+
+```bash
+dctl init --template python  # scaffold from a specific template
+dctl init                    # interactive fzf selector
+dctl init --force --template rust
+```
+
+If `.devcontainer/devcontainer.json` already exists, `dctl init` warns and keeps
+it unchanged by default, then runs the smoke test against the current project.
+
+### `dctl test`
+
+```bash
+dctl test  # validate prerequisites, build managed images, smoke-test the workspace
+```
 
 ### `dctl image`
 

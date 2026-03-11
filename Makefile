@@ -7,7 +7,7 @@ INSTALL := install
 
 IMAGE_NAMES := agents python-dev rust-dev zig-dev
 TEMPLATE_DIRS := python rust zig
-LIB_FILES := common.sh workspace.sh image.sh
+LIB_FILES := common.sh workspace.sh image.sh init.sh test.sh
 
 .PHONY: install uninstall install-systemd uninstall-systemd test lint check
 
