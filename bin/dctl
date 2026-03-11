@@ -39,7 +39,7 @@ Examples:
   dctl test
   dctl workspace up
   dctl workspace shell
-  dctl workspace run -- claude
+  dctl workspace run -- claude-session
   dctl image build --all
   dctl image list
 EOF

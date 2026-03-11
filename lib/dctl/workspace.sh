@@ -144,7 +144,7 @@ cmd_workspace_run() {
   if [[ ${1:-} == "--" ]]; then
     shift
   fi
-  [[ $# -gt 0 ]] || err "run requires a command. Example: dctl workspace run -- claude"
+  [[ $# -gt 0 ]] || err "run requires a command. Example: dctl workspace run -- claude-session"
 
   devcontainer_exec bash -lc "$*"
 }

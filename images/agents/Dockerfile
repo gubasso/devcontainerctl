@@ -262,8 +262,8 @@ LABEL devcontainer.metadata='[ \
         "type": "bind" \
       }, \
       { \
-        "source": "${localEnv:DOT}/claude/.local/bin/claude", \
-        "target": "${localEnv:HOME}/.local/bin/claude-wrapper", \
+        "source": "${localEnv:DOT}/claude/.local/bin/claude-session", \
+        "target": "${localEnv:HOME}/.local/bin/claude-session", \
         "type": "bind" \
       }, \
       { \

@@ -1012,8 +1012,8 @@ dctl workspace status
 cd ~/projects/project-a
 
 # Multiple agent sessions
-dctl workspace run -- claude
-dctl workspace run -- claude
+dctl workspace run -- claude-session
+dctl workspace run -- claude-session
 
 # Interactive shell
 dctl workspace shell
@@ -1108,7 +1108,7 @@ UID/GID are baked into the image at build time via `--build-arg USER_UID=$(id -u
 dctl workspace up             # Start current project container
 dctl workspace reup           # Recreate after devcontainer.json/image changes
 dctl workspace shell          # Open interactive bash shell
-dctl workspace run -- claude  # Run command via bash -lc
+dctl workspace run -- claude-session  # Run command via bash -lc
 dctl workspace exec -- id     # Run direct command in container
 dctl workspace status         # Show matching container(s)
 dctl workspace down           # Remove matching container(s)
@@ -1156,7 +1156,7 @@ mise install
 
 # Start container (creates .venv/ via the Python template bootstrap)
 dctl workspace up
-dctl workspace run -- claude  # Interactive login on first run
+dctl workspace run -- claude-session  # Interactive login on first run
 
 # Now open editor - LSP will use container-created .venv/
 nvim .
@@ -1174,7 +1174,7 @@ dctl workspace up
 nvim .
 
 # Terminal 2: agent in container
-dctl workspace run -- claude
+dctl workspace run -- claude-session
 
 # Terminal 3: tests in container
 dctl workspace run -- pytest
@@ -1191,7 +1191,7 @@ dctl workspace down
 
 # Edit .devcontainer/devcontainer.json mounts, then restart
 dctl workspace reup
-dctl workspace run -- claude
+dctl workspace run -- claude-session
 ```
 
 ### Workflow 4: Multi-Directory Workspace Setup
@@ -1220,7 +1220,7 @@ cat > .devcontainer/devcontainer.json << EOF
 EOF
 
 dctl workspace up
-dctl workspace run -- claude  # Interactive login on first run
+dctl workspace run -- claude-session  # Interactive login on first run
 ```
 
 ---
@@ -1427,7 +1427,7 @@ chmod 600 ~/.ssh/deploy_key
 devcontainer exec --workspace-folder . curl -I https://api.anthropic.com
 
 # Re-run interactive login if needed
-devcontainer exec --workspace-folder . bash -lc "claude"
+devcontainer exec --workspace-folder . bash -lc "claude-session"
 ```
 
 ### Find Running Containers

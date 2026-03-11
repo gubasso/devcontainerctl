@@ -47,7 +47,7 @@ Shared auth/editor mounts, `remoteUser`, `init`, `shutdownAction`, container env
 dctl workspace up             # start
 dctl workspace reup           # recreate after devcontainer.json/image changes
 dctl workspace shell          # attach shell
-dctl workspace run -- claude  # run agent command
+dctl workspace run -- claude-session  # run agent command
 dctl workspace run -- pytest  # execute arbitrary command
 dctl workspace status         # show container(s) for current workspace
 dctl workspace down           # stop/remove current workspace container(s)
