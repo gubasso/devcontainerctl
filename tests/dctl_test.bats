@@ -397,3 +397,47 @@ teardown() {
     "${systemd_dir}/dctl-image-build.service"
   [ "$status" -eq 0 ]
 }
+
+# Dotfiles validation
+
+@test "workspace up fails early when dotfiles directory is missing" {
+  local missing_home
+  missing_home="${TEST_TMPDIR}/home-no-dotfiles"
+  mkdir -p "$missing_home"
+
+  enable_mocks
+  create_mock devcontainer 0 ""
+
+  unset DOT
+  HOME="$missing_home" run cmd_workspace_up
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Dotfiles not found"* ]]
+  assert_mock_not_called "devcontainer "
+}
+
+@test "workspace reup fails early when dotfiles directory is missing" {
+  local missing_home
+  missing_home="${TEST_TMPDIR}/home-no-dotfiles"
+  mkdir -p "$missing_home"
+
+  enable_mocks
+  create_mock devcontainer 0 ""
+
+  unset DOT
+  HOME="$missing_home" run cmd_workspace_reup
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Dotfiles not found"* ]]
+  assert_mock_not_called "devcontainer "
+}
+
+@test "workspace up calls devcontainer when DOT is valid" {
+  enable_mocks
+  create_mock devcontainer 0 ""
+
+  DOT="${TEST_TMPDIR}/dotfiles"
+  mkdir -p "$DOT"
+
+  run cmd_workspace_up
+  [ "$status" -eq 0 ]
+  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER}"
+}
