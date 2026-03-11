@@ -32,7 +32,7 @@ systemctl --user enable --now dctl-image-build.timer
 `make install` installs:
 
 - `dctl` to `~/.local/bin/dctl`
-- image Dockerfiles to `~/.config/dctl/`
+- image Dockerfiles to `~/.local/share/dctl/images/`
 - devcontainer templates to `~/.local/share/dctl/templates/`
 
 `~/.local/bin` must be in `PATH`. The installer warns if it is missing.

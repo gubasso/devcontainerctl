@@ -104,7 +104,7 @@ Terminal 3: pytest ───────────────────► 
 
 ```text
 ~/
-├── .config/dctl/          # Base image definitions (build once)
+├── .local/share/dctl/images/      # Base image definitions (build once)
 │   ├── agents/                    # Agent tools layer (shared)
 │   │   └── Dockerfile
 │   ├── python-dev/
@@ -196,14 +196,14 @@ devcontainer --version
 
 ## Base Images
 
-Dockerfiles are managed via the `devcontainerctl` stow package. Deploy with `dots devcontainerctl` to populate `~/.config/dctl/`.
+Dockerfiles are installed by `make install` into `~/.local/share/dctl/images/`.
 
 **Source files** (single source of truth):
 
-- [`.config/dctl/agents/Dockerfile`](.config/dctl/agents/Dockerfile)
-- [`.config/dctl/python-dev/Dockerfile`](.config/dctl/python-dev/Dockerfile)
-- [`.config/dctl/rust-dev/Dockerfile`](.config/dctl/rust-dev/Dockerfile)
-- [`.config/dctl/zig-dev/Dockerfile`](.config/dctl/zig-dev/Dockerfile)
+- [`images/agents/Dockerfile`](../images/agents/Dockerfile)
+- [`images/python-dev/Dockerfile`](../images/python-dev/Dockerfile)
+- [`images/rust-dev/Dockerfile`](../images/rust-dev/Dockerfile)
+- [`images/zig-dev/Dockerfile`](../images/zig-dev/Dockerfile)
 
 ### User Naming Convention
 
@@ -338,7 +338,7 @@ dctl image build --dry-run
 Or build manually:
 
 ```bash
-cd ~/.config/dctl
+cd ~/.local/share/dctl/images
 docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ./agents/
 docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/python-dev:latest ./python-dev/
 docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/rust-dev:latest ./rust-dev/
@@ -398,7 +398,7 @@ No separate `.python-version` or `.mise.toml` needed—`pyproject.toml` is the s
 
 Use `devimg/python-dev:latest` with mise and Poetry cache volumes. See [Standard Python Configuration](#standard-python-configuration) for a complete `devcontainer.json` template.
 
-**Dockerfile**: [`.config/dctl/python-dev/Dockerfile`](.config/dctl/python-dev/Dockerfile)
+**Dockerfile**: [`images/python-dev/Dockerfile`](../images/python-dev/Dockerfile)
 
 #### Cold Start Behavior
 
@@ -428,7 +428,7 @@ Rustup reads this file automatically—no extra commands needed.
 
 Use `devimg/rust-dev:latest` with rustup and cargo cache volumes. See [Standard Rust Configuration](#standard-rust-configuration) for a complete `devcontainer.json` template.
 
-**Dockerfile**: [`.config/dctl/rust-dev/Dockerfile`](.config/dctl/rust-dev/Dockerfile)
+**Dockerfile**: [`images/rust-dev/Dockerfile`](../images/rust-dev/Dockerfile)
 
 #### Cold Start Behavior
 
@@ -458,7 +458,7 @@ Mach projects can use `.mach_zig_version = "<version>-mach"`; when present, it t
 
 Use `devimg/zig-dev:latest` with Zig and zls cache volumes. `zig-zls-init` sets up project-local zls wiring (`.nvim.lua`) and caches zls per Zig version.
 
-**Dockerfile**: [`.config/dctl/zig-dev/Dockerfile`](.config/dctl/zig-dev/Dockerfile)
+**Dockerfile**: [`images/zig-dev/Dockerfile`](../images/zig-dev/Dockerfile)
 
 #### Typical Flow
 
@@ -1177,7 +1177,7 @@ dctl workspace reup
 crontab -e
 
 # Sunday 3am
-0 3 * * 0 cd ~/.config/dctl && docker buildx build --load --pull --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ./agents/ && docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/python-dev:latest ./python-dev/ && docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/rust-dev:latest ./rust-dev/ && docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/zig-dev:latest ./zig-dev/ 2>&1 | logger -t devimg-rebuild
+0 3 * * 0 cd ~/.local/share/dctl/images && docker buildx build --load --pull --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ./agents/ && docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/python-dev:latest ./python-dev/ && docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/rust-dev:latest ./rust-dev/ && docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/zig-dev:latest ./zig-dev/ 2>&1 | logger -t devimg-rebuild
 ```
 
 ---
@@ -1398,10 +1398,10 @@ docker volume rm mise-cache poetry-cache pip-cache rustup-toolchains cargo-regis
 docker volume prune
 
 # Rebuild from scratch
-docker buildx build --load --pull --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ~/.config/dctl/agents/
-docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/python-dev:latest ~/.config/dctl/python-dev/
-docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/rust-dev:latest ~/.config/dctl/rust-dev/
-docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/zig-dev:latest ~/.config/dctl/zig-dev/
+docker buildx build --load --pull --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ~/.local/share/dctl/images/agents/
+docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/python-dev:latest ~/.local/share/dctl/images/python-dev/
+docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/rust-dev:latest ~/.local/share/dctl/images/rust-dev/
+docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/zig-dev:latest ~/.local/share/dctl/images/zig-dev/
 ```
 
 ---
@@ -1437,7 +1437,7 @@ dctl image build --all
 
 | File | Purpose |
 | ---- | ------- |
-| `~/.config/dctl/*/Dockerfile` | Base image definitions |
+| `~/.local/share/dctl/images/*/Dockerfile` | Base image definitions |
 | `project/.devcontainer/devcontainer.json` | Per-project container config |
 | `project/pyproject.toml` | Python version (`[tool.mise]`) + deps |
 | `project/rust-toolchain.toml` | Rust toolchain version |
@@ -1499,7 +1499,7 @@ components = ["rustfmt", "clippy", "rust-analyzer"]
 Complete `devcontainer.json` examples demonstrating multi-directory workspaces.
 Each project uses the default automatic workspace mount for the main repository.
 These rely on the shared defaults baked into `devimg/agents`. For base image
-Dockerfiles, see [`.config/dctl/`](.config/dctl/).
+Dockerfiles, see [`images/`](../images/).
 
 ### Example 1: API Project with Docs and SDK
 
