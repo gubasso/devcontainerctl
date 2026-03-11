@@ -1,6 +1,6 @@
 # Devcontainers for AI Agent Sandboxing
 
-A practical guide to using Dev Containers as isolated, reproducible development environments for running AI coding agents (Claude Code, Codex, OpenCode) safely in YOLO mode.
+A practical guide to using Dev Containers as isolated, reproducible development environments for running AI coding agents (Claude Code, Codex, OpenCode, Gemini CLI) safely in YOLO mode.
 
 ---
 
@@ -31,7 +31,7 @@ A practical guide to using Dev Containers as isolated, reproducible development 
 
 - **Reproducible environments**: Define once, use across all projects of the same type
 - **Isolation**: Containers can only access explicitly mounted directories
-- **Project-pinned runtimes**: Python and Rust versions declared in project files, resolved at container creation
+- **Project-pinned runtimes**: Python, Rust, and Zig versions declared in project files, resolved at container creation or first tool invocation
 - **Flexible workspace composition**: Mount multiple directories (repos, docs, libs) into a unified `/workspaces`
 - **Multi-agent support**: Attach unlimited terminals/agents to the same container
 - **YOLO-safe**: Agents have full permissions inside the container, but limited host access
@@ -49,7 +49,7 @@ This guide follows a **project-pinned runtime** approach:
 | Zig version | Pinned per project | `build.zig.zon` |
 | Dependencies | Pinned per project | `poetry.lock` / `Cargo.lock` |
 
-Language runtimes are installed at container creation time based on project config files. Shared volumes cache installed versions across projects, so subsequent containers with the same version start instantly.
+The `agents` base image includes rolling shared runtimes for container tooling, while project-specific Python, Rust, and Zig versions stay pinned in project config and are resolved at container creation or first tool invocation. Shared volumes cache installed versions across projects, so subsequent containers with the same version start instantly.
 
 ### Host Runtime Mirroring
 
@@ -59,21 +59,21 @@ For LSP accuracy, install runtime version managers on the host:
 2. **Install rustup on host** - Same toolchain manager as container
 3. **Run `mise install` on host** - Installs Python interpreter for LSP
 
-The container creates `.venv/` via `postCreateCommand: "mise install && poetry install"`. Since the project directory is bind-mounted, the host LSP discovers this `.venv/` and uses it for completions and type-checking.
+The Python template creates `.venv/` via `postCreateCommand: { "python": "bash -ic dev-py", "pre-commit": "pre-commit install" }`. Since the project directory is bind-mounted, the host LSP discovers this `.venv/` and uses it for completions and type-checking.
 
 ```bash
 # On host (one-time setup per project)
 cd ~/projects/my-api
 mise install                        # Installs Python version for LSP
 
-# Start container - creates .venv/ via postCreateCommand
+# Start container - creates .venv/ via the Python template bootstrap
 devcontainer up --workspace-folder .
 
 # Now host LSP can use the container-created .venv/
 nvim .
 ```
 
-**Why not run `poetry install` on host?** The `.venv/` is shared via bind mount. Running `poetry install` in both places writes to the same directory, which is redundant. Let the container own the venv; the host just reads it.
+**Why not run `poetry install` on host?** The `.venv/` is shared via bind mount. Running project bootstrap in both places writes to the same directory, which is redundant. Let the container own the venv; the host just reads it.
 
 ### Mental Model
 
@@ -81,7 +81,7 @@ nvim .
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ HOST                                  CONTAINER                             │
 │                                                                             │
-│ mise install                          mise install && poetry install        │
+│ mise install                          bash -ic dev-py                      │
 │   └── Python interpreter for LSP        └── Creates .venv/ in project root │
 │                                                                             │
 │ nvim ~/projects/my-app/               ${containerWorkspaceFolder}/ (bind mount) │
@@ -140,19 +140,19 @@ Separate agent tools from language tooling for better caching:
 ```text
 devimg/agents:latest    (Debian bookworm + bun + node LTS + agent CLIs + mise + build deps)
        │
-       ├── devimg/python-dev:latest   (poetry via mise, no python baked in)
+       ├── devimg/python-dev:latest   (poetry via mise; inherits base python, overridden by project pin)
        ├── devimg/rust-dev:latest     (rustup with no default toolchain)
        └── devimg/zig-dev:latest      (anyzig + minisign + zig-zls-init)
 ```
 
-Python, Rust, and Zig versions are **not** in the image. They're installed/resolved at container creation based on project config, then cached in shared volumes.
+The `agents` base includes rolling Python and Go runtimes for shared tooling. Project-specific Python versions override the base default via mise, while Rust and Zig versions remain unbaked and resolve from `rust-toolchain.toml` and `build.zig.zon`.
 
 **Note**: This guide covers Python, Rust, and Zig as practical examples. The same pattern extends to polyglot environments (combine layers) or hardened variants (remove sudo, drop capabilities, add `no-new-privileges`). Adapt the Dockerfiles as needed for your use case.
 
 ### Image Reuse
 
 ```text
-devimg/python-dev:latest (base image, no python version)
+devimg/python-dev:latest (base image, rolling base python)
        │
        ├── project-a  ─► container (mise installs python 3.11)
        ├── project-b  ─► container (mise installs python 3.12)
@@ -225,6 +225,7 @@ Foundation layer using Debian bookworm-slim for broad compatibility and package 
   - [Claude Code](https://github.com/anthropics/claude-code) (native installer)
   - [Codex CLI](https://github.com/openai/codex) (OpenAI)
   - [OpenCode](https://github.com/opencode-ai/opencode)
+  - [Gemini CLI](https://github.com/google-gemini/gemini-cli) (Google)
 - Non-root user with passwordless sudo
 
 #### AI Agent CLI Installation Methods
@@ -235,13 +236,15 @@ Native installers are preferred over Homebrew in containers (Homebrew adds ~500M
 | ---- | ------ | ------- |
 | Claude Code | Native installer | `curl -fsSL https://claude.ai/install.sh \| bash` |
 | Codex CLI | npm (via Bun) | `bun install -g @openai/codex` |
-| OpenCode | Native installer | `curl -fsSL https://raw.githubusercontent.com/opencode-ai/opencode/refs/heads/main/install \| bash` |
+| OpenCode | npm (via Bun) | `bun add -g opencode-ai` |
+| Gemini CLI | npm (via Node) | `npm install -g @google/gemini-cli@latest` |
 
 **Notes**:
 
 - Claude Code: Native installer recommended (auto-updates); npm still supported
 - Codex CLI: Official install is npm; Bun works via npm compatibility (unofficial)
-- OpenCode: Go binary; native installer downloads pre-built binary
+- OpenCode: Installed from the npm package via Bun in the current image build
+- Gemini CLI: Installed globally via npm using the Node runtime already present in `devimg/agents`
 
 **Authentication**:
 
@@ -250,6 +253,7 @@ Native installers are preferred over Homebrew in containers (Homebrew adds ~500M
 | Claude Code | Interactive login (Anthropic subscription) |
 | Codex CLI | Interactive login (ChatGPT account) on first run |
 | OpenCode | Interactive login (supports multiple providers) |
+| Gemini CLI | Interactive login (Google account) or API key |
 
 All agents authenticate interactively on first run. To persist auth across container recreations, mount the agent config directories (see [Pattern 6](#pattern-6-config-with-selective-rw-mounts)).
 
@@ -291,7 +295,7 @@ timeout 300 nvim --headless \
 Thin layer extending `devimg/agents:latest`:
 
 - [Poetry](https://python-poetry.org/) via mise (`pipx:poetry`) with `virtualenvs.in-project = true`
-- No Python version baked in—mise installs per-project versions from `pyproject.toml`
+- Inherits rolling Python from `devimg/agents`; project-pinned versions from `pyproject.toml` override via mise
 
 ### Layer 1: Rust Development (rust-dev/)
 
@@ -315,23 +319,20 @@ Thin layer extending `devimg/agents:latest`:
 Use the provided `dctl image` commands:
 
 ```bash
-# Deploy Dockerfiles
-dots devcontainerctl
-
-# Wrapper (recommended for daily use)
-dctl image build --all
-dctl image build agents
-dctl image build zig-dev
-
 # Interactive selection (fzf)
 dctl image build
 
-# Build all images (non-interactive, pulls base for agents layer)
+# Build a specific image
+dctl image build agents
+
+# Build all images (non-interactive, pulls base updates for agents)
 dctl image build --all
 
-# Build specific image
-dctl image build agents
-dctl image build zig-dev
+# Cache-bust the agent CLI layer
+dctl image build --refresh-agents agents
+
+# Full uncached rebuild of all images
+dctl image build --full-rebuild
 
 # Preview what would be built
 dctl image build --dry-run
@@ -341,11 +342,14 @@ Or build manually:
 
 ```bash
 cd ~/.local/share/dctl/images
-docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ./agents/
+DOTFILES_DIR="${DOT:-$HOME/.dotfiles}"
+docker buildx build --load --build-context dotfiles="$DOTFILES_DIR" --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ./agents/
 docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/python-dev:latest ./python-dev/
 docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/rust-dev:latest ./rust-dev/
-docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/zig-dev:latest ./zig-dev/
+docker buildx build --load --build-context dotfiles="$DOTFILES_DIR" --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/zig-dev:latest ./zig-dev/
 ```
+
+The `agents` and `zig-dev` images require the dotfiles repo as a BuildKit named context. Set `DOT=` or ensure `~/.dotfiles` exists before building.
 
 ---
 
@@ -353,13 +357,13 @@ docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id 
 
 ### Philosophy
 
-Language versions are **not baked into images**. Instead:
+The `agents` base includes rolling Python and Go runtimes for shared tooling such as neovim providers, pre-commit, and general CLI usage. Project-specific versions override these defaults where applicable:
 
-- **Python**: Declared in `pyproject.toml` via `[tool.mise]`, installed by mise at container creation
+- **Python**: Declared in `pyproject.toml` via `[tool.mise]`, overriding the base Python via mise during project bootstrap
 - **Rust**: Declared in `rust-toolchain.toml`, auto-installed by rustup on first `cargo` invocation
 - **Zig**: Declared in `build.zig.zon`, resolved by anyzig on command execution
 
-This keeps images small and reusable while giving each project exact version control. The same config files work for CI and other developers without containers.
+This keeps the shared image layer reusable while giving each project exact version control. The same config files work for CI and other developers without containers.
 
 ### What's Shared vs Isolated
 
@@ -676,14 +680,25 @@ below show only project-local deltas.
 ```jsonc
 // project-a/.devcontainer/devcontainer.json
 {
-  "name": "project-a",
+  "name": "${localWorkspaceFolderBasename}-sandbox",
   "image": "devimg/python-dev:latest",
-
   "mounts": [
-    "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume"
+    // python caches
+    {
+      "source": "mise-cache",
+      "target": "${localEnv:HOME}/.local/share/mise",
+      "type": "volume"
+    },
+    {
+      "source": "poetry-cache",
+      "target": "${localEnv:HOME}/.cache/pypoetry",
+      "type": "volume"
+    }
   ],
-
-  "postCreateCommand": "mise install && poetry install"
+  "postCreateCommand": {
+    "python": "bash -ic dev-py",
+    "pre-commit": "pre-commit install"
+  }
 }
 ```
 
@@ -691,16 +706,56 @@ below show only project-local deltas.
 
 ```jsonc
 {
-  "name": "rust-project",
+  "name": "${localWorkspaceFolderBasename}-sandbox",
   "image": "devimg/rust-dev:latest",
-
   "mounts": [
-    "source=rustup-toolchains,target=/home/${localEnv:USER}/.rustup,type=volume",
-    "source=cargo-registry,target=/home/${localEnv:USER}/.cargo/registry,type=volume",
-    "source=cargo-git,target=/home/${localEnv:USER}/.cargo/git,type=volume"
+    // rust caches
+    {
+      "source": "rustup-toolchains",
+      "target": "${localEnv:HOME}/.rustup",
+      "type": "volume"
+    },
+    {
+      "source": "cargo-registry",
+      "target": "${localEnv:HOME}/.cargo/registry",
+      "type": "volume"
+    },
+    {
+      "source": "cargo-git",
+      "target": "${localEnv:HOME}/.cargo/git",
+      "type": "volume"
+    }
   ],
+  "postCreateCommand": {
+    "rust": "cargo build",
+    "pre-commit": "pre-commit install"
+  }
+}
+```
 
-  "postCreateCommand": "cargo build"
+### Standard Zig Configuration
+
+```jsonc
+{
+  "name": "${localWorkspaceFolderBasename}-sandbox",
+  "image": "devimg/zig-dev:latest",
+  "mounts": [
+    // zig caches
+    {
+      "source": "zig-cache",
+      "target": "${localEnv:HOME}/.cache/zig",
+      "type": "volume"
+    },
+    {
+      "source": "zls-cache",
+      "target": "${localEnv:HOME}/.local/share/zls",
+      "type": "volume"
+    }
+  ],
+  "postCreateCommand": {
+    "zig-zls": "zig-zls-init --allow-unsigned || true",
+    "pre-commit": "pre-commit install"
+  }
 }
 ```
 
@@ -717,7 +772,10 @@ below show only project-local deltas.
     "source=${localEnv:HOME}/.ssh/known_hosts,target=/home/${localEnv:USER}/.ssh/known_hosts,type=bind,readonly"
   ],
 
-  "postCreateCommand": "mise install && poetry install"
+  "postCreateCommand": {
+    "python": "bash -ic dev-py",
+    "pre-commit": "pre-commit install"
+  }
 }
 ```
 
@@ -737,7 +795,10 @@ alongside it.
     "source=${localEnv:HOME}/projects/shared-lib,target=/workspaces/shared-lib,type=bind,readonly"
   ],
 
-  "postCreateCommand": "mise install && poetry install"
+  "postCreateCommand": {
+    "python": "bash -ic dev-py",
+    "pre-commit": "pre-commit install"
+  }
 }
 ```
 
@@ -1069,7 +1130,10 @@ cat > .devcontainer/devcontainer.json << EOF
 {
   "name": "new-project",
   "image": "devimg/python-dev:latest",
-  "postCreateCommand": "mise install && poetry install",
+  "postCreateCommand": {
+    "python": "bash -ic dev-py",
+    "pre-commit": "pre-commit install"
+  },
   "mounts": [
     "source=poetry-cache,target=/home/\${localEnv:USER}/.cache/pypoetry,type=volume"
   ]
@@ -1079,7 +1143,7 @@ EOF
 # Host: install Python interpreter for LSP
 mise install
 
-# Start container (creates .venv/ via postCreateCommand)
+# Start container (creates .venv/ via the Python template bootstrap)
 dctl workspace up
 dctl workspace run -- claude  # Interactive login on first run
 
@@ -1137,7 +1201,10 @@ cat > .devcontainer/devcontainer.json << EOF
     "source=\${localEnv:HOME}/libs/internal-sdk,target=/workspaces/sdk,type=bind,readonly",
     "source=poetry-cache,target=/home/\${localEnv:USER}/.cache/pypoetry,type=volume"
   ],
-  "postCreateCommand": "mise install && poetry install"
+  "postCreateCommand": {
+    "python": "bash -ic dev-py",
+    "pre-commit": "pre-commit install"
+  }
 }
 EOF
 
@@ -1167,10 +1234,9 @@ dctl workspace reup
 ### Automation (Optional)
 
 ```bash
-crontab -e
-
-# Sunday 3am
-0 3 * * 0 cd ~/.local/share/dctl/images && docker buildx build --load --pull --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ./agents/ && docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/python-dev:latest ./python-dev/ && docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/rust-dev:latest ./rust-dev/ && docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/zig-dev:latest ./zig-dev/ 2>&1 | logger -t devimg-rebuild
+make install-systemd
+systemctl --user daemon-reload
+systemctl --user enable --now dctl-image-build.timer
 ```
 
 ---
@@ -1383,16 +1449,17 @@ If symlinks point outside the mounted tree, use rsync snapshot with `-L` flag.
 docker ps -aq --filter "label=devcontainer.local_folder" | xargs -r docker rm -f
 
 # Remove all cache volumes
-docker volume rm poetry-cache pip-cache rustup-toolchains cargo-registry cargo-git 2>/dev/null || true
+docker volume rm mise-cache poetry-cache pip-cache rustup-toolchains cargo-registry cargo-git zig-cache zls-cache 2>/dev/null || true
 
 # Prune dangling volumes
 docker volume prune
 
 # Rebuild from scratch
-docker buildx build --load --pull --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ~/.local/share/dctl/images/agents/
+DOTFILES_DIR="${DOT:-$HOME/.dotfiles}"
+docker buildx build --load --pull --no-cache --build-context dotfiles="$DOTFILES_DIR" --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ~/.local/share/dctl/images/agents/
 docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/python-dev:latest ~/.local/share/dctl/images/python-dev/
 docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/rust-dev:latest ~/.local/share/dctl/images/rust-dev/
-docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/zig-dev:latest ~/.local/share/dctl/images/zig-dev/
+docker buildx build --load --no-cache --build-context dotfiles="$DOTFILES_DIR" --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/zig-dev:latest ~/.local/share/dctl/images/zig-dev/
 ```
 
 ---
@@ -1432,6 +1499,7 @@ dctl image build --all
 | `project/.devcontainer/devcontainer.json` | Per-project container config |
 | `project/pyproject.toml` | Python version (`[tool.mise]`) + deps |
 | `project/rust-toolchain.toml` | Rust toolchain version |
+| `project/build.zig.zon` | Zig version for anyzig resolution |
 
 ### Key devcontainer.json Fields
 
@@ -1455,6 +1523,8 @@ dctl image build --all
 | `rustup-toolchains` | Rust toolchains | Yes |
 | `cargo-registry` | Crates.io index + crates | Yes |
 | `cargo-git` | Git-based dependencies | Yes |
+| `zig-cache` | Zig global cache | Yes |
+| `zls-cache` | zls binaries | Yes |
 
 ### Mount Types
 
@@ -1511,7 +1581,10 @@ Open from the `my-api` project directory.
     "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume"
   ],
 
-  "postCreateCommand": "mise install && poetry install"
+  "postCreateCommand": {
+    "python": "bash -ic dev-py",
+    "pre-commit": "pre-commit install"
+  }
 }
 ```
 
@@ -1534,7 +1607,11 @@ symlink-heavy SDK into a flat directory at container creation time.
   ],
 
   // Snapshot legacy-sdk into /workspaces (resolves symlinks), then setup project
-  "postCreateCommand": "rsync -aL --delete /mnt/src-legacy-sdk/ /workspaces/legacy-sdk/ && mise install && poetry install"
+  "postCreateCommand": {
+    "rsync-sdk": "rsync -aL --delete /mnt/src-legacy-sdk/ /workspaces/legacy-sdk/",
+    "python": "bash -ic dev-py",
+    "pre-commit": "pre-commit install"
+  }
 }
 ```
 
