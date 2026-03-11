@@ -1,17 +1,23 @@
 BIN_DIR ?= $(HOME)/.local/bin
 DATA_DIR ?= $(HOME)/.local/share/dctl
+LIB_DIR ?= $(HOME)/.local/lib/dctl
 SYSTEMD_DIR ?= $(HOME)/.local/share/systemd/user
 
 INSTALL := install
 
 IMAGE_NAMES := agents python-dev rust-dev zig-dev
 TEMPLATE_DIRS := python rust zig
+LIB_FILES := common.sh workspace.sh image.sh
 
 .PHONY: install uninstall install-systemd uninstall-systemd test lint check
 
 install:
 	$(INSTALL) -d "$(BIN_DIR)"
 	$(INSTALL) -m 755 bin/dctl "$(BIN_DIR)/dctl"
+	$(INSTALL) -d "$(LIB_DIR)"
+	for lib in $(LIB_FILES); do \
+		$(INSTALL) -m 644 "lib/dctl/$$lib" "$(LIB_DIR)/$$lib"; \
+	done
 	for image in $(IMAGE_NAMES); do \
 		$(INSTALL) -d "$(DATA_DIR)/images/$$image"; \
 		$(INSTALL) -m 644 "images/$$image/Dockerfile" "$(DATA_DIR)/images/$$image/Dockerfile"; \
@@ -30,6 +36,10 @@ install:
 
 uninstall:
 	rm -f "$(BIN_DIR)/dctl"
+	for lib in $(LIB_FILES); do \
+		rm -f "$(LIB_DIR)/$$lib"; \
+	done
+	rmdir "$(LIB_DIR)" 2>/dev/null || true
 	for image in $(IMAGE_NAMES); do \
 		rm -f "$(DATA_DIR)/images/$$image/Dockerfile"; \
 		rmdir "$(DATA_DIR)/images/$$image" 2>/dev/null || true; \

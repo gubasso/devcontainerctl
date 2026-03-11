@@ -3,9 +3,16 @@
 load test_helper
 
 source_dctl_functions() {
-  local script
-  script="${BATS_TEST_DIRNAME}/../bin/dctl"
-  eval "$(sed -n '1,/^# --- Main/p' "$script" | head -n -1)"
+  local repo_root
+  repo_root="${BATS_TEST_DIRNAME}/.."
+  readonly DCTL_LIB_DIR="${repo_root}/lib/dctl"
+  set -euo pipefail
+  # shellcheck source=/dev/null
+  source "${DCTL_LIB_DIR}/common.sh"
+  # shellcheck source=/dev/null
+  source "${DCTL_LIB_DIR}/workspace.sh"
+  # shellcheck source=/dev/null
+  source "${DCTL_LIB_DIR}/image.sh"
 }
 
 setup() {
@@ -209,15 +216,18 @@ teardown() {
 }
 
 @test "make install puts Dockerfiles in DATA_DIR/images and installed dctl uses them" {
-  local bin_dir data_home
+  local bin_dir data_home lib_dir
   bin_dir="${TEST_TMPDIR}/bin"
   data_home="${TEST_TMPDIR}/data-home"
+  lib_dir="${TEST_TMPDIR}/lib/dctl"
 
   run make install \
     BIN_DIR="$bin_dir" \
-    DATA_DIR="${data_home}/dctl"
+    DATA_DIR="${data_home}/dctl" \
+    LIB_DIR="$lib_dir"
   [ "$status" -eq 0 ]
 
+  [ -f "${lib_dir}/common.sh" ]
   [ -f "${data_home}/dctl/images/agents/Dockerfile" ]
   [ -f "${data_home}/dctl/templates/python/devcontainer.json" ]
 
