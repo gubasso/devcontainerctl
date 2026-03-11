@@ -17,18 +17,26 @@ source "${DCTL_LIB_DIR}/common.sh"
 source "${DCTL_LIB_DIR}/workspace.sh"
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/image.sh"
+# shellcheck source=/dev/null
+source "${DCTL_LIB_DIR}/init.sh"
+# shellcheck source=/dev/null
+source "${DCTL_LIB_DIR}/test.sh"
 
 usage() {
   cat <<'EOF'
-Usage: dctl <command-group> <command> [options]
+Usage: dctl <command-group> [command] [options]
 
-Command groups:
+Commands:
+  init         Scaffold .devcontainer/devcontainer.json from a template
+  test         Validate the current workspace setup
   workspace    Manage the current workspace's devcontainer lifecycle
   image        Build and inspect devcontainer base images
   help         Show this help text
   version      Show dctl version
 
 Examples:
+  dctl init --template python
+  dctl test
   dctl workspace up
   dctl workspace shell
   dctl workspace run -- claude
@@ -41,6 +49,14 @@ main() {
   local command_group="${1:-help}"
 
   case "$command_group" in
+    init)
+      shift
+      main_init "$@"
+      ;;
+    test)
+      shift
+      main_test "$@"
+      ;;
     workspace)
       shift
       main_workspace "$@"
