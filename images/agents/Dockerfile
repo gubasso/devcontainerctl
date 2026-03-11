@@ -3,13 +3,13 @@
 #
 # Supply chain note: Bun, Claude Code, OpenCode, and the mise
 # refresh are installed via curl-pipe. Codex is installed via Bun (npm-style).
-# Node.js LTS, neovim, Python, fzf, and pre-commit are installed via mise. eza,
-# mise, zoxide, starship, and bottom are
-# installed via cargo-binstall (prebuilt binaries). trash-cli via pipx. Rust
-# toolchain via rustup. Lazy plugins, treesitter parsers, and Mason tools are
-# pre-installed at build time. For stronger guarantees, pin versions and validate
-# checksums. Current approach favors simplicity for personal devcontainers with
-# weekly rebuilds.
+# gh is installed via the official GitHub APT repo. Node.js LTS, neovim,
+# Python, fzf, pre-commit, and glab are installed via mise. eza, mise, zoxide,
+# starship, and bottom are installed via cargo-binstall (prebuilt binaries).
+# trash-cli via pipx. Rust toolchain via rustup. Lazy plugins, treesitter
+# parsers, and Mason tools are pre-installed at build time. For stronger
+# guarantees, pin versions and validate checksums. Current approach favors
+# simplicity for personal devcontainers with weekly rebuilds.
 
 FROM debian:bookworm-slim
 
@@ -88,6 +88,17 @@ RUN git clone --depth=1 https://github.com/lincheney/fzf-tab-completion /usr/sha
     && rm -rf /usr/share/fzf-tab-completion/.git \
     && test -r /usr/share/fzf-tab-completion/bash/fzf-bash-completion.sh
 
+# GitHub CLI (gh): official APT repo tracks latest releases for Debian
+RUN mkdir -p -m 755 /etc/apt/keyrings \
+    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
 USER $USERNAME
 WORKDIR /home/$USERNAME
 
@@ -134,6 +145,7 @@ RUN curl -fsSL https://mise.run | MISE_INSTALL_PATH="$HOME/.cargo/bin/mise" sh \
     && mise use --global pre-commit@latest \
     && mise use --global go@latest \
     && mise use --global fzf@latest \
+    && mise use --global gitlab:gitlab-org/cli@latest \
     && pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir pipx \
     && python -m pipx install trash-cli \
