@@ -16,4 +16,4 @@ RUN rustup default none \
 
 ENV PATH="/home/$USERNAME/.cargo/bin:$PATH"
 
-WORKDIR /workspace
+WORKDIR /workspaces

@@ -40,4 +40,4 @@ RUN chmod +x /home/$USERNAME/.local/bin/zig-zls-init
 # Predictable cache path for volume mounts
 ENV ZIG_GLOBAL_CACHE_DIR="/home/$USERNAME/.cache/zig"
 
-WORKDIR /workspace
+WORKDIR /workspaces
