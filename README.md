@@ -8,12 +8,12 @@ Three-tier architecture on a shared foundation:
 
 | Image | Base | What it adds |
 | --- | --- | --- |
-| `devimg/agents` | Debian bookworm-slim | Dev tools, Bun, Rust, mise, Node LTS, neovim, Claude Code, Codex, OpenCode |
+| `devimg/agents` | Debian bookworm-slim | Dev tools, Bun, Rust, mise, Node LTS, neovim, Claude Code, Codex, OpenCode, Gemini CLI |
 | `devimg/python-dev` | `devimg/agents` | Poetry via mise (`virtualenvs.in-project = true`) |
 | `devimg/rust-dev` | `devimg/agents` | rustup (`--default-toolchain none`) |
 | `devimg/zig-dev` | `devimg/agents` | anyzig + minisign + zig-zls-init |
 
-Images provide tooling, not language runtime versions. Project runtime versions stay pinned in project config and are installed at container start.
+The `agents` base includes rolling Python and Go runtimes for shared tooling. Project-specific runtime versions stay pinned in project config and override the base defaults at container start or first tool invocation.
 
 ## Install
 
@@ -58,6 +58,7 @@ cp "$HOME/.local/share/dctl/templates/python/devcontainer.json" .devcontainer/de
 dctl image build                  # interactive fzf selection
 dctl image build agents           # specific image
 dctl image build --all            # all images (pulls base updates)
+dctl image build --refresh-agents agents  # cache-bust agent CLI layer
 dctl image build --full-rebuild   # full uncached rebuild of all images
 dctl image build --dry-run        # preview only
 dctl image list                   # show available targets

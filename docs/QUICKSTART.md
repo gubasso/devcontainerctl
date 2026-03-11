@@ -37,7 +37,7 @@ Shared auth/editor mounts, `remoteUser`, `init`, `shutdownAction`, container env
 
 | Image | Use case |
 | --- | --- |
-| `devimg/agents:latest` | General-purpose (Bun, mise, Claude Code, Codex, OpenCode) |
+| `devimg/agents:latest` | General-purpose (Bun, mise, Claude Code, Codex, OpenCode, Gemini CLI) |
 | `devimg/python-dev:latest` | Python projects |
 | `devimg/rust-dev:latest` | Rust projects |
 | `devimg/zig-dev:latest` | Zig projects |
