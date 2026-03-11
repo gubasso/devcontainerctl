@@ -156,10 +156,12 @@ devimg/python-dev:latest (base image, no python version)
        │
        ├── project-a  ─► container (mise installs python 3.11)
        ├── project-b  ─► container (mise installs python 3.12)
-       └── project-c  ─► container (reuses cached 3.11)
+       └── project-c  ─► container (installs python 3.11)
 ```
 
-Each project gets its own container with its own virtualenv. Python interpreters are shared via the `mise-cache` volume.
+Each project gets its own container with its own virtualenv. Python interpreters are installed inside each container when `mise install` runs.
+
+This keeps the default Python setup simpler, but interpreters become ephemeral: rebuilding a container re-downloads its Python runtime unless you add a custom `mise` volume mount back yourself.
 
 ---
 
@@ -363,7 +365,7 @@ This keeps images small and reusable while giving each project exact version con
 
 | Component | Scope | Storage |
 | --------- | ----- | ------- |
-| Python interpreters | Shared across projects | `mise-cache` volume |
+| Python interpreters | Per-container | Installed by `mise install` during container creation |
 | Rust toolchains | Shared across projects | `rustup-toolchains` volume |
 | Zig global cache | Shared across projects | `zig-cache` volume (`/home/<user>/.cache/zig`) |
 | Cargo registry/git | Shared across projects | `cargo-registry`, `cargo-git` volumes |
@@ -678,7 +680,6 @@ below show only project-local deltas.
   "image": "devimg/python-dev:latest",
 
   "mounts": [
-    "source=mise-cache,target=/home/${localEnv:USER}/.local/share/mise,type=volume",
     "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume"
   ],
 
@@ -711,7 +712,6 @@ below show only project-local deltas.
   "image": "devimg/python-dev:latest",
 
   "mounts": [
-    "source=mise-cache,target=/home/${localEnv:USER}/.local/share/mise,type=volume",
     "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume",
 
     "source=${localEnv:HOME}/.ssh/known_hosts,target=/home/${localEnv:USER}/.ssh/known_hosts,type=bind,readonly"
@@ -733,7 +733,6 @@ alongside it.
   "image": "devimg/python-dev:latest",
 
   "mounts": [
-    "source=mise-cache,target=/home/${localEnv:USER}/.local/share/mise,type=volume",
     "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume",
     "source=${localEnv:HOME}/projects/shared-lib,target=/workspaces/shared-lib,type=bind,readonly"
   ],
@@ -799,7 +798,6 @@ dctl image build agents python-dev rust-dev zig-dev
 ```jsonc
 {
   "mounts": [
-    "source=mise-cache,target=/home/${localEnv:USER}/.local/share/mise,type=volume",
     "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume",
     "source=pip-cache,target=/home/${localEnv:USER}/.cache/pip,type=volume"
   ]
@@ -825,7 +823,6 @@ For truly untrusted sessions, prefer **per-project cache volumes**:
 ```jsonc
 {
   "mounts": [
-    "source=mise-cache-project-a,target=/home/${localEnv:USER}/.local/share/mise,type=volume",
     "source=poetry-cache-project-a,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume"
   ]
 }
@@ -834,7 +831,7 @@ For truly untrusted sessions, prefer **per-project cache volumes**:
 Wipe caches when needed:
 
 ```bash
-docker volume rm mise-cache-project-a poetry-cache-project-a 2>/dev/null || true
+docker volume rm poetry-cache-project-a 2>/dev/null || true
 ```
 
 #### Pattern 3: Project + Shared Libraries (RO)
@@ -842,7 +839,6 @@ docker volume rm mise-cache-project-a poetry-cache-project-a 2>/dev/null || true
 ```jsonc
 {
   "mounts": [
-    "source=mise-cache,target=/home/${localEnv:USER}/.local/share/mise,type=volume",
     "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume",
     "source=${localEnv:HOME}/libs/common,target=/workspaces/libs/common,type=bind,readonly",
     "source=${localEnv:HOME}/libs/sdk,target=/workspaces/libs/sdk,type=bind,readonly"
@@ -980,7 +976,6 @@ docker compose -f .devcontainer/docker-compose.yml down
   "privileged": false,
 
   "mounts": [
-    "source=mise-cache,target=/home/${localEnv:USER}/.local/share/mise,type=volume",
     "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume"
   ]
 }
@@ -1076,7 +1071,6 @@ cat > .devcontainer/devcontainer.json << EOF
   "image": "devimg/python-dev:latest",
   "postCreateCommand": "mise install && poetry install",
   "mounts": [
-    "source=mise-cache,target=/home/\${localEnv:USER}/.local/share/mise,type=volume",
     "source=poetry-cache,target=/home/\${localEnv:USER}/.cache/pypoetry,type=volume"
   ]
 }
@@ -1141,7 +1135,6 @@ cat > .devcontainer/devcontainer.json << EOF
   "mounts": [
     "source=\${localEnv:HOME}/projects/my-api-docs,target=/workspaces/docs,type=bind,readonly",
     "source=\${localEnv:HOME}/libs/internal-sdk,target=/workspaces/sdk,type=bind,readonly",
-    "source=mise-cache,target=/home/\${localEnv:USER}/.local/share/mise,type=volume",
     "source=poetry-cache,target=/home/\${localEnv:USER}/.cache/pypoetry,type=volume"
   ],
   "postCreateCommand": "mise install && poetry install"
@@ -1232,7 +1225,6 @@ services:
     volumes:
       - ..:/workspaces/<project-name>
       - ~/.gitconfig:/home/${USER}/.gitconfig:ro
-      - mise-cache:/home/${USER}/.local/share/mise
       - poetry-cache:/home/${USER}/.cache/pypoetry
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/dev
@@ -1253,7 +1245,6 @@ services:
 
 volumes:
   postgres-data:
-  mise-cache:
   poetry-cache:
 ```
 
@@ -1323,7 +1314,7 @@ UID/GID should match if the image was built with the correct `USER_UID`/`USER_GI
 If caches were created with a different UID/GID:
 
 ```bash
-docker volume rm mise-cache poetry-cache rustup-toolchains cargo-registry cargo-git zig-cache zls-cache
+docker volume rm poetry-cache rustup-toolchains cargo-registry cargo-git zig-cache zls-cache
 ```
 
 ### mise Install Fails
@@ -1392,7 +1383,7 @@ If symlinks point outside the mounted tree, use rsync snapshot with `-L` flag.
 docker ps -aq --filter "label=devcontainer.local_folder" | xargs -r docker rm -f
 
 # Remove all cache volumes
-docker volume rm mise-cache poetry-cache pip-cache rustup-toolchains cargo-registry cargo-git 2>/dev/null || true
+docker volume rm poetry-cache pip-cache rustup-toolchains cargo-registry cargo-git 2>/dev/null || true
 
 # Prune dangling volumes
 docker volume prune
@@ -1460,7 +1451,6 @@ dctl image build --all
 
 | Volume | Contents | Shared? |
 | ------ | -------- | ------- |
-| `mise-cache` | Python interpreters | Yes |
 | `poetry-cache` | Poetry package cache | Yes |
 | `rustup-toolchains` | Rust toolchains | Yes |
 | `cargo-registry` | Crates.io index + crates | Yes |
@@ -1517,8 +1507,7 @@ Open from the `my-api` project directory.
     // Internal SDK (read-only context)
     "source=${localEnv:HOME}/libs/internal-sdk,target=/workspaces/internal-sdk,type=bind,readonly",
 
-    // Runtime + cache volumes
-    "source=mise-cache,target=/home/${localEnv:USER}/.local/share/mise,type=volume",
+    // Cache volumes
     "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume"
   ],
 
@@ -1540,8 +1529,7 @@ symlink-heavy SDK into a flat directory at container creation time.
     // Source for rsync (temporary mount point)
     "source=${localEnv:HOME}/libs/legacy-sdk,target=/mnt/src-legacy-sdk,type=bind,readonly",
 
-    // Runtime + cache volumes
-    "source=mise-cache,target=/home/${localEnv:USER}/.local/share/mise,type=volume",
+    // Cache volumes
     "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume"
   ],
 
@@ -1574,8 +1562,7 @@ monorepo packages alongside it.
     "source=${localEnv:HOME}/monorepo/pyproject.toml,target=/workspaces/pyproject.toml,type=bind,readonly",
     "source=${localEnv:HOME}/monorepo/poetry.lock,target=/workspaces/poetry.lock,type=bind,readonly",
 
-    // Runtime volumes
-    "source=mise-cache,target=/home/${localEnv:USER}/.local/share/mise,type=volume",
+    // Cache volumes
     "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume"
   ]
 }

@@ -4,11 +4,6 @@
   "mounts": [
     // python caches
     {
-      "source": "mise-cache",
-      "target": "${localEnv:HOME}/.local/share/mise",
-      "type": "volume"
-    },
-    {
       "source": "poetry-cache",
       "target": "${localEnv:HOME}/.cache/pypoetry",
       "type": "volume"
