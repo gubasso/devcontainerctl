@@ -64,7 +64,7 @@ build_workspace_image_if_managed() {
   if [[ "$image" =~ ^devimg/([[:alnum:]._-]+):latest$ ]]; then
     local target="${BASH_REMATCH[1]}"
     if [[ -f "$IMAGES_DIR/$target/Dockerfile" ]]; then
-      cmd_image_build "$target"
+      (cmd_image_build "$target")
       return $?
     fi
   fi
@@ -136,7 +136,7 @@ cmd_test() {
     fi
 
     if [[ "$container_started" == true ]]; then
-      if devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" printf dctl-smoke; then
+      if devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" printf 'dctl-smoke\n' >/dev/null; then
         check_pass "devcontainer exec succeeded"
       else
         check_fail "devcontainer exec failed"

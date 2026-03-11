@@ -35,14 +35,15 @@ create_image_fixture() {
 setup() {
   setup_test_fixtures
   export XDG_DATA_HOME="${TEST_TMPDIR}/xdg-data"
-  mkdir -p "${XDG_DATA_HOME}/dctl/images" "${TEST_TMPDIR}/workspace"
+  export WORKSPACE_FOLDER="${TEST_TMPDIR}/workspace"
+  mkdir -p "${XDG_DATA_HOME}/dctl/images" "$WORKSPACE_FOLDER"
   source_dctl_functions
   # shellcheck disable=SC2329
-  workspace_path() { echo "/test/workspace"; }
+  workspace_path() { printf '%s\n' "$WORKSPACE_FOLDER"; }
   # shellcheck disable=SC2329
-  workspace_devcontainer_dir() { echo "${TEST_TMPDIR}/workspace/.devcontainer"; }
+  workspace_devcontainer_dir() { printf '%s/.devcontainer\n' "$WORKSPACE_FOLDER"; }
   # shellcheck disable=SC2329
-  workspace_devcontainer_file() { echo "${TEST_TMPDIR}/workspace/.devcontainer/devcontainer.json"; }
+  workspace_devcontainer_file() { printf '%s/.devcontainer/devcontainer.json\n' "$WORKSPACE_FOLDER"; }
   unset TERM COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION 2>/dev/null || true
 }
 
@@ -53,7 +54,7 @@ teardown() {
 @test "workspace_label_filter formats docker filter correctly" {
   run workspace_label_filter
   [ "$status" -eq 0 ]
-  [ "$output" = "label=devcontainer.local_folder=/test/workspace" ]
+  [ "$output" = "label=devcontainer.local_folder=${WORKSPACE_FOLDER}" ]
 }
 
 @test "list_workspace_containers uses docker ps -a" {
@@ -106,7 +107,7 @@ teardown() {
 
   run cmd_workspace_exec
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer exec --workspace-folder . bash"
+  assert_mock_called "devcontainer exec --workspace-folder ${WORKSPACE_FOLDER} bash"
 }
 
 @test "cmd_workspace_exec passes args through" {
@@ -116,7 +117,7 @@ teardown() {
 
   run cmd_workspace_exec -- id
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer exec --workspace-folder . id"
+  assert_mock_called "devcontainer exec --workspace-folder ${WORKSPACE_FOLDER} id"
 }
 
 @test "cmd_workspace_shell runs commands in a login shell" {
@@ -126,7 +127,7 @@ teardown() {
 
   run cmd_workspace_shell codex
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer exec --workspace-folder . bash -lic codex"
+  assert_mock_called "devcontainer exec --workspace-folder ${WORKSPACE_FOLDER} bash -lic codex"
 }
 
 @test "cmd_workspace_run requires a command" {
@@ -146,7 +147,7 @@ teardown() {
 
   run cmd_workspace_run -- pytest -q
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer exec --workspace-folder . bash -lc pytest -q"
+  assert_mock_called "devcontainer exec --workspace-folder ${WORKSPACE_FOLDER} bash -lc pytest -q"
 }
 
 @test "cmd_workspace_status does not auto-start a container" {
@@ -173,7 +174,7 @@ teardown() {
 
   run cmd_workspace_up -- --build-no-cache
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer up --workspace-folder . --build-no-cache"
+  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --build-no-cache"
 }
 
 @test "cmd_workspace_reup adds remove-existing-container" {
@@ -182,7 +183,7 @@ teardown() {
 
   run cmd_workspace_reup
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer up --workspace-folder . --remove-existing-container"
+  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --remove-existing-container"
 }
 
 @test "collect_term_env includes remote env flags for set vars" {
@@ -358,8 +359,8 @@ teardown() {
   run cmd_test
   [ "$status" -eq 0 ]
   assert_mock_called "docker buildx build"
-  assert_mock_called "devcontainer up --workspace-folder ."
-  assert_mock_called "devcontainer exec --workspace-folder . printf dctl-smoke"
+  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER}"
+  assert_mock_called "devcontainer exec --workspace-folder ${WORKSPACE_FOLDER} printf dctl-smoke\n"
   assert_mock_called "docker rm -f"
 }
 
@@ -373,7 +374,7 @@ teardown() {
   run cmd_test
   [ "$status" -eq 0 ]
   assert_mock_not_called "docker buildx build"
-  assert_mock_called "devcontainer up --workspace-folder ."
+  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER}"
 }
 
 @test "root help includes init and test commands" {

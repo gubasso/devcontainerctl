@@ -6,7 +6,8 @@ readonly _DCTL_COMMON_LOADED=1
 
 : "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)}"
 : "${DCTL_VERSION:=dev}"
-: "${WORKSPACE_FOLDER:=.}"
+: "${WORKSPACE_FOLDER:=$PWD}"
+WORKSPACE_FOLDER="$(cd -- "$WORKSPACE_FOLDER" && pwd -P)"
 : "${IMAGES_DIR:=${XDG_DATA_HOME:-$HOME/.local/share}/dctl/images}"
 : "${TEMPLATES_DIR:=${XDG_DATA_HOME:-$HOME/.local/share}/dctl/templates}"
 
@@ -34,7 +35,7 @@ require_cmd() {
 }
 
 workspace_path() {
-  pwd -P
+  printf '%s\n' "$WORKSPACE_FOLDER"
 }
 
 workspace_devcontainer_dir() {
