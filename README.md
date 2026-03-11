@@ -8,7 +8,7 @@ Three-tier architecture on a shared foundation:
 
 | Image | Base | What it adds |
 | --- | --- | --- |
-| `devimg/agents` | Debian bookworm-slim | Dev tools, Bun, Rust, mise, Node LTS, neovim, Claude Code, Codex, OpenCode, Gemini CLI |
+| `devimg/agents` | Debian bookworm-slim | Dev tools, Bun, Rust, mise, Node LTS, neovim, gh, glab, Claude Code, Codex, OpenCode, Gemini CLI |
 | `devimg/python-dev` | `devimg/agents` | Poetry via mise (`virtualenvs.in-project = true`) |
 | `devimg/rust-dev` | `devimg/agents` | rustup (`--default-toolchain none`) |
 | `devimg/zig-dev` | `devimg/agents` | anyzig + minisign + zig-zls-init |

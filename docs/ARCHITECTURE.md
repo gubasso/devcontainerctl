@@ -221,6 +221,8 @@ Foundation layer using Debian bookworm-slim for broad compatibility and package 
 - [Bun](https://bun.com/) as JavaScript runtime for agent CLIs (curl install - no apt package)
 - [Node.js](https://nodejs.org/) LTS via mise (required for bun-installed package shebangs)
 - [mise](https://mise.jdx.dev/) for runtime version management
+- [GitHub CLI (gh)](https://github.com/cli/cli) for GitHub workflows
+- [GitLab CLI (glab)](https://gitlab.com/gitlab-org/cli) for GitLab workflows
 - AI agent CLIs:
   - [Claude Code](https://github.com/anthropics/claude-code) (native installer)
   - [Codex CLI](https://github.com/openai/codex) (OpenAI)
@@ -239,6 +241,13 @@ Native installers are preferred over Homebrew in containers (Homebrew adds ~500M
 | OpenCode | npm (via Bun) | `bun add -g opencode-ai` |
 | Gemini CLI | npm (via Node) | `npm install -g @google/gemini-cli@latest` |
 
+#### Platform CLI Installation Methods
+
+| Tool | Method | Command |
+| ---- | ------ | ------- |
+| gh (GitHub CLI) | Official APT repo | Keyring + `sources.list.d` entry in `images/agents/Dockerfile` |
+| glab (GitLab CLI) | mise (GitLab releases) | `mise use --global gitlab:gitlab-org/cli@latest` |
+
 **Notes**:
 
 - Claude Code: Native installer recommended (auto-updates); npm still supported
@@ -254,8 +263,10 @@ Native installers are preferred over Homebrew in containers (Homebrew adds ~500M
 | Codex CLI | Interactive login (ChatGPT account) on first run |
 | OpenCode | Interactive login (supports multiple providers) |
 | Gemini CLI | Interactive login (Google account) or API key |
+| gh | `gh auth login` (interactive, GitHub account) |
+| glab | `glab auth login` (interactive, GitLab account) |
 
-All agents authenticate interactively on first run. To persist auth across container recreations, mount the agent config directories (see [Pattern 6](#pattern-6-config-with-selective-rw-mounts)).
+All listed CLIs authenticate interactively on first run. To persist auth across container recreations, mount the relevant config directories (see [Pattern 6](#pattern-6-config-with-selective-rw-mounts)).
 
 #### Headless Neovim Bootstrap
 
