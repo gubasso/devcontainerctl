@@ -10,8 +10,8 @@ source_dctl_functions() {
 
 setup() {
   setup_test_fixtures
-  export XDG_CONFIG_HOME="${TEST_TMPDIR}/xdg-config"
-  mkdir -p "${XDG_CONFIG_HOME}/dctl"
+  export XDG_DATA_HOME="${TEST_TMPDIR}/xdg-data"
+  mkdir -p "${XDG_DATA_HOME}/dctl/images"
   source_dctl_functions
   # shellcheck disable=SC2329
   workspace_path() { echo "/test/workspace"; }
@@ -180,9 +180,9 @@ teardown() {
   assert_mock_called "--remote-env COLORTERM=truecolor"
 }
 
-@test "cmd_image_list prints discovered targets from XDG config dir" {
-  mkdir -p "${XDG_CONFIG_HOME}/dctl/agents" "${XDG_CONFIG_HOME}/dctl/python-dev"
-  touch "${XDG_CONFIG_HOME}/dctl/agents/Dockerfile" "${XDG_CONFIG_HOME}/dctl/python-dev/Dockerfile"
+@test "cmd_image_list prints discovered targets from XDG data dir" {
+  mkdir -p "${XDG_DATA_HOME}/dctl/images/agents" "${XDG_DATA_HOME}/dctl/images/python-dev"
+  touch "${XDG_DATA_HOME}/dctl/images/agents/Dockerfile" "${XDG_DATA_HOME}/dctl/images/python-dev/Dockerfile"
 
   run cmd_image_list
   [ "$status" -eq 0 ]
@@ -190,9 +190,9 @@ teardown() {
   [[ "$output" == *"python-dev"* ]]
 }
 
-@test "cmd_image_build dry-run uses XDG config dir" {
-  mkdir -p "${XDG_CONFIG_HOME}/dctl/agents"
-  touch "${XDG_CONFIG_HOME}/dctl/agents/Dockerfile"
+@test "cmd_image_build dry-run uses XDG data dir" {
+  mkdir -p "${XDG_DATA_HOME}/dctl/images/agents"
+  touch "${XDG_DATA_HOME}/dctl/images/agents/Dockerfile"
 
   run cmd_image_build --dry-run agents
   [ "$status" -eq 0 ]
@@ -200,30 +200,28 @@ teardown() {
 }
 
 @test "cmd_image_build rejects unknown image targets" {
-  mkdir -p "${XDG_CONFIG_HOME}/dctl/agents"
-  touch "${XDG_CONFIG_HOME}/dctl/agents/Dockerfile"
+  mkdir -p "${XDG_DATA_HOME}/dctl/images/agents"
+  touch "${XDG_DATA_HOME}/dctl/images/agents/Dockerfile"
 
   run cmd_image_build --dry-run unknown
   [ "$status" -ne 0 ]
   [[ "$output" == *"Unknown image: unknown"* ]]
 }
 
-@test "make install puts Dockerfiles in CONFIG_DIR and installed dctl uses them" {
-  local bin_dir config_home data_home
+@test "make install puts Dockerfiles in DATA_DIR/images and installed dctl uses them" {
+  local bin_dir data_home
   bin_dir="${TEST_TMPDIR}/bin"
-  config_home="${TEST_TMPDIR}/config-home"
   data_home="${TEST_TMPDIR}/data-home"
 
   run make install \
     BIN_DIR="$bin_dir" \
-    CONFIG_DIR="${config_home}/dctl" \
     DATA_DIR="${data_home}/dctl"
   [ "$status" -eq 0 ]
 
-  [ -f "${config_home}/dctl/agents/Dockerfile" ]
+  [ -f "${data_home}/dctl/images/agents/Dockerfile" ]
   [ -f "${data_home}/dctl/templates/python/devcontainer.json" ]
 
-  run env XDG_CONFIG_HOME="$config_home" HOME="${TEST_TMPDIR}/home" \
+  run env XDG_DATA_HOME="$data_home" HOME="${TEST_TMPDIR}/home" \
     "${bin_dir}/dctl" image list
   [ "$status" -eq 0 ]
   [[ "$output" == *"agents"* ]]

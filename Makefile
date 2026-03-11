@@ -1,11 +1,10 @@
 BIN_DIR ?= $(HOME)/.local/bin
-CONFIG_DIR ?= $(HOME)/.config/dctl
 DATA_DIR ?= $(HOME)/.local/share/dctl
 SYSTEMD_DIR ?= $(HOME)/.local/share/systemd/user
 
 INSTALL := install
 
-CONFIG_IMAGES := agents python-dev rust-dev zig-dev
+IMAGE_NAMES := agents python-dev rust-dev zig-dev
 TEMPLATE_DIRS := python rust zig
 
 .PHONY: install uninstall install-systemd uninstall-systemd test lint check
@@ -13,9 +12,9 @@ TEMPLATE_DIRS := python rust zig
 install:
 	$(INSTALL) -d "$(BIN_DIR)"
 	$(INSTALL) -m 755 bin/dctl "$(BIN_DIR)/dctl"
-	for image in $(CONFIG_IMAGES); do \
-		$(INSTALL) -d "$(CONFIG_DIR)/$$image"; \
-		$(INSTALL) -m 644 ".config/dctl/$$image/Dockerfile" "$(CONFIG_DIR)/$$image/Dockerfile"; \
+	for image in $(IMAGE_NAMES); do \
+		$(INSTALL) -d "$(DATA_DIR)/images/$$image"; \
+		$(INSTALL) -m 644 "images/$$image/Dockerfile" "$(DATA_DIR)/images/$$image/Dockerfile"; \
 	done
 	$(INSTALL) -d "$(DATA_DIR)/templates"
 	for template in $(TEMPLATE_DIRS); do \
@@ -31,11 +30,11 @@ install:
 
 uninstall:
 	rm -f "$(BIN_DIR)/dctl"
-	for image in $(CONFIG_IMAGES); do \
-		rm -f "$(CONFIG_DIR)/$$image/Dockerfile"; \
-		rmdir "$(CONFIG_DIR)/$$image" 2>/dev/null || true; \
+	for image in $(IMAGE_NAMES); do \
+		rm -f "$(DATA_DIR)/images/$$image/Dockerfile"; \
+		rmdir "$(DATA_DIR)/images/$$image" 2>/dev/null || true; \
 	done
-	rmdir "$(CONFIG_DIR)" 2>/dev/null || true
+	rmdir "$(DATA_DIR)/images" 2>/dev/null || true
 	for template in $(TEMPLATE_DIRS); do \
 		rm -f "$(DATA_DIR)/templates/$$template/devcontainer.json"; \
 		rmdir "$(DATA_DIR)/templates/$$template" 2>/dev/null || true; \

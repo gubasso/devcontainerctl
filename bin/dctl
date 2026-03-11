@@ -5,7 +5,7 @@ set -euo pipefail
 
 readonly DCTL_VERSION="dev"
 readonly WORKSPACE_FOLDER="."
-readonly IMAGES_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/dctl"
+readonly IMAGES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/dctl/images"
 
 usage() {
   cat <<'EOF'
@@ -71,7 +71,7 @@ Usage: dctl image <command> [options]
 
 Commands:
   build [OPTIONS] [IMAGE...]
-      Build devcontainer base images from $XDG_CONFIG_HOME/dctl.
+      Build devcontainer base images from $XDG_DATA_HOME/dctl/images.
       If no image is specified, launches interactive fzf selection.
 
       Options:

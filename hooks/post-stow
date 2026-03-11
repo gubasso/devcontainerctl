@@ -18,7 +18,7 @@ if ! command -v docker &>/dev/null; then
   exit 0
 fi
 
-info "Dctl image definitions deployed to ~/.config/dctl/"
+info "Dctl image definitions deployed to ~/.local/share/dctl/images/"
 info "Build images with:"
 echo ""
 echo "  dctl image build --all"
