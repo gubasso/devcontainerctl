@@ -26,7 +26,6 @@
     // "source=${localEnv:HOME}/.ssh/known_hosts,target=/home/${localEnv:USER}/.ssh/known_hosts,type=bind,readonly"
 
     // Python caches (for python-dev image)
-    // "source=mise-cache,target=/home/${localEnv:USER}/.local/share/mise,type=volume",
     // "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume"
   ]
 }
