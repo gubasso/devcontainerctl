@@ -119,16 +119,14 @@ cmd_test() {
     failures=$((failures + 1))
   fi
 
-  if [[ "$docker_ready" == true ]]; then
+  if [[ "$docker_ready" == true && "$devcontainer_ready" == true ]]; then
     if build_workspace_image_if_managed; then
       check_pass "Workspace image is ready"
     else
       check_fail "Failed to build managed workspace image"
       failures=$((failures + 1))
     fi
-  fi
 
-  if [[ "$docker_ready" == true && "$devcontainer_ready" == true ]]; then
     if devcontainer up --workspace-folder "$WORKSPACE_FOLDER"; then
       check_pass "devcontainer up succeeded"
       container_started=true
@@ -136,18 +134,16 @@ cmd_test() {
       check_fail "devcontainer up failed"
       failures=$((failures + 1))
     fi
-  fi
 
-  if [[ "$container_started" == true ]]; then
-    if devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" printf dctl-smoke; then
-      check_pass "devcontainer exec succeeded"
-    else
-      check_fail "devcontainer exec failed"
-      failures=$((failures + 1))
+    if [[ "$container_started" == true ]]; then
+      if devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" printf dctl-smoke; then
+        check_pass "devcontainer exec succeeded"
+      else
+        check_fail "devcontainer exec failed"
+        failures=$((failures + 1))
+      fi
     fi
-  fi
 
-  if [[ "$docker_ready" == true ]]; then
     if cleanup_test_workspace_containers; then
       check_pass "Workspace containers cleaned up"
     else

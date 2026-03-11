@@ -338,12 +338,11 @@ teardown() {
 }
 
 @test "cmd_test fails when devcontainer command is missing" {
-  create_image_fixture python-dev
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{\n  "image": "devimg/python-dev:latest"\n}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
   create_mock docker 0 "container123"
-  PATH="${TEST_TMPDIR}/bin:/bin:/usr/bin" run cmd_test
+  PATH="${TEST_TMPDIR}/bin" run cmd_test
   [ "$status" -ne 0 ]
   [[ "$output" == *"Missing required command: devcontainer"* ]]
 }
