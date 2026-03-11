@@ -116,6 +116,7 @@ RUN cargo install cargo-binstall --locked \
     && { cargo binstall --no-confirm eza || cargo install --locked eza; } \
     && { cargo binstall --no-confirm starship || cargo install --locked starship; } \
     && { cargo binstall --no-confirm ast-grep || cargo install --locked ast-grep; } \
+    && { cargo binstall --no-confirm shellharden || cargo install --locked shellharden; } \
     && cargo install --locked tree-sitter-cli
 
 # Node.js LTS via mise (needed for bun-installed packages with #!/usr/bin/env node shebangs)
