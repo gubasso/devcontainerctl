@@ -94,7 +94,7 @@ dctl workspace up             # start devcontainer
 dctl workspace reup           # recreate after config/image changes
 dctl workspace shell          # interactive shell
 dctl workspace exec -- pytest # run command in container
-dctl workspace run -- claude  # run via bash -lc
+dctl workspace run -- claude-session  # run via bash -lc
 dctl workspace status         # show containers for this project
 dctl workspace down           # stop and remove
 ```
