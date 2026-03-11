@@ -26,4 +26,4 @@ RUN mise use --global pipx:poetry@latest \
 # Poetry config: virtualenvs inside project directories
 RUN poetry config virtualenvs.in-project true
 
-WORKDIR /workspace
+WORKDIR /workspaces

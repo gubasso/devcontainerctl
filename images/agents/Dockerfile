@@ -216,7 +216,7 @@ RUN echo "agent-cache-bust=$CACHEBUST_AGENTS" \
 # Codex CLI (OpenAI) via Bun | OpenCode via Bun | Gemini CLI via npm
 RUN bun add -g @openai/codex opencode-ai && npm install -g @google/gemini-cli@latest
 
-WORKDIR /workspace
+WORKDIR /workspaces
 
 # Shared devcontainer defaults inherited by child images and merged with project-local devcontainer.json
 LABEL devcontainer.metadata='[ \
