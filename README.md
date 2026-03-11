@@ -32,6 +32,7 @@ systemctl --user enable --now dctl-image-build.timer
 `make install` installs:
 
 - `dctl` to `~/.local/bin/dctl`
+- shell library to `~/.local/lib/dctl/`
 - image Dockerfiles to `~/.local/share/dctl/images/`
 - devcontainer templates to `~/.local/share/dctl/templates/`
 
