@@ -298,12 +298,12 @@ LABEL devcontainer.metadata='[ \
         "type": "bind" \
       }, \
       { \
-        "source": "${localEnv:DOTFILES}/gh/.config/gh", \
+        "source": "${localEnv:HOME}/.config/gh", \
         "target": "${localEnv:HOME}/.config/gh", \
         "type": "bind" \
       }, \
       { \
-        "source": "${localEnv:DOTFILES}/glab/.config/glab-cli", \
+        "source": "${localEnv:HOME}/.config/glab-cli", \
         "target": "${localEnv:HOME}/.config/glab-cli", \
         "type": "bind" \
       } \
