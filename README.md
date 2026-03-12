@@ -87,22 +87,22 @@ dctl image list                   # show available targets
 
 The `agents` and `zig-dev` images require the dotfiles repo as a BuildKit named context. Set `DOT=` or ensure `~/.dotfiles` exists.
 
-### `dctl workspace`
+### `dctl ws`
 
 ```bash
-dctl workspace up             # start devcontainer
-dctl workspace reup           # recreate after config/image changes
-dctl workspace shell          # interactive shell
-dctl workspace exec -- pytest # run command in container
-dctl workspace run -- claude-session  # run via bash -lc
-dctl workspace status         # show containers for this project
-dctl workspace down           # stop and remove
+dctl ws up             # start devcontainer
+dctl ws reup           # recreate after config/image changes
+dctl ws shell          # interactive shell
+dctl ws exec -- pytest # run command in container
+dctl ws run -- claude-session  # run via bash -lc
+dctl ws status         # show containers for this project
+dctl ws down           # stop and remove
 ```
 
 If the Claude wrapper wiring inside a container looks broken, recreate the container:
 
 ```bash
-dctl workspace reup
+dctl ws reup
 ```
 
 ## Automation
@@ -181,7 +181,7 @@ devcontainer up --workspace-folder .
 
 ```bash
 dctl init --template python
-dctl workspace up
+dctl ws up
 ```
 
 `dctl init` copies a ready-made `devcontainer.json` into `.devcontainer/` with image, mounts, and lifecycle hooks pre-configured.
@@ -205,7 +205,7 @@ devcontainer exec --workspace-folder . pytest
 **dctl:**
 
 ```bash
-dctl workspace exec -- pytest
+dctl ws exec -- pytest
 ```
 
 ### Interactive Shell
@@ -227,7 +227,7 @@ devcontainer exec --workspace-folder . bash
 **dctl:**
 
 ```bash
-dctl workspace shell
+dctl ws shell
 ```
 
 ### Multiple Terminal Sessions
@@ -264,13 +264,13 @@ devcontainer exec --workspace-folder . claude-session
 
 ```bash
 # terminal 1
-dctl workspace shell
+dctl ws shell
 
 # terminal 2
-dctl workspace shell
+dctl ws shell
 
 # terminal 3 — run an agent
-dctl workspace shell claude-session
+dctl ws shell claude-session
 ```
 
 Each session shares the same container, filesystem, and installed tools.
@@ -301,7 +301,7 @@ devcontainer up --workspace-folder . --remove-existing-container
 **dctl:**
 
 ```bash
-dctl workspace reup
+dctl ws reup
 ```
 
 ### Image Management

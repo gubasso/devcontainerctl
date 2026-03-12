@@ -10,8 +10,8 @@
 
 1. Run `dctl init --template <python|rust|zig>` in your project root.
 2. Add only project-specific mounts or cache volumes as needed.
-3. Start: `dctl workspace up`
-4. Attach: `dctl workspace shell`
+3. Start: `dctl ws up`
+4. Attach: `dctl ws shell`
 5. Re-run validation any time with `dctl test`
 
 ## Template
@@ -44,13 +44,13 @@ Shared auth/editor mounts, `remoteUser`, `init`, `shutdownAction`, container env
 ## Common Commands
 
 ```bash
-dctl workspace up             # start
-dctl workspace reup           # recreate after devcontainer.json/image changes
-dctl workspace shell          # attach shell
-dctl workspace run -- claude-session  # run agent command
-dctl workspace run -- pytest  # execute arbitrary command
-dctl workspace status         # show container(s) for current workspace
-dctl workspace down           # stop/remove current workspace container(s)
+dctl ws up             # start
+dctl ws reup           # recreate after devcontainer.json/image changes
+dctl ws shell          # attach shell
+dctl ws run -- claude-session  # run agent command
+dctl ws run -- pytest  # execute arbitrary command
+dctl ws status         # show container(s) for current workspace
+dctl ws down           # stop/remove current workspace container(s)
 dctl image build --all        # rebuild base images
 ```
 

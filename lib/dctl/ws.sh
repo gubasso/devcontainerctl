@@ -1,8 +1,8 @@
 # shellcheck shell=bash
-# Workspace commands for dctl (sourced, not executed directly)
+# Workspace (ws) commands for dctl (sourced, not executed directly)
 
-[[ -n "${_DCTL_WORKSPACE_LOADED:-}" ]] && return 0
-readonly _DCTL_WORKSPACE_LOADED=1
+[[ -n "${_DCTL_WS_LOADED:-}" ]] && return 0
+readonly _DCTL_WS_LOADED=1
 
 : "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)}"
 
@@ -15,9 +15,9 @@ require_dotfiles_dir() {
   export DOT
 }
 
-usage_workspace() {
+usage_ws() {
   cat <<'EOF'
-Usage: dctl workspace <command> [options]
+Usage: dctl ws <command> [options]
 
 Commands:
   up [-- <devcontainer up args...>]
@@ -46,38 +46,38 @@ Commands:
       Show this help text.
 
 Examples:
-  dctl workspace up
-  dctl workspace reup -- --build-no-cache
-  dctl workspace exec -- id
-  dctl workspace shell codex
-  dctl workspace run -- pytest -q
+  dctl ws up
+  dctl ws reup -- --build-no-cache
+  dctl ws exec -- id
+  dctl ws shell codex
+  dctl ws run -- pytest -q
 EOF
 }
 
-list_workspace_containers() {
+list_ws_containers() {
   local filter
   filter="$(workspace_label_filter)"
   docker ps -a --filter "$filter" --format '{{.ID}}'
 }
 
-list_running_workspace_containers() {
+list_running_ws_containers() {
   local filter
   filter="$(workspace_label_filter)"
   docker ps --filter "$filter" --format '{{.ID}}'
 }
 
-ensure_workspace_container_running() {
+ensure_ws_container_running() {
   require_cmd docker
   require_cmd devcontainer
 
   local running_ids
-  running_ids="$(list_running_workspace_containers)"
+  running_ids="$(list_running_ws_containers)"
   if [[ -n "$running_ids" ]]; then
     return 0
   fi
 
   log "No running devcontainer for $(workspace_path); starting one now..."
-  cmd_workspace_up
+  cmd_ws_up
 }
 
 collect_term_env() {
@@ -98,7 +98,7 @@ devcontainer_exec() {
   devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" "${term_args[@]}" "$@"
 }
 
-cmd_workspace_up() {
+cmd_ws_up() {
   require_cmd devcontainer
   require_dotfiles_dir
   local args=("$@")
@@ -110,7 +110,7 @@ cmd_workspace_up() {
   devcontainer up --workspace-folder "$WORKSPACE_FOLDER" "${args[@]}"
 }
 
-cmd_workspace_reup() {
+cmd_ws_reup() {
   require_cmd devcontainer
   require_dotfiles_dir
   local args=("$@")
@@ -122,8 +122,8 @@ cmd_workspace_reup() {
   devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --remove-existing-container "${args[@]}"
 }
 
-cmd_workspace_exec() {
-  ensure_workspace_container_running
+cmd_ws_exec() {
+  ensure_ws_container_running
 
   local args=("$@")
   if [[ ${#args[@]} -gt 0 && ${args[0]} == "--" ]]; then
@@ -136,8 +136,8 @@ cmd_workspace_exec() {
   devcontainer_exec "${args[@]}"
 }
 
-cmd_workspace_shell() {
-  ensure_workspace_container_running
+cmd_ws_shell() {
+  ensure_ws_container_running
 
   if [[ $# -gt 0 ]]; then
     devcontainer_exec bash -lic "$*"
@@ -146,25 +146,25 @@ cmd_workspace_shell() {
   fi
 }
 
-cmd_workspace_run() {
-  ensure_workspace_container_running
+cmd_ws_run() {
+  ensure_ws_container_running
 
   if [[ ${1:-} == "--" ]]; then
     shift
   fi
-  [[ $# -gt 0 ]] || err "run requires a command. Example: dctl workspace run -- claude-session"
+  [[ $# -gt 0 ]] || err "run requires a command. Example: dctl ws run -- claude-session"
 
   devcontainer_exec bash -lc "$*"
 }
 
-cmd_workspace_status() {
+cmd_ws_status() {
   require_cmd docker
 
   local filter
   filter="$(workspace_label_filter)"
 
   local ids
-  ids="$(list_workspace_containers)"
+  ids="$(list_ws_containers)"
   if [[ -z "$ids" ]]; then
     warn "No devcontainer found for workspace: $(workspace_path)"
     return 0
@@ -175,14 +175,14 @@ cmd_workspace_status() {
     --format 'table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.RunningFor}}'
 }
 
-cmd_workspace_down() {
+cmd_ws_down() {
   require_cmd docker
 
   local filter
   filter="$(workspace_label_filter)"
 
   local ids
-  ids="$(list_workspace_containers)"
+  ids="$(list_ws_containers)"
   if [[ -z "$ids" ]]; then
     warn "No devcontainer to remove for workspace: $(workspace_path)"
     return 0
@@ -192,43 +192,43 @@ cmd_workspace_down() {
   docker ps -aq --filter "$filter" | xargs -r docker rm -f
 }
 
-main_workspace() {
+main_ws() {
   local command="${1:-help}"
 
   case "$command" in
     up)
       shift
-      cmd_workspace_up "$@"
+      cmd_ws_up "$@"
       ;;
     reup)
       shift
-      cmd_workspace_reup "$@"
+      cmd_ws_reup "$@"
       ;;
     exec)
       shift
-      cmd_workspace_exec "$@"
+      cmd_ws_exec "$@"
       ;;
     shell)
       shift
-      cmd_workspace_shell "$@"
+      cmd_ws_shell "$@"
       ;;
     run)
       shift
-      cmd_workspace_run "$@"
+      cmd_ws_run "$@"
       ;;
     status)
       shift
-      cmd_workspace_status "$@"
+      cmd_ws_status "$@"
       ;;
     down)
       shift
-      cmd_workspace_down "$@"
+      cmd_ws_down "$@"
       ;;
     help | -h | --help)
-      usage_workspace
+      usage_ws
       ;;
     *)
-      err "Unknown workspace command: $command"
+      err "Unknown ws command: $command"
       ;;
   esac
 }

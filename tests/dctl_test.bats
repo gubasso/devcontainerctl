@@ -10,7 +10,7 @@ source_dctl_functions() {
   # shellcheck source=/dev/null
   source "${DCTL_LIB_DIR}/common.sh"
   # shellcheck source=/dev/null
-  source "${DCTL_LIB_DIR}/workspace.sh"
+  source "${DCTL_LIB_DIR}/ws.sh"
   # shellcheck source=/dev/null
   source "${DCTL_LIB_DIR}/image.sh"
   # shellcheck source=/dev/null
@@ -57,131 +57,131 @@ teardown() {
   [ "$output" = "label=devcontainer.local_folder=${WORKSPACE_FOLDER}" ]
 }
 
-@test "list_workspace_containers uses docker ps -a" {
+@test "list_ws_containers uses docker ps -a" {
   enable_mocks
   create_mock docker 0 "abc123"
 
-  run list_workspace_containers
+  run list_ws_containers
   [ "$status" -eq 0 ]
   [ "$output" = "abc123" ]
   assert_mock_called "docker ps -a"
 }
 
-@test "list_running_workspace_containers uses docker ps without -a" {
+@test "list_running_ws_containers uses docker ps without -a" {
   enable_mocks
   create_mock docker 0 "def456"
 
-  run list_running_workspace_containers
+  run list_running_ws_containers
   [ "$status" -eq 0 ]
   [ "$output" = "def456" ]
   assert_mock_called "docker ps --filter"
   assert_mock_not_called "docker ps -a"
 }
 
-@test "ensure_workspace_container_running skips startup when container is running" {
+@test "ensure_ws_container_running skips startup when container is running" {
   enable_mocks
   create_mock docker 0 "running123"
   create_mock devcontainer 0 ""
 
-  cmd_workspace_up() { echo "CMD_WORKSPACE_UP_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+  cmd_ws_up() { echo "CMD_WS_UP_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
 
-  run ensure_workspace_container_running
+  run ensure_ws_container_running
   [ "$status" -eq 0 ]
-  assert_mock_not_called "CMD_WORKSPACE_UP_CALLED"
+  assert_mock_not_called "CMD_WS_UP_CALLED"
 }
 
-@test "ensure_workspace_container_running starts container when needed" {
+@test "ensure_ws_container_running starts container when needed" {
   enable_mocks
   create_mock docker 0 ""
   create_mock devcontainer 0 ""
 
-  run ensure_workspace_container_running
+  run ensure_ws_container_running
   [ "$status" -eq 0 ]
   assert_mock_called "devcontainer up"
 }
 
-@test "cmd_workspace_exec defaults to bash" {
+@test "cmd_ws_exec defaults to bash" {
   enable_mocks
   create_mock docker 0 "running"
   create_mock devcontainer 0 ""
 
-  run cmd_workspace_exec
+  run cmd_ws_exec
   [ "$status" -eq 0 ]
   assert_mock_called "devcontainer exec --workspace-folder ${WORKSPACE_FOLDER} bash"
 }
 
-@test "cmd_workspace_exec passes args through" {
+@test "cmd_ws_exec passes args through" {
   enable_mocks
   create_mock docker 0 "running"
   create_mock devcontainer 0 ""
 
-  run cmd_workspace_exec -- id
+  run cmd_ws_exec -- id
   [ "$status" -eq 0 ]
   assert_mock_called "devcontainer exec --workspace-folder ${WORKSPACE_FOLDER} id"
 }
 
-@test "cmd_workspace_shell runs commands in a login shell" {
+@test "cmd_ws_shell runs commands in a login shell" {
   enable_mocks
   create_mock docker 0 "running"
   create_mock devcontainer 0 ""
 
-  run cmd_workspace_shell codex
+  run cmd_ws_shell codex
   [ "$status" -eq 0 ]
   assert_mock_called "devcontainer exec --workspace-folder ${WORKSPACE_FOLDER} bash -lic codex"
 }
 
-@test "cmd_workspace_run requires a command" {
+@test "cmd_ws_run requires a command" {
   enable_mocks
   create_mock docker 0 "running"
   create_mock devcontainer 0 ""
 
-  run cmd_workspace_run
+  run cmd_ws_run
   [ "$status" -ne 0 ]
   [[ "$output" == *"run requires a command"* ]]
 }
 
-@test "cmd_workspace_run wraps commands with bash -lc" {
+@test "cmd_ws_run wraps commands with bash -lc" {
   enable_mocks
   create_mock docker 0 "running"
   create_mock devcontainer 0 ""
 
-  run cmd_workspace_run -- pytest -q
+  run cmd_ws_run -- pytest -q
   [ "$status" -eq 0 ]
   assert_mock_called "devcontainer exec --workspace-folder ${WORKSPACE_FOLDER} bash -lc pytest -q"
 }
 
-@test "cmd_workspace_status does not auto-start a container" {
+@test "cmd_ws_status does not auto-start a container" {
   enable_mocks
   create_mock docker 0 "abc123"
 
-  run cmd_workspace_status
+  run cmd_ws_status
   [ "$status" -eq 0 ]
   assert_mock_not_called "devcontainer up"
 }
 
-@test "cmd_workspace_down warns when nothing matches" {
+@test "cmd_ws_down warns when nothing matches" {
   enable_mocks
   create_mock docker 0 ""
 
-  run cmd_workspace_down
+  run cmd_ws_down
   [ "$status" -eq 0 ]
   [[ "$output" == *"No devcontainer to remove"* ]]
 }
 
-@test "cmd_workspace_up passes args to devcontainer up" {
+@test "cmd_ws_up passes args to devcontainer up" {
   enable_mocks
   create_mock devcontainer 0 ""
 
-  run cmd_workspace_up -- --build-no-cache
+  run cmd_ws_up -- --build-no-cache
   [ "$status" -eq 0 ]
   assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --build-no-cache"
 }
 
-@test "cmd_workspace_reup adds remove-existing-container" {
+@test "cmd_ws_reup adds remove-existing-container" {
   enable_mocks
   create_mock devcontainer 0 ""
 
-  run cmd_workspace_reup
+  run cmd_ws_reup
   [ "$status" -eq 0 ]
   assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --remove-existing-container"
 }
@@ -198,12 +198,12 @@ teardown() {
   [[ "${args[*]}" == *"--remote-env COLORTERM=truecolor"* ]]
 }
 
-@test "cmd_workspace_run forwards terminal env" {
+@test "cmd_ws_run forwards terminal env" {
   enable_mocks
   create_mock docker 0 "running"
   create_mock devcontainer 0 ""
 
-  TERM=xterm-256color COLORTERM=truecolor run cmd_workspace_run -- codex
+  TERM=xterm-256color COLORTERM=truecolor run cmd_ws_run -- codex
   [ "$status" -eq 0 ]
   assert_mock_called "--remote-env TERM=xterm-256color"
   assert_mock_called "--remote-env COLORTERM=truecolor"
@@ -400,7 +400,7 @@ teardown() {
 
 # Dotfiles validation
 
-@test "workspace up fails early when dotfiles directory is missing" {
+@test "ws up fails early when dotfiles directory is missing" {
   local missing_home
   missing_home="${TEST_TMPDIR}/home-no-dotfiles"
   mkdir -p "$missing_home"
@@ -409,13 +409,13 @@ teardown() {
   create_mock devcontainer 0 ""
 
   unset DOT
-  HOME="$missing_home" run cmd_workspace_up
+  HOME="$missing_home" run cmd_ws_up
   [ "$status" -eq 1 ]
   [[ "$output" == *"Dotfiles not found"* ]]
   assert_mock_not_called "devcontainer "
 }
 
-@test "workspace reup fails early when dotfiles directory is missing" {
+@test "ws reup fails early when dotfiles directory is missing" {
   local missing_home
   missing_home="${TEST_TMPDIR}/home-no-dotfiles"
   mkdir -p "$missing_home"
@@ -424,20 +424,20 @@ teardown() {
   create_mock devcontainer 0 ""
 
   unset DOT
-  HOME="$missing_home" run cmd_workspace_reup
+  HOME="$missing_home" run cmd_ws_reup
   [ "$status" -eq 1 ]
   [[ "$output" == *"Dotfiles not found"* ]]
   assert_mock_not_called "devcontainer "
 }
 
-@test "workspace up calls devcontainer when DOT is valid" {
+@test "ws up calls devcontainer when DOT is valid" {
   enable_mocks
   create_mock devcontainer 0 ""
 
   DOT="${TEST_TMPDIR}/dotfiles"
   mkdir -p "$DOT"
 
-  run cmd_workspace_up
+  run cmd_ws_up
   [ "$status" -eq 0 ]
   assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER}"
 }

@@ -9,7 +9,7 @@ readonly _DCTL_TEST_LOADED=1
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/common.sh"
 # shellcheck source=/dev/null
-source "${DCTL_LIB_DIR}/workspace.sh"
+source "${DCTL_LIB_DIR}/ws.sh"
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/image.sh"
 
@@ -49,7 +49,7 @@ extract_workspace_image() {
 }
 
 cleanup_test_workspace_containers() {
-  list_workspace_containers | xargs -r docker rm -f
+  list_ws_containers | xargs -r docker rm -f
 }
 
 build_workspace_image_if_managed() {
