@@ -990,20 +990,20 @@ Rsync most of `~/.config` as read-only snapshot, but bind-mount agent config dir
 
 ### Container Lifecycle
 
-Use `dctl workspace` for normal lifecycle operations. Raw `devcontainer` and `docker` commands remain available when needed.
+Use `dctl ws` for normal lifecycle operations. Raw `devcontainer` and `docker` commands remain available when needed.
 
 ### Start Container
 
 ```bash
 cd ~/projects/project-a
-dctl workspace up
+dctl ws up
 ```
 
 ### Find Container(s)
 
 ```bash
 cd ~/projects/project-a
-dctl workspace status
+dctl ws status
 ```
 
 ### Attach Multiple Agents
@@ -1012,18 +1012,18 @@ dctl workspace status
 cd ~/projects/project-a
 
 # Multiple agent sessions
-dctl workspace run -- claude-session
-dctl workspace run -- claude-session
+dctl ws run -- claude-session
+dctl ws run -- claude-session
 
 # Interactive shell
-dctl workspace shell
+dctl ws shell
 ```
 
 ### Stop/Remove Container(s)
 
 ```bash
 cd ~/projects/project-a
-dctl workspace down
+dctl ws down
 ```
 
 ### Compose Projects
@@ -1100,18 +1100,18 @@ UID/GID are baked into the image at build time via `--build-arg USER_UID=$(id -u
 
 ## Workflows
 
-### Workflow Wrapper (`dctl workspace`)
+### Workflow Wrapper (`dctl ws`)
 
-`dctl workspace` is installed by the `devcontainerctl` package and wraps the most common per-project lifecycle commands:
+`dctl ws` is installed by the `devcontainerctl` package and wraps the most common per-project lifecycle commands:
 
 ```bash
-dctl workspace up             # Start current project container
-dctl workspace reup           # Recreate after devcontainer.json/image changes
-dctl workspace shell          # Open interactive bash shell
-dctl workspace run -- claude-session  # Run command via bash -lc
-dctl workspace exec -- id     # Run direct command in container
-dctl workspace status         # Show matching container(s)
-dctl workspace down           # Remove matching container(s)
+dctl ws up             # Start current project container
+dctl ws reup           # Recreate after devcontainer.json/image changes
+dctl ws shell          # Open interactive bash shell
+dctl ws run -- claude-session  # Run command via bash -lc
+dctl ws exec -- id     # Run direct command in container
+dctl ws status         # Show matching container(s)
+dctl ws down           # Remove matching container(s)
 ```
 
 ### Workflow 1: New Project Setup
@@ -1155,8 +1155,8 @@ EOF
 mise install
 
 # Start container (creates .venv/ via the Python template bootstrap)
-dctl workspace up
-dctl workspace run -- claude-session  # Interactive login on first run
+dctl ws up
+dctl ws run -- claude-session  # Interactive login on first run
 
 # Now open editor - LSP will use container-created .venv/
 nvim .
@@ -1168,30 +1168,30 @@ nvim .
 cd ~/projects/project-a
 
 # Start container first (ensures .venv/ exists for LSP)
-dctl workspace up
+dctl ws up
 
 # Terminal 1: editor on host (LSP uses container-created .venv/)
 nvim .
 
 # Terminal 2: agent in container
-dctl workspace run -- claude-session
+dctl ws run -- claude-session
 
 # Terminal 3: tests in container
-dctl workspace run -- pytest
+dctl ws run -- pytest
 
 # When done
-dctl workspace down
+dctl ws down
 ```
 
 ### Workflow 3: Add Mount Mid-Session
 
 ```bash
 # Stop container
-dctl workspace down
+dctl ws down
 
 # Edit .devcontainer/devcontainer.json mounts, then restart
-dctl workspace reup
-dctl workspace run -- claude-session
+dctl ws reup
+dctl ws run -- claude-session
 ```
 
 ### Workflow 4: Multi-Directory Workspace Setup
@@ -1219,8 +1219,8 @@ cat > .devcontainer/devcontainer.json << EOF
 }
 EOF
 
-dctl workspace up
-dctl workspace run -- claude-session  # Interactive login on first run
+dctl ws up
+dctl ws run -- claude-session  # Interactive login on first run
 ```
 
 ---
@@ -1239,7 +1239,7 @@ dctl image build --all
 
 ```bash
 cd ~/projects/project-a
-dctl workspace reup
+dctl ws reup
 ```
 
 ### Automation (Optional)
@@ -1481,22 +1481,22 @@ docker buildx build --load --no-cache --build-context dotfiles="$DOTFILES_DIR" -
 
 ```bash
 # Start container
-dctl workspace up
+dctl ws up
 
 # Recreate container
-dctl workspace reup
+dctl ws reup
 
 # Attach shell
-dctl workspace shell
+dctl ws shell
 
 # Execute command
-dctl workspace run -- cmd
+dctl ws run -- cmd
 
 # Show container details
-dctl workspace status
+dctl ws status
 
 # Stop/remove container
-dctl workspace down
+dctl ws down
 
 # Rebuild images
 dctl image build --all

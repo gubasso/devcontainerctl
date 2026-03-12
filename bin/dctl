@@ -14,7 +14,7 @@ fi
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/common.sh"
 # shellcheck source=/dev/null
-source "${DCTL_LIB_DIR}/workspace.sh"
+source "${DCTL_LIB_DIR}/ws.sh"
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/image.sh"
 # shellcheck source=/dev/null
@@ -29,7 +29,7 @@ Usage: dctl <command-group> [command] [options]
 Commands:
   init         Scaffold .devcontainer/devcontainer.json from a template
   test         Validate the current workspace setup
-  workspace    Manage the current workspace's devcontainer lifecycle
+  ws           Manage the current workspace's devcontainer lifecycle
   image        Build and inspect devcontainer base images
   help         Show this help text
   version      Show dctl version
@@ -37,9 +37,9 @@ Commands:
 Examples:
   dctl init --template python
   dctl test
-  dctl workspace up
-  dctl workspace shell
-  dctl workspace run -- claude-session
+  dctl ws up
+  dctl ws shell
+  dctl ws run -- claude-session
   dctl image build --all
   dctl image list
 EOF
@@ -57,9 +57,9 @@ main() {
       shift
       main_test "$@"
       ;;
-    workspace)
+    ws)
       shift
-      main_workspace "$@"
+      main_ws "$@"
       ;;
     image)
       shift
