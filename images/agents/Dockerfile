@@ -3,11 +3,11 @@
 #
 # Supply chain note: Bun, Claude Code, OpenCode, and the mise
 # refresh are installed via curl-pipe. Codex is installed via Bun (npm-style).
-# gh is installed via the official GitHub APT repo. Node.js LTS, neovim,
+# gh is installed via the official GitHub APT repo. Node.js LTS, Neovim,
 # Python, fzf, pre-commit, and glab are installed via mise. eza, mise, zoxide,
-# starship, and bottom are installed via cargo-binstall (prebuilt binaries).
-# trash-cli via pipx. Rust toolchain via rustup. Lazy plugins, treesitter
-# parsers, and Mason tools are pre-installed at build time. For stronger
+# and starship are installed via cargo-binstall (prebuilt binaries).
+# trash-cli via pipx. Rust toolchain via rustup. Neovim runs a minimal
+# config in containers (no plugins, LSP, or treesitter). For stronger
 # guarantees, pin versions and validate checksums. Current approach favors
 # simplicity for personal devcontainers with weekly rebuilds.
 
@@ -50,21 +50,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-dev \
     libxft-dev \
     libxinerama-dev \
-    # Neovim optional deps (checkhealth providers, :help lazy-pkg-spec)
-    mercurial \
-    golang-go \
-    ruby-full \
-    php-cli \
-    composer \
-    default-jdk \
-    lua5.4 \
-    luarocks \
-    cpanminus \
     && rm -rf /var/lib/apt/lists/* \
     # Create fd symlink (Debian names binary fdfind to avoid conflict)
     && if [ -x /usr/bin/fdfind ]; then ln -sf /usr/bin/fdfind /usr/local/bin/fd; fi \
-    && if [ -x /usr/bin/batcat ]; then ln -sf /usr/bin/batcat /usr/local/bin/bat; fi \
-    && if [ -x /usr/bin/lua5.4 ] && [ ! -x /usr/local/bin/lua ]; then ln -sf /usr/bin/lua5.4 /usr/local/bin/lua; fi
+    && if [ -x /usr/bin/batcat ]; then ln -sf /usr/bin/batcat /usr/local/bin/bat; fi
 
 # Non-root user with passwordless sudo
 # USERNAME must match host $USER for config file consistency
@@ -119,7 +108,6 @@ ENV EDITOR=nvim
 ENV VISUAL=nvim
 
 # CLI tools via cargo (prebuilt where available, source where needed)
-# tree-sitter-cli: compiled from source — needs libclang-dev (bindgen); prebuilt needs GLIBC_2.39 (bookworm has 2.36)
 # Preference: apt > cargo-binstall > cargo-install
 RUN cargo install cargo-binstall --locked \
     && { cargo binstall --no-confirm mise || cargo install --locked mise; } \
@@ -127,14 +115,13 @@ RUN cargo install cargo-binstall --locked \
     && { cargo binstall --no-confirm eza || cargo install --locked eza; } \
     && { cargo binstall --no-confirm starship || cargo install --locked starship; } \
     && { cargo binstall --no-confirm ast-grep || cargo install --locked ast-grep; } \
-    && { cargo binstall --no-confirm shellharden || cargo install --locked shellharden; } \
-    && cargo install --locked tree-sitter-cli
+    && { cargo binstall --no-confirm shellharden || cargo install --locked shellharden; }
 
 # Node.js LTS via mise (needed for bun-installed packages with #!/usr/bin/env node shebangs)
 RUN mise use --global node@lts \
     && mise reshim
 
-# Neovim (latest stable) + Python + pre-commit + Go via mise
+# Neovim (latest stable) + Python + pre-commit + fzf + glab via mise
 # Intentionally unpinned: @latest with default backends matches the weekly-rebuild
 # rolling model. If a backend drifts, the build breaks loud — fix forward.
 # Refresh mise binary: cached cargo-binstall version may have registry/parser bugs
@@ -143,78 +130,12 @@ RUN curl -fsSL https://mise.run | MISE_INSTALL_PATH="$HOME/.cargo/bin/mise" sh \
     && mise use --global neovim@latest \
     && mise use --global python@latest \
     && mise use --global pre-commit@latest \
-    && mise use --global go@latest \
     && mise use --global fzf@latest \
     && mise use --global gitlab:gitlab-org/cli@latest \
     && pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir pipx \
     && python -m pipx install trash-cli \
     && mise reshim
-
-# Neovim provider hosts (node, ruby, python)
-# hadolint ignore=DL3013,DL3028
-RUN bun add -g neovim \
-    && gem install --no-document --user-install --bindir "${HOME}/.local/bin" neovim \
-    && pipx install pynvim
-
-# Build-time nvim bootstrap: install Lazy plugins + treesitter parsers + Mason tools
-# Uses host nvim config via XDG_CONFIG_HOME; headless deterministic exit via os.exit(0)
-# hadolint ignore=DL3022
-COPY --from=dotfiles --chown=$USERNAME:$USERNAME /nvim/.config/nvim /tmp/nvim-bootstrap/.config/nvim
-RUN mkdir -p /tmp/nvim-bootstrap/.config/kitty \
-    && set -euo pipefail \
-    && printf '%s\n' '#!/bin/bash' \
-         'exec env XDG_CONFIG_HOME=/tmp/nvim-bootstrap/.config nvim --headless --cmd "set nomore" --cmd "set cmdheight=1" --cmd "set shortmess+=IF" "$@"' \
-         > /tmp/nvim_boot \
-    && chmod +x /tmp/nvim_boot \
-    && /tmp/nvim_boot "+Lazy! restore" "+lua os.exit(0)" \
-    && /tmp/nvim_boot \
-         "+Lazy! load nvim-treesitter" \
-         "+TSUpdateSync" \
-         "+lua os.exit(0)" 2>&1 | tee /tmp/ts.log \
-    && if grep -Eqi "(failed|error:)" /tmp/ts.log; then \
-         echo "ERROR: Treesitter installation reported failures:"; \
-         grep -Ein "(failed|error:)" /tmp/ts.log | head -50; \
-         exit 1; \
-       fi \
-    # Preflight: detect duplicate ensure_installed entries (causes hangs/errors)
-    && for f in \
-         /tmp/nvim-bootstrap/.config/nvim/lua/plugins/mason-tool-installer.lua \
-         /tmp/nvim-bootstrap/.config/nvim/lua/plugins/mason-lspconfig.lua \
-         /tmp/nvim-bootstrap/.config/nvim/lua/plugins/treesitter.lua; do \
-         dupes=$(sed -n '/ensure_installed\s*=\s*{/,/}/p' "$f" \
-           | awk -F'"' '{for(i=2;i<=NF;i+=2) if($i!="") print $i}' | sort | uniq -d); \
-         if [ -n "$dupes" ]; then \
-           echo "ERROR: Duplicate ensure_installed entries in $(basename "$f"):"; \
-           echo "$dupes"; \
-           exit 1; \
-         fi; \
-       done \
-    # Mason tools: headless synchronous install with timeout
-    && echo "[nvim-bootstrap] Mason install start" \
-    && mason_rc=0 \
-    && timeout 300 /tmp/nvim_boot \
-         "+Lazy! load mason-tool-installer.nvim" \
-         "+MasonToolsInstallSync" \
-         "+lua os.exit(0)" 2>&1 | tee /tmp/mason.log \
-       || mason_rc=$? \
-    && if [ "$mason_rc" -eq 124 ]; then \
-         echo "ERROR: Mason install timed out (5min) — likely a hang. Check for duplicate ensure_installed entries or network issues."; \
-         tail -30 /tmp/mason.log; \
-         exit 1; \
-       elif [ "$mason_rc" -ne 0 ]; then \
-         echo "ERROR: Mason install failed (exit $mason_rc):"; \
-         tail -30 /tmp/mason.log; \
-         exit 1; \
-       fi \
-    && if grep -Eqi "(failed|error:)" /tmp/mason.log; then \
-         echo "ERROR: Mason tool installation reported failures:"; \
-         grep -Ein "(failed|error:)" /tmp/mason.log | head -50; \
-         exit 1; \
-       fi \
-    && echo "[nvim-bootstrap] Mason install complete" \
-    && rm -f /tmp/ts.log /tmp/mason.log \
-    && rm -f /tmp/nvim_boot && rm -rf /tmp/nvim-bootstrap
 
 # AI Agent CLIs (rolling: rebuild weekly, or on-demand via --refresh-agents)
 # Cache-bust: dctl image build --refresh-agents agents
