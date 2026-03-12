@@ -353,14 +353,14 @@ Or build manually:
 
 ```bash
 cd ~/.local/share/dctl/images
-DOTFILES_DIR="${DOT:-$HOME/.dotfiles}"
+DOTFILES_DIR="${DOTFILES:-$HOME/.dotfiles}"
 docker buildx build --load --build-context dotfiles="$DOTFILES_DIR" --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ./agents/
 docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/python-dev:latest ./python-dev/
 docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/rust-dev:latest ./rust-dev/
 docker buildx build --load --build-context dotfiles="$DOTFILES_DIR" --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/zig-dev:latest ./zig-dev/
 ```
 
-The `agents` and `zig-dev` images require the dotfiles repo as a BuildKit named context. Set `DOT=` or ensure `~/.dotfiles` exists before building.
+The `agents` and `zig-dev` images require the dotfiles repo as a BuildKit named context. Set `DOTFILES=` or ensure `~/.dotfiles` exists before building.
 
 ---
 
@@ -826,8 +826,8 @@ The `devimg/agents` base image embeds default devcontainer metadata in a Docker 
 | `init` | `true` | Proper init process (PID 1 reaping) |
 | `shutdownAction` | `"none"` | Container keeps running after detach |
 | `containerEnv` | `TERM`, `COLORTERM` | Propagates host terminal defaults |
-| `mounts` | gitconfig, DOT, Claude, gcloud, Codex, OpenCode, Gemini, nvim | Shared auth/editor mounts |
-| `postCreateCommand` | `${localEnv:DOT}/.devcontainer/setup-dotfiles ${localEnv:DOT}` | Shared dotfiles bootstrap |
+| `mounts` | gitconfig, DOTFILES, Claude, gcloud, Codex, OpenCode, Gemini, nvim | Shared auth/editor mounts |
+| `postCreateCommand` | `${localEnv:DOTFILES}/.devcontainer/setup-dotfiles ${localEnv:DOTFILES}` | Shared dotfiles bootstrap |
 
 **NOT in the label** (set per project when needed):
 
@@ -1466,7 +1466,7 @@ docker volume rm mise-cache poetry-cache pip-cache rustup-toolchains cargo-regis
 docker volume prune
 
 # Rebuild from scratch
-DOTFILES_DIR="${DOT:-$HOME/.dotfiles}"
+DOTFILES_DIR="${DOTFILES:-$HOME/.dotfiles}"
 docker buildx build --load --pull --no-cache --build-context dotfiles="$DOTFILES_DIR" --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ~/.local/share/dctl/images/agents/
 docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/python-dev:latest ~/.local/share/dctl/images/python-dev/
 docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/rust-dev:latest ~/.local/share/dctl/images/rust-dev/

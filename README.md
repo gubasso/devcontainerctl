@@ -41,7 +41,7 @@ systemctl --user enable --now dctl-image-build.timer
 ## Setup
 
 ```bash
-# Build all images (requires dotfiles at ~/.dotfiles or $DOT)
+# Build all images (requires dotfiles at ~/.dotfiles or $DOTFILES)
 dctl image build --all
 
 # Inspect available images
@@ -85,7 +85,7 @@ dctl image build --dry-run        # preview only
 dctl image list                   # show available targets
 ```
 
-The `agents` and `zig-dev` images require the dotfiles repo as a BuildKit named context. Set `DOT=` or ensure `~/.dotfiles` exists.
+The `agents` and `zig-dev` images require the dotfiles repo as a BuildKit named context. Set `DOTFILES=` or ensure `~/.dotfiles` exists.
 
 ### `dctl ws`
 

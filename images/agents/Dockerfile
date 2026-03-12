@@ -247,12 +247,12 @@ LABEL devcontainer.metadata='[ \
         "readonly": true \
       }, \
       { \
-        "source": "${localEnv:DOT}", \
-        "target": "${localEnv:DOT}", \
+        "source": "${localEnv:DOTFILES}", \
+        "target": "${localEnv:DOTFILES}", \
         "type": "bind" \
       }, \
       { \
-        "source": "${localEnv:DOT}/claude/.claude", \
+        "source": "${localEnv:DOTFILES}/claude/.claude", \
         "target": "${localEnv:HOME}/.claude", \
         "type": "bind" \
       }, \
@@ -262,7 +262,7 @@ LABEL devcontainer.metadata='[ \
         "type": "bind" \
       }, \
       { \
-        "source": "${localEnv:DOT}/claude/.local/bin/claude-session", \
+        "source": "${localEnv:DOTFILES}/claude/.local/bin/claude-session", \
         "target": "${localEnv:HOME}/.local/bin/claude-session", \
         "type": "bind" \
       }, \
@@ -273,7 +273,7 @@ LABEL devcontainer.metadata='[ \
         "readonly": true \
       }, \
       { \
-        "source": "${localEnv:DOT}/codex/.codex", \
+        "source": "${localEnv:DOTFILES}/codex/.codex", \
         "target": "${localEnv:HOME}/.codex", \
         "type": "bind" \
       }, \
@@ -283,23 +283,23 @@ LABEL devcontainer.metadata='[ \
         "type": "bind" \
       }, \
       { \
-        "source": "${localEnv:DOT}/opencode/.config/opencode", \
+        "source": "${localEnv:DOTFILES}/opencode/.config/opencode", \
         "target": "${localEnv:HOME}/.config/opencode", \
         "type": "bind" \
       }, \
       { \
-        "source": "${localEnv:DOT}/gemini/.gemini", \
+        "source": "${localEnv:DOTFILES}/gemini/.gemini", \
         "target": "${localEnv:HOME}/.gemini", \
         "type": "bind" \
       }, \
       { \
-        "source": "${localEnv:DOT}/nvim/.config/nvim", \
+        "source": "${localEnv:DOTFILES}/nvim/.config/nvim", \
         "target": "${localEnv:HOME}/.config/nvim", \
         "type": "bind" \
       } \
     ], \
     "postCreateCommand": { \
-      "dotfiles": "${localEnv:DOT}/.devcontainer/setup-dotfiles ${localEnv:DOT}" \
+      "dotfiles": "${localEnv:DOTFILES}/.devcontainer/setup-dotfiles ${localEnv:DOTFILES}" \
     } \
   } \
 ]'

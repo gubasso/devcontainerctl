@@ -10,9 +10,9 @@ readonly _DCTL_WS_LOADED=1
 source "${DCTL_LIB_DIR}/common.sh"
 
 require_dotfiles_dir() {
-  DOT="${DOT:-${HOME}/.dotfiles}"
-  [[ -d "$DOT" ]] || err "Dotfiles not found at ${DOT} — set DOT= or ensure ~/.dotfiles exists"
-  export DOT
+  DOTFILES="${DOTFILES:-${HOME}/.dotfiles}"
+  [[ -d "$DOTFILES" ]] || err "Dotfiles not found at ${DOTFILES} — set DOTFILES= or ensure ~/.dotfiles exists"
+  export DOTFILES
 }
 
 usage_ws() {

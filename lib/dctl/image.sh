@@ -202,7 +202,7 @@ cmd_image_build() {
 
   local username dotfiles_dir
   username="${USER:-$(id -un)}"
-  dotfiles_dir="${DOT:-${HOME}/.dotfiles}"
+  dotfiles_dir="${DOTFILES:-${HOME}/.dotfiles}"
   local -a build_args
   build_args=(--build-arg "USERNAME=${username}" --build-arg "USER_UID=$(id -u)" --build-arg "USER_GID=$(id -g)")
 
@@ -223,7 +223,7 @@ cmd_image_build() {
       elif [[ "$dry_run" == true ]]; then
         warn "Dotfiles not found at ${dotfiles_dir} - agents/zig-dev build would fail"
       else
-        err "Dotfiles not found at ${dotfiles_dir} - set DOT= or ensure ~/.dotfiles exists"
+        err "Dotfiles not found at ${dotfiles_dir} - set DOTFILES= or ensure ~/.dotfiles exists"
       fi
     fi
 
