@@ -296,6 +296,16 @@ LABEL devcontainer.metadata='[ \
         "source": "${localEnv:DOTFILES}/nvim/.config/nvim", \
         "target": "${localEnv:HOME}/.config/nvim", \
         "type": "bind" \
+      }, \
+      { \
+        "source": "${localEnv:DOTFILES}/gh/.config/gh", \
+        "target": "${localEnv:HOME}/.config/gh", \
+        "type": "bind" \
+      }, \
+      { \
+        "source": "${localEnv:DOTFILES}/glab/.config/glab-cli", \
+        "target": "${localEnv:HOME}/.config/glab-cli", \
+        "type": "bind" \
       } \
     ], \
     "postCreateCommand": { \

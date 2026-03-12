@@ -826,7 +826,7 @@ The `devimg/agents` base image embeds default devcontainer metadata in a Docker 
 | `init` | `true` | Proper init process (PID 1 reaping) |
 | `shutdownAction` | `"none"` | Container keeps running after detach |
 | `containerEnv` | `TERM`, `COLORTERM` | Propagates host terminal defaults |
-| `mounts` | gitconfig, DOTFILES, Claude, gcloud, Codex, OpenCode, Gemini, nvim | Shared auth/editor mounts |
+| `mounts` | gitconfig, DOTFILES, Claude, gcloud, Codex, OpenCode, Gemini, nvim, gh, glab | Shared auth/editor mounts |
 | `postCreateCommand` | `${localEnv:DOTFILES}/.devcontainer/setup-dotfiles ${localEnv:DOTFILES}` | Shared dotfiles bootstrap |
 
 **NOT in the label** (set per project when needed):
