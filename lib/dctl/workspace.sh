@@ -9,6 +9,12 @@ readonly _DCTL_WORKSPACE_LOADED=1
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/common.sh"
 
+require_dotfiles_dir() {
+  DOT="${DOT:-${HOME}/.dotfiles}"
+  [[ -d "$DOT" ]] || err "Dotfiles not found at ${DOT} — set DOT= or ensure ~/.dotfiles exists"
+  export DOT
+}
+
 usage_workspace() {
   cat <<'EOF'
 Usage: dctl workspace <command> [options]
@@ -94,6 +100,7 @@ devcontainer_exec() {
 
 cmd_workspace_up() {
   require_cmd devcontainer
+  require_dotfiles_dir
   local args=("$@")
   if [[ ${#args[@]} -gt 0 && ${args[0]} == "--" ]]; then
     args=("${args[@]:1}")
@@ -105,6 +112,7 @@ cmd_workspace_up() {
 
 cmd_workspace_reup() {
   require_cmd devcontainer
+  require_dotfiles_dir
   local args=("$@")
   if [[ ${#args[@]} -gt 0 && ${args[0]} == "--" ]]; then
     args=("${args[@]:1}")
