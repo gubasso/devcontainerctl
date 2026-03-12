@@ -268,6 +268,65 @@ Native installers are preferred over Homebrew in containers (Homebrew adds ~500M
 
 All listed CLIs authenticate interactively on first run. To persist auth across container recreations, mount the relevant config directories (see [Pattern 6](#pattern-6-config-with-selective-rw-mounts)).
 
+#### GitHub CLI (gh) and GitLab CLI (glab) Setup
+
+Both CLIs are installed in the agents image but require one-time host authentication before they work inside containers. Their config directories (`~/.config/gh`, `~/.config/glab-cli`) are bind-mounted directly from the host — not through dotfiles — because they contain sensitive auth tokens.
+
+**Prerequisites (host)**:
+
+```bash
+# Verify the CLIs are available on the host
+gh --version
+glab --version
+```
+
+If missing, install them on the host first:
+
+```bash
+# gh — https://cli.github.com/
+# glab — https://gitlab.com/gitlab-org/cli
+```
+
+**One-time authentication (host)**:
+
+```bash
+# GitHub CLI — creates ~/.config/gh/hosts.yml with your OAuth token
+gh auth login
+
+# GitLab CLI — stores your PAT in ~/.config/glab-cli/config.yml
+glab auth login
+```
+
+Both commands are interactive and guide you through protocol selection (SSH or HTTPS) and token creation. Choose SSH as the git protocol if you want git push/pull to use your existing SSH keys.
+
+**How it works in containers**:
+
+| Component | What happens |
+| --------- | ------------ |
+| API calls (`gh pr create`, `glab mr list`) | Use the OAuth/PAT token from the mounted config |
+| Git transport (`git push/pull`) | Uses your SSH key (if remotes are `git@...`) or the CLI credential helper (if remotes are `https://...`) |
+
+The bind mounts share the host config read-write so that token refreshes inside the container propagate back to the host.
+
+**Verification (inside container)**:
+
+```bash
+# Check authentication status
+gh auth status
+glab auth status
+
+# Verify API access
+gh api user --jq .login
+glab api user --jq .username
+```
+
+**Sensitive files** (do not commit to version control):
+
+| CLI | File | Contains |
+| --- | ---- | -------- |
+| gh | `~/.config/gh/hosts.yml` | OAuth token (plain text fallback when no system keyring) |
+| glab | `~/.config/glab-cli/config.yml` | PAT in the `token:` field under each host entry |
+
 #### Headless Neovim Bootstrap
 
 The agents image pre-bakes Neovim dependencies at build time so first launch is instant:
@@ -826,7 +885,7 @@ The `devimg/agents` base image embeds default devcontainer metadata in a Docker 
 | `init` | `true` | Proper init process (PID 1 reaping) |
 | `shutdownAction` | `"none"` | Container keeps running after detach |
 | `containerEnv` | `TERM`, `COLORTERM` | Propagates host terminal defaults |
-| `mounts` | gitconfig, DOTFILES, Claude, gcloud, Codex, OpenCode, Gemini, nvim | Shared auth/editor mounts |
+| `mounts` | gitconfig, DOTFILES, Claude, gcloud, Codex, OpenCode, Gemini, nvim, gh, glab | Shared auth/editor mounts |
 | `postCreateCommand` | `${localEnv:DOTFILES}/.devcontainer/setup-dotfiles ${localEnv:DOTFILES}` | Shared dotfiles bootstrap |
 
 **NOT in the label** (set per project when needed):
@@ -1428,6 +1487,28 @@ devcontainer exec --workspace-folder . curl -I https://api.anthropic.com
 
 # Re-run interactive login if needed
 devcontainer exec --workspace-folder . bash -lc "claude-session"
+```
+
+### gh or glab Not Authenticated in Container
+
+```bash
+# Check if config directories exist on the host
+ls ~/.config/gh/hosts.yml
+ls ~/.config/glab-cli/config.yml
+
+# If missing, authenticate on the host first
+gh auth login
+glab auth login
+
+# Then recreate the container to pick up the mounted config
+dctl ws reup
+```
+
+If the config files exist but the CLI still reports unauthenticated, check that the bind mount is active:
+
+```bash
+# Inside container
+mount | grep -E 'gh|glab-cli'
 ```
 
 ### Find Running Containers
