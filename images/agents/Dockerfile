@@ -151,15 +151,11 @@ RUN curl -fsSL https://mise.run | MISE_INSTALL_PATH="$HOME/.cargo/bin/mise" sh \
     && python -m pipx install trash-cli \
     && mise reshim
 
-# Neovim provider hosts (node, ruby, python, perl)
+# Neovim provider hosts (node, ruby, python)
 # hadolint ignore=DL3013,DL3028
 RUN bun add -g neovim \
     && gem install --no-document --user-install --bindir "${HOME}/.local/bin" neovim \
-    && pipx install pynvim \
-    && PERL_MM_OPT="INSTALL_BASE=${HOME}/perl5" PERL_MB_OPT="--install_base ${HOME}/perl5" \
-       cpanm -l "${HOME}/perl5" -n Neovim::Ext
-
-ENV PERL5LIB="/home/$USERNAME/perl5/lib/perl5"
+    && pipx install pynvim
 
 # Build-time nvim bootstrap: install Lazy plugins + treesitter parsers + Mason tools
 # Uses host nvim config via XDG_CONFIG_HOME; headless deterministic exit via os.exit(0)
