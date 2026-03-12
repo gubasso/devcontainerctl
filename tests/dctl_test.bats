@@ -408,7 +408,7 @@ teardown() {
   enable_mocks
   create_mock devcontainer 0 ""
 
-  unset DOT
+  unset DOTFILES
   HOME="$missing_home" run cmd_ws_up
   [ "$status" -eq 1 ]
   [[ "$output" == *"Dotfiles not found"* ]]
@@ -423,19 +423,19 @@ teardown() {
   enable_mocks
   create_mock devcontainer 0 ""
 
-  unset DOT
+  unset DOTFILES
   HOME="$missing_home" run cmd_ws_reup
   [ "$status" -eq 1 ]
   [[ "$output" == *"Dotfiles not found"* ]]
   assert_mock_not_called "devcontainer "
 }
 
-@test "ws up calls devcontainer when DOT is valid" {
+@test "ws up calls devcontainer when DOTFILES is valid" {
   enable_mocks
   create_mock devcontainer 0 ""
 
-  DOT="${TEST_TMPDIR}/dotfiles"
-  mkdir -p "$DOT"
+  DOTFILES="${TEST_TMPDIR}/dotfiles"
+  mkdir -p "$DOTFILES"
 
   run cmd_ws_up
   [ "$status" -eq 0 ]
