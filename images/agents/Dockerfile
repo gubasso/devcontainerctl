@@ -184,6 +184,21 @@ LABEL devcontainer.metadata='[ \
         "type": "bind" \
       }, \
       { \
+        "source": "${localEnv:DOTFILES}/claude/.local/bin/claude-cost-sync", \
+        "target": "${localEnv:HOME}/.local/bin/claude-cost-sync", \
+        "type": "bind" \
+      }, \
+      { \
+        "source": "${localEnv:DOTFILES}/claude/.local/bin/claude-cost-report", \
+        "target": "${localEnv:HOME}/.local/bin/claude-cost-report", \
+        "type": "bind" \
+      }, \
+      { \
+        "source": "${localEnv:HOME}/.local/state/claude-cost/sessions/", \
+        "target": "${localEnv:HOME}/.local/state/claude-cost/sessions/", \
+        "type": "bind" \
+      }, \
+      { \
         "source": "${localEnv:HOME}/.config/gcloud", \
         "target": "${localEnv:HOME}/.config/gcloud", \
         "type": "bind", \
