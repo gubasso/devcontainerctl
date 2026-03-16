@@ -4,7 +4,7 @@
 # Supply chain note: Bun, Claude Code, OpenCode, and the mise
 # refresh are installed via curl-pipe. Codex is installed via Bun (npm-style).
 # gh is installed via the official GitHub APT repo. Node.js LTS, Neovim,
-# Python, fzf, pre-commit, and glab are installed via mise. eza, mise, zoxide,
+# Python, fzf, pre-commit, glab, bats, and yq are installed via mise. eza, mise, zoxide,
 # and starship are installed via cargo-binstall (prebuilt binaries).
 # trash-cli via pipx. Rust toolchain via rustup. Neovim runs a minimal
 # config in containers (no plugins, LSP, or treesitter). For stronger
@@ -29,7 +29,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ripgrep \
     fd-find \
     bat \
-    bats \
     fish \
     jq \
     tree \
@@ -132,6 +131,8 @@ RUN curl -fsSL https://mise.run | MISE_INSTALL_PATH="$HOME/.cargo/bin/mise" sh \
     && mise use --global pre-commit@latest \
     && mise use --global fzf@latest \
     && mise use --global gitlab:gitlab-org/cli@latest \
+    && mise use --global bats@latest \
+    && mise use --global yq@latest \
     && pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir pipx \
     && python -m pipx install trash-cli \
