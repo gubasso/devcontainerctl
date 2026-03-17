@@ -45,6 +45,9 @@ setup() {
   # shellcheck disable=SC2329
   workspace_devcontainer_file() { printf '%s/.devcontainer/devcontainer.json\n' "$WORKSPACE_FOLDER"; }
   unset TERM COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION 2>/dev/null || true
+  # Clear git env leaked by pre-commit so in-test git repos work correctly
+  unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_OBJECT_DIRECTORY \
+    GIT_ALTERNATE_OBJECT_DIRECTORIES 2>/dev/null || true
 }
 
 teardown() {
@@ -428,6 +431,52 @@ teardown() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"Dotfiles not found"* ]]
   assert_mock_not_called "devcontainer "
+}
+
+# --- Git worktree mount detection ---
+
+@test "collect_git_worktree_mounts returns empty for non-git workspace" {
+  local -a mounts=()
+  collect_git_worktree_mounts mounts
+  [ "${#mounts[@]}" -eq 0 ]
+}
+
+@test "collect_git_worktree_mounts returns empty for regular git repo" {
+  git -C "$WORKSPACE_FOLDER" init -q
+  local -a mounts=()
+  collect_git_worktree_mounts mounts
+  [ "${#mounts[@]}" -eq 0 ]
+}
+
+@test "collect_git_worktree_mounts returns mount for linked worktree" {
+  local main_repo="${TEST_TMPDIR}/main-repo"
+  mkdir -p "$main_repo"
+  git -C "$main_repo" init -q
+  git -C "$main_repo" commit --allow-empty -m "init"
+  # Create the linked worktree at $WORKSPACE_FOLDER (which is already set and readonly)
+  rm -rf "$WORKSPACE_FOLDER"
+  git -C "$main_repo" worktree add "$WORKSPACE_FOLDER" -b test-branch
+
+  local -a mounts=()
+  collect_git_worktree_mounts mounts
+  [ "${#mounts[@]}" -eq 2 ]
+  [ "${mounts[0]}" = "--mount" ]
+  [[ "${mounts[1]}" == "type=bind,source=${main_repo}/.git,target=${main_repo}/.git" ]]
+}
+
+@test "ws up includes git worktree mount for linked worktree" {
+  local main_repo="${TEST_TMPDIR}/main-repo"
+  mkdir -p "$main_repo"
+  git -C "$main_repo" init -q
+  git -C "$main_repo" commit --allow-empty -m "init"
+  git -C "$main_repo" worktree add "$WORKSPACE_FOLDER" -b test-branch
+
+  enable_mocks
+  create_mock devcontainer 0 ""
+
+  run cmd_ws_up
+  [ "$status" -eq 0 ]
+  assert_mock_called "--mount type=bind,source=${main_repo}/.git,target=${main_repo}/.git"
 }
 
 @test "ws up calls devcontainer when DOTFILES is valid" {
