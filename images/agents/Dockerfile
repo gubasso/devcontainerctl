@@ -241,8 +241,6 @@ LABEL devcontainer.metadata='[ \
         "type": "bind" \
       } \
     ], \
-    "initializeCommand": "dctl auth init-tokens", \
-    "runArgs": ["--env-file", "/tmp/.devcontainer-tokens.env"], \
     "postCreateCommand": { \
       "dotfiles": "${localEnv:DOTFILES}/.devcontainer/setup-dotfiles ${localEnv:DOTFILES}" \
     } \

@@ -9,7 +9,7 @@ IMAGE_NAMES := agents python-dev rust-dev zig-dev
 TEMPLATE_DIRS := python rust zig
 LIB_FILES := common.sh ws.sh image.sh init.sh test.sh auth.sh
 
-.PHONY: install uninstall install-systemd uninstall-systemd test lint check
+.PHONY: install uninstall install-systemd uninstall-systemd test test-unit test-integration lint check
 
 install:
 	$(INSTALL) -d "$(BIN_DIR)"
@@ -67,8 +67,13 @@ uninstall-systemd:
 	rm -f "$(SYSTEMD_DIR)/dctl-image-build.timer"
 	systemctl --user daemon-reload >/dev/null 2>&1 || true
 
-test:
-	pre-commit run bats-tests --all-files
+test-unit:
+	bats --filter-tags 'unit,!integration' tests
+
+test-integration:
+	bats --filter-tags integration tests
+
+test: test-unit test-integration
 
 lint:
 	pre-commit run shellcheck --all-files

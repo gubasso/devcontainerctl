@@ -10,6 +10,14 @@ readonly _DCTL_AUTH_LOADED=1
 source "${DCTL_LIB_DIR}/common.sh"
 
 _extract_gh_token() {
+  if [[ -n "${GH_TOKEN:-}" ]]; then
+    printf '%s' "$GH_TOKEN"
+    return 0
+  fi
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    printf '%s' "$GITHUB_TOKEN"
+    return 0
+  fi
   if ! command -v gh >/dev/null 2>&1; then
     warn "gh CLI not found — install from https://cli.github.com"
     return 1
@@ -28,6 +36,10 @@ _extract_gh_token() {
 }
 
 _extract_glab_token() {
+  if [[ -n "${GITLAB_TOKEN:-}" ]]; then
+    printf '%s' "$GITLAB_TOKEN"
+    return 0
+  fi
   if ! command -v glab >/dev/null 2>&1; then
     warn "glab CLI not found — install from https://gitlab.com/gitlab-org/cli"
     return 1
@@ -45,62 +57,14 @@ _extract_glab_token() {
   printf '%s' "$token"
 }
 
-_TOKEN_ENV_FILE="${_TOKEN_ENV_FILE:-/tmp/.devcontainer-tokens.env}"
-
-cmd_auth_init_tokens() {
-  local env_file="$_TOKEN_ENV_FILE"
-  local gh_ok=false glab_ok=false
-
-  umask 077
-  : >"$env_file"
-
+collect_auth_env() {
+  local -n _out="$1"
+  _out=()
   local token
-  if token=$(_extract_gh_token); then
-    printf 'GH_TOKEN=%s\n' "$token" >>"$env_file"
-    log "GitHub token extracted"
-    gh_ok=true
-  else
-    printf 'GH_TOKEN=\n' >>"$env_file"
+  if token=$(_extract_gh_token 2>/dev/null); then
+    _out+=(--remote-env "GH_TOKEN=${token}")
   fi
-
-  if token=$(_extract_glab_token); then
-    printf 'GITLAB_TOKEN=%s\n' "$token" >>"$env_file"
-    log "GitLab token extracted"
-    glab_ok=true
-  else
-    printf 'GITLAB_TOKEN=\n' >>"$env_file"
+  if token=$(_extract_glab_token 2>/dev/null); then
+    _out+=(--remote-env "GITLAB_TOKEN=${token}")
   fi
-
-  if [[ "$gh_ok" == false && "$glab_ok" == false ]]; then
-    warn "No tokens extracted — gh/glab auth will not work in container"
-  fi
-
-  log "Token env file written to ${env_file}"
-  return 0
-}
-
-usage_auth() {
-  cat <<'EOF'
-Usage: dctl auth <command>
-
-Commands:
-  init-tokens  Extract gh/glab auth tokens into an env file for container use
-  help         Show this help text
-EOF
-}
-
-main_auth() {
-  local cmd="${1:-help}"
-  case "$cmd" in
-    init-tokens)
-      shift
-      cmd_auth_init_tokens "$@"
-      ;;
-    help | -h | --help)
-      usage_auth
-      ;;
-    *)
-      err "Unknown auth command: $cmd"
-      ;;
-  esac
 }

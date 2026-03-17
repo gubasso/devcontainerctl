@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+# bats file_tags=unit
+
 load test_helper
 
 source_dctl_functions() {
@@ -9,6 +11,8 @@ source_dctl_functions() {
   set -euo pipefail
   # shellcheck source=/dev/null
   source "${DCTL_LIB_DIR}/common.sh"
+  # shellcheck source=/dev/null
+  source "${DCTL_LIB_DIR}/auth.sh"
   # shellcheck source=/dev/null
   source "${DCTL_LIB_DIR}/ws.sh"
   # shellcheck source=/dev/null
@@ -45,6 +49,11 @@ setup() {
   # shellcheck disable=SC2329
   workspace_devcontainer_file() { printf '%s/.devcontainer/devcontainer.json\n' "$WORKSPACE_FOLDER"; }
   unset TERM COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION 2>/dev/null || true
+  unset GH_TOKEN GITHUB_TOKEN GITLAB_TOKEN 2>/dev/null || true
+  # Stub gh/glab to fail fast — avoids slow network calls in non-auth tests
+  create_mock gh 1
+  create_mock glab 1
+  enable_mocks
   # Clear git env leaked by pre-commit so in-test git repos work correctly
   unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_OBJECT_DIRECTORY \
     GIT_ALTERNATE_OBJECT_DIRECTORIES 2>/dev/null || true
@@ -110,7 +119,8 @@ teardown() {
 
   run cmd_ws_exec
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer exec --workspace-folder ${WORKSPACE_FOLDER} bash"
+  assert_mock_called "devcontainer exec"
+  assert_mock_called "bash"
 }
 
 @test "cmd_ws_exec passes args through" {
@@ -120,7 +130,8 @@ teardown() {
 
   run cmd_ws_exec -- id
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer exec --workspace-folder ${WORKSPACE_FOLDER} id"
+  assert_mock_called "devcontainer exec"
+  assert_mock_called "id"
 }
 
 @test "cmd_ws_shell runs commands in a login shell" {
@@ -130,7 +141,8 @@ teardown() {
 
   run cmd_ws_shell codex
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer exec --workspace-folder ${WORKSPACE_FOLDER} bash -lic codex"
+  assert_mock_called "devcontainer exec"
+  assert_mock_called "bash -lic codex"
 }
 
 @test "cmd_ws_run requires a command" {
@@ -150,7 +162,8 @@ teardown() {
 
   run cmd_ws_run -- pytest -q
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer exec --workspace-folder ${WORKSPACE_FOLDER} bash -lc pytest -q"
+  assert_mock_called "devcontainer exec"
+  assert_mock_called "bash -lc pytest -q"
 }
 
 @test "cmd_ws_status does not auto-start a container" {
@@ -240,6 +253,7 @@ teardown() {
   [[ "$output" == *"Unknown image: unknown"* ]]
 }
 
+# bats test_tags=integration
 @test "make install puts Dockerfiles in DATA_DIR/images and installed dctl uses them" {
   local bin_dir data_home lib_dir
   bin_dir="${TEST_TMPDIR}/bin"
@@ -380,6 +394,7 @@ teardown() {
   assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER}"
 }
 
+# bats test_tags=integration
 @test "root help includes init and test commands" {
   run env XDG_DATA_HOME="$XDG_DATA_HOME" HOME="${TEST_TMPDIR}/home" \
     bash "${BATS_TEST_DIRNAME}/../bin/dctl" help
@@ -388,6 +403,7 @@ teardown() {
   [[ "$output" == *"test"* ]]
 }
 
+# bats test_tags=integration
 @test "install-systemd writes a service with the selected BIN_DIR" {
   local systemd_dir bin_dir
   systemd_dir="${TEST_TMPDIR}/systemd-user"
@@ -448,6 +464,7 @@ teardown() {
   [ "${#mounts[@]}" -eq 0 ]
 }
 
+# bats test_tags=integration
 @test "collect_git_worktree_mounts returns mount for linked worktree" {
   local main_repo="${TEST_TMPDIR}/main-repo"
   mkdir -p "$main_repo"
@@ -464,6 +481,7 @@ teardown() {
   [[ "${mounts[1]}" == "type=bind,source=${main_repo}/.git,target=${main_repo}/.git" ]]
 }
 
+# bats test_tags=integration
 @test "ws up includes git worktree mount for linked worktree" {
   local main_repo="${TEST_TMPDIR}/main-repo"
   mkdir -p "$main_repo"
@@ -489,4 +507,65 @@ teardown() {
   run cmd_ws_up
   [ "$status" -eq 0 ]
   assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER}"
+}
+
+# --- Auth token forwarding via devcontainer exec ---
+
+@test "cmd_ws_shell forwards GH_TOKEN via remote-env" {
+  enable_mocks
+  create_mock docker 0 "running"
+  create_mock devcontainer 0 ""
+  cat >"${TEST_TMPDIR}/bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+[[ "$1" == "auth" && "$2" == "status" ]] && exit 0
+[[ "$1" == "auth" && "$2" == "token" ]] && printf 'ghp_testXYZ' && exit 0
+exit 1
+MOCK
+  chmod +x "${TEST_TMPDIR}/bin/gh"
+
+  run cmd_ws_shell
+  [ "$status" -eq 0 ]
+  assert_mock_called "--remote-env GH_TOKEN=ghp_testXYZ"
+}
+
+@test "cmd_ws_shell forwards GITLAB_TOKEN via remote-env" {
+  enable_mocks
+  create_mock docker 0 "running"
+  create_mock devcontainer 0 ""
+  cat >"${TEST_TMPDIR}/bin/glab" <<'MOCK'
+#!/usr/bin/env bash
+[[ "$1" == "auth" && "$2" == "status" && "$3" != "--show-token" ]] && exit 0
+[[ "$1" == "auth" && "$2" == "status" && "$3" == "--show-token" ]] && printf 'Token: glpat_testABC\n' && exit 0
+exit 1
+MOCK
+  chmod +x "${TEST_TMPDIR}/bin/glab"
+
+  run cmd_ws_shell
+  [ "$status" -eq 0 ]
+  assert_mock_called "--remote-env GITLAB_TOKEN=glpat_testABC"
+}
+
+@test "cmd_ws_shell forwards both tokens when both CLIs authenticated" {
+  enable_mocks
+  create_mock docker 0 "running"
+  create_mock devcontainer 0 ""
+  cat >"${TEST_TMPDIR}/bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+[[ "$1" == "auth" && "$2" == "status" ]] && exit 0
+[[ "$1" == "auth" && "$2" == "token" ]] && printf 'ghp_both999' && exit 0
+exit 1
+MOCK
+  chmod +x "${TEST_TMPDIR}/bin/gh"
+  cat >"${TEST_TMPDIR}/bin/glab" <<'MOCK'
+#!/usr/bin/env bash
+[[ "$1" == "auth" && "$2" == "status" && "$3" != "--show-token" ]] && exit 0
+[[ "$1" == "auth" && "$2" == "status" && "$3" == "--show-token" ]] && printf 'Token: glpat_both888\n' && exit 0
+exit 1
+MOCK
+  chmod +x "${TEST_TMPDIR}/bin/glab"
+
+  run cmd_ws_shell
+  [ "$status" -eq 0 ]
+  assert_mock_called "--remote-env GH_TOKEN=ghp_both999"
+  assert_mock_called "--remote-env GITLAB_TOKEN=glpat_both888"
 }

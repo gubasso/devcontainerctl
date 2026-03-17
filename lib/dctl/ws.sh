@@ -8,6 +8,8 @@ readonly _DCTL_WS_LOADED=1
 
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/common.sh"
+# shellcheck source=/dev/null
+source "${DCTL_LIB_DIR}/auth.sh"
 
 require_dotfiles_dir() {
   DOTFILES="${DOTFILES:-${HOME}/.dotfiles}"
@@ -118,9 +120,10 @@ collect_term_env() {
 }
 
 devcontainer_exec() {
-  local -a term_args
+  local -a term_args auth_args
   collect_term_env term_args
-  devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" "${term_args[@]}" "$@"
+  collect_auth_env auth_args
+  devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" "${term_args[@]}" "${auth_args[@]}" "$@"
 }
 
 cmd_ws_up() {

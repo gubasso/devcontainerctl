@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+# bats file_tags=unit
+
 load test_helper
 
 source_auth() {
@@ -23,7 +25,7 @@ _setup_sysbin() {
   local sysbin="${TEST_TMPDIR}/sysbin"
   mkdir -p "$sysbin"
   local cmd
-  for cmd in bash printf awk grep stat cat mkdir chmod rm; do
+  for cmd in bash printf awk grep cat mkdir chmod rm; do
     if command -v "$cmd" >/dev/null 2>&1; then
       ln -sf "$(command -v "$cmd")" "${sysbin}/${cmd}"
     fi
@@ -37,8 +39,8 @@ _no_cli_path() {
 
 setup() {
   setup_test_fixtures
-  export _TOKEN_ENV_FILE="${TEST_TMPDIR}/tokens.env"
   _setup_sysbin
+  unset GH_TOKEN GITHUB_TOKEN GITLAB_TOKEN
   source_auth
 }
 
@@ -46,129 +48,150 @@ teardown() {
   teardown_test_fixtures
 }
 
-# --- gh token extraction ---
+# --- collect_auth_env ---
 
-@test "gh not installed warns and writes empty GH_TOKEN" {
-  PATH="$(_no_cli_path)" run cmd_auth_init_tokens
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"gh CLI not found"* ]]
-  grep -q '^GH_TOKEN=$' "$_TOKEN_ENV_FILE"
+@test "collect_auth_env returns empty when no CLIs available" {
+  local -a args
+  PATH="$(_no_cli_path)" collect_auth_env args
+  [ "${#args[@]}" -eq 0 ]
 }
 
-@test "gh not authenticated warns" {
-  enable_mocks
-  create_mock gh 1
-
-  PATH="$(_mock_path)" run cmd_auth_init_tokens
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"gh not authenticated"* ]]
-  grep -q '^GH_TOKEN=$' "$_TOKEN_ENV_FILE"
-}
-
-@test "gh authenticated extracts token" {
+@test "collect_auth_env includes GH_TOKEN when gh authenticated" {
   enable_mocks
   cat >"${TEST_TMPDIR}/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
-if [[ "$1" == "auth" && "$2" == "status" ]]; then
-  exit 0
-elif [[ "$1" == "auth" && "$2" == "token" ]]; then
-  printf 'ghp_test123'
-  exit 0
-fi
+[[ "$1" == "auth" && "$2" == "status" ]] && exit 0
+[[ "$1" == "auth" && "$2" == "token" ]] && printf 'ghp_test123' && exit 0
 exit 1
 MOCK
   chmod +x "${TEST_TMPDIR}/bin/gh"
 
-  PATH="$(_mock_path)" run cmd_auth_init_tokens
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"GitHub token extracted"* ]]
-  grep -q '^GH_TOKEN=ghp_test123$' "$_TOKEN_ENV_FILE"
+  local -a args
+  PATH="$(_mock_path)" collect_auth_env args
+  [[ "${args[*]}" == *"--remote-env GH_TOKEN=ghp_test123"* ]]
 }
 
-# --- glab token extraction ---
-
-@test "glab not installed warns and writes empty GITLAB_TOKEN" {
-  PATH="$(_no_cli_path)" run cmd_auth_init_tokens
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"glab CLI not found"* ]]
-  grep -q '^GITLAB_TOKEN=$' "$_TOKEN_ENV_FILE"
-}
-
-@test "glab not authenticated warns" {
-  enable_mocks
-  create_mock glab 1
-
-  PATH="$(_mock_path)" run cmd_auth_init_tokens
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"glab not authenticated"* ]]
-  grep -q '^GITLAB_TOKEN=$' "$_TOKEN_ENV_FILE"
-}
-
-@test "glab authenticated extracts token" {
+@test "collect_auth_env includes GITLAB_TOKEN when glab authenticated" {
   enable_mocks
   cat >"${TEST_TMPDIR}/bin/glab" <<'MOCK'
 #!/usr/bin/env bash
-if [[ "$1" == "auth" && "$2" == "status" && "$3" != "--show-token" ]]; then
-  exit 0
-elif [[ "$1" == "auth" && "$2" == "status" && "$3" == "--show-token" ]]; then
-  printf 'Token: mock_glab_tok456\n'
-  exit 0
-fi
+[[ "$1" == "auth" && "$2" == "status" && "$3" != "--show-token" ]] && exit 0
+[[ "$1" == "auth" && "$2" == "status" && "$3" == "--show-token" ]] && printf 'Token: mock_glab_tok456\n' && exit 0
 exit 1
 MOCK
   chmod +x "${TEST_TMPDIR}/bin/glab"
 
-  PATH="$(_mock_path)" run cmd_auth_init_tokens
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"GitLab token extracted"* ]]
-  grep -q '^GITLAB_TOKEN=mock_glab_tok456$' "$_TOKEN_ENV_FILE"
+  local -a args
+  PATH="$(_mock_path)" collect_auth_env args
+  [[ "${args[*]}" == *"--remote-env GITLAB_TOKEN=mock_glab_tok456"* ]]
 }
 
-# --- combined scenarios ---
-
-@test "both missing warns no tokens extracted" {
-  PATH="$(_no_cli_path)" run cmd_auth_init_tokens
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"No tokens extracted"* ]]
-  grep -q '^GH_TOKEN=$' "$_TOKEN_ENV_FILE"
-  grep -q '^GITLAB_TOKEN=$' "$_TOKEN_ENV_FILE"
-}
-
-@test "both present writes both tokens" {
+@test "collect_auth_env includes both tokens when both CLIs authenticated" {
   enable_mocks
   cat >"${TEST_TMPDIR}/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
-if [[ "$1" == "auth" && "$2" == "status" ]]; then exit 0; fi
-if [[ "$1" == "auth" && "$2" == "token" ]]; then printf 'ghp_both123'; exit 0; fi
+[[ "$1" == "auth" && "$2" == "status" ]] && exit 0
+[[ "$1" == "auth" && "$2" == "token" ]] && printf 'ghp_both123' && exit 0
 exit 1
 MOCK
   chmod +x "${TEST_TMPDIR}/bin/gh"
 
   cat >"${TEST_TMPDIR}/bin/glab" <<'MOCK'
 #!/usr/bin/env bash
-if [[ "$1" == "auth" && "$2" == "status" && "$3" != "--show-token" ]]; then exit 0; fi
-if [[ "$1" == "auth" && "$2" == "status" && "$3" == "--show-token" ]]; then printf 'Token: mock_glab_tok789\n'; exit 0; fi
+[[ "$1" == "auth" && "$2" == "status" && "$3" != "--show-token" ]] && exit 0
+[[ "$1" == "auth" && "$2" == "status" && "$3" == "--show-token" ]] && printf 'Token: mock_glab_tok789\n' && exit 0
 exit 1
 MOCK
   chmod +x "${TEST_TMPDIR}/bin/glab"
 
-  PATH="$(_mock_path)" run cmd_auth_init_tokens
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"GitHub token extracted"* ]]
-  [[ "$output" == *"GitLab token extracted"* ]]
-  grep -q '^GH_TOKEN=ghp_both123$' "$_TOKEN_ENV_FILE"
-  grep -q '^GITLAB_TOKEN=mock_glab_tok789$' "$_TOKEN_ENV_FILE"
+  local -a args
+  PATH="$(_mock_path)" collect_auth_env args
+  [[ "${args[*]}" == *"--remote-env GH_TOKEN=ghp_both123"* ]]
+  [[ "${args[*]}" == *"--remote-env GITLAB_TOKEN=mock_glab_tok789"* ]]
 }
 
-@test "env file permissions are 0600" {
-  PATH="$(_no_cli_path)" run cmd_auth_init_tokens
-  [ "$status" -eq 0 ]
-  local perms
-  perms=$(stat -c '%a' "$_TOKEN_ENV_FILE")
-  [ "$perms" = "600" ]
+@test "collect_auth_env suppresses warnings on stderr" {
+  local -a args
+  local stderr_output
+  stderr_output=$(PATH="$(_no_cli_path)" collect_auth_env args 2>&1 >/dev/null)
+  [ "$stderr_output" = "" ]
 }
 
-@test "always exits 0 even when both fail" {
-  PATH="$(_no_cli_path)" run cmd_auth_init_tokens
+# --- env var short-circuit ---
+
+@test "_extract_gh_token returns GH_TOKEN env var" {
+  # shellcheck disable=SC2030
+  GH_TOKEN="ghp_from_env"
+  run _extract_gh_token
   [ "$status" -eq 0 ]
+  [ "$output" = "ghp_from_env" ]
+}
+
+@test "_extract_gh_token returns GITHUB_TOKEN when GH_TOKEN unset" {
+  # shellcheck disable=SC2030
+  GITHUB_TOKEN="ghp_github_env"
+  run _extract_gh_token
+  [ "$status" -eq 0 ]
+  [ "$output" = "ghp_github_env" ]
+}
+
+@test "_extract_gh_token prefers GH_TOKEN over GITHUB_TOKEN" {
+  # shellcheck disable=SC2030,SC2031
+  export GH_TOKEN="ghp_primary"
+  # shellcheck disable=SC2031
+  export GITHUB_TOKEN="ghp_secondary"
+  run _extract_gh_token
+  [ "$status" -eq 0 ]
+  [ "$output" = "ghp_primary" ]
+}
+
+@test "_extract_glab_token returns GITLAB_TOKEN env var" {
+  # shellcheck disable=SC2030
+  GITLAB_TOKEN="glpat_from_env"
+  run _extract_glab_token
+  [ "$status" -eq 0 ]
+  [ "$output" = "glpat_from_env" ]
+}
+
+@test "collect_auth_env uses env vars, no CLIs needed" {
+  # shellcheck disable=SC2030,SC2031
+  export GH_TOKEN="ghp_envonly"
+  # shellcheck disable=SC2031
+  export GITLAB_TOKEN="glpat_envonly"
+  local -a args
+  PATH="$(_no_cli_path)" collect_auth_env args
+  [[ "${args[*]}" == *"--remote-env GH_TOKEN=ghp_envonly"* ]]
+  [[ "${args[*]}" == *"--remote-env GITLAB_TOKEN=glpat_envonly"* ]]
+}
+
+@test "_extract_gh_token prefers env var over CLI" {
+  enable_mocks
+  cat >"${TEST_TMPDIR}/bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+[[ "$1" == "auth" && "$2" == "status" ]] && exit 0
+[[ "$1" == "auth" && "$2" == "token" ]] && printf 'ghp_from_cli' && exit 0
+exit 1
+MOCK
+  chmod +x "${TEST_TMPDIR}/bin/gh"
+
+  # shellcheck disable=SC2031
+  export GH_TOKEN="ghp_from_env"
+  local result
+  result=$(PATH="$(_mock_path)" _extract_gh_token)
+  [ "$result" = "ghp_from_env" ]
+}
+
+@test "_extract_gh_token falls back to CLI when no env vars" {
+  enable_mocks
+  cat >"${TEST_TMPDIR}/bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+[[ "$1" == "auth" && "$2" == "status" ]] && exit 0
+[[ "$1" == "auth" && "$2" == "token" ]] && printf 'ghp_cli_fallback' && exit 0
+exit 1
+MOCK
+  chmod +x "${TEST_TMPDIR}/bin/gh"
+
+  local result
+  result=$(PATH="$(_mock_path)" _extract_gh_token)
+  [ "$result" = "ghp_cli_fallback" ]
 }
