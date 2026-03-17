@@ -21,6 +21,8 @@ source "${DCTL_LIB_DIR}/image.sh"
 source "${DCTL_LIB_DIR}/init.sh"
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/test.sh"
+# shellcheck source=/dev/null
+source "${DCTL_LIB_DIR}/auth.sh"
 
 usage() {
   cat <<'EOF'
@@ -31,6 +33,7 @@ Commands:
   test         Validate the current workspace setup
   ws           Manage the current workspace's devcontainer lifecycle
   image        Build and inspect devcontainer base images
+  auth         Manage authentication tokens for containers
   help         Show this help text
   version      Show dctl version
 
@@ -64,6 +67,10 @@ main() {
     image)
       shift
       main_image "$@"
+      ;;
+    auth)
+      shift
+      main_auth "$@"
       ;;
     help | -h | --help)
       usage

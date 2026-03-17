@@ -87,6 +87,19 @@ dctl image list                   # show available targets
 
 The `agents` and `zig-dev` images require the dotfiles repo as a BuildKit named context. Set `DOTFILES=` or ensure `~/.dotfiles` exists.
 
+### `dctl auth`
+
+```bash
+dctl auth init-tokens   # extract gh/glab tokens into /tmp/.devcontainer-tokens.env
+```
+
+Modern `gh` (v2.24.0+) stores OAuth tokens in the system keyring, which is unavailable inside containers. `dctl auth init-tokens` runs on the **host** to extract tokens from `gh auth token` and `glab auth status --show-token`, writing them to a temporary env file (`0600` permissions). The `agents` image metadata wires this up automatically:
+
+- `initializeCommand` calls `dctl auth init-tokens` before container creation.
+- `runArgs` passes `--env-file /tmp/.devcontainer-tokens.env` so `GH_TOKEN` and `GITLAB_TOKEN` are set inside the container.
+
+The existing `~/.config/gh` and `~/.config/glab-cli` bind mounts are preserved for metadata, aliases, and protocol settings. If a CLI is not installed or not authenticated on the host, its token is written as empty and a warning is printed — container creation is never blocked.
+
 ### `dctl ws`
 
 ```bash
