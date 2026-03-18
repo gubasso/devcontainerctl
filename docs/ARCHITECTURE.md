@@ -266,7 +266,7 @@ Native installers are preferred over Homebrew in containers (Homebrew adds ~500M
 | gh | `gh auth login` (interactive, GitHub account) |
 | glab | `glab auth login` (interactive, GitLab account) |
 
-All listed CLIs authenticate interactively on first run. To persist auth across container recreations, mount the relevant config directories (see [Pattern 6](#pattern-6-config-with-selective-rw-mounts)).
+All listed CLIs authenticate interactively on first run. For `gh` and `glab`, tokens are extracted on the host and injected into containers at exec-time (see below). Other CLIs persist auth via config directory mounts (see [Pattern 6](#pattern-6-config-with-selective-rw-mounts)).
 
 #### GitHub CLI (gh) and GitLab CLI (glab) Setup
 
@@ -301,12 +301,12 @@ Both commands are interactive and guide you through protocol selection (SSH or H
 
 **How it works in containers**:
 
+Modern `gh` (v2.24.0+) stores OAuth tokens in the system keyring, which is inaccessible from containers. The config directories (`~/.config/gh`, `~/.config/glab-cli`) are still bind-mounted for non-token config (SSH protocol settings, aliases), but **tokens are extracted on the host** at exec-time using `gh auth token` / `glab auth status --show-token` and injected into the container via `devcontainer exec --remote-env`. This happens automatically — `collect_auth_env()` in `lib/dctl/auth.sh` is called by every `devcontainer_exec()` invocation.
+
 | Component | What happens |
 | --------- | ------------ |
-| API calls (`gh pr create`, `glab mr list`) | Use the OAuth/PAT token from the mounted config |
+| API calls (`gh pr create`, `glab mr list`) | Use `GH_TOKEN` / `GITLAB_TOKEN` injected via `--remote-env` |
 | Git transport (`git push/pull`) | Uses your SSH key (if remotes are `git@...`) or the CLI credential helper (if remotes are `https://...`) |
-
-The bind mounts share the host config read-write so that token refreshes inside the container propagate back to the host.
 
 **Verification (inside container)**:
 

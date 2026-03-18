@@ -99,6 +99,8 @@ dctl ws status         # show containers for this project
 dctl ws down           # stop and remove
 ```
 
+When using `dctl ws shell`/`exec`/`run`, tokens are automatically extracted from the host via `gh auth token` and `glab auth status --show-token` and passed into the container as `GH_TOKEN`/`GITLAB_TOKEN` environment variables. This is necessary because modern `gh` (v2.24.0+) stores OAuth tokens in the system keyring, which is inaccessible from containers; `glab` stores tokens in `~/.config/glab-cli/config.yml` by default, but extracting them uniformly via the CLI avoids depending on config file internals. If a CLI is not installed or not authenticated, its token is silently skipped.
+
 If the Claude wrapper wiring inside a container looks broken, recreate the container:
 
 ```bash

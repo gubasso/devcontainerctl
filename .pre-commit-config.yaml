@@ -85,9 +85,16 @@ repos:
 
   - repo: local
     hooks:
-      - id: bats-tests
-        name: bats tests
+      - id: bats-unit
+        name: bats unit tests
         language: system
-        entry: bats tests
+        entry: bats --filter-tags 'unit,!integration' tests
         pass_filenames: false
         always_run: true
+      - id: bats-integration
+        name: bats integration tests
+        language: system
+        entry: bats --filter-tags integration tests
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
