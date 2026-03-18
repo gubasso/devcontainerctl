@@ -147,6 +147,13 @@ RUN echo "agent-cache-bust=$CACHEBUST_AGENTS" \
 # Codex CLI (OpenAI) via Bun | OpenCode via Bun | Gemini CLI via npm
 RUN bun add -g @openai/codex opencode-ai && npm install -g @google/gemini-cli@latest
 
+# Kitty remote control client (standalone static binary, no runtime deps)
+# Enables tab-title hooks and notifications from inside containers via kitty's Unix socket
+RUN curl -fsSL -o /tmp/kitten \
+    https://github.com/kovidgoyal/kitty/releases/latest/download/kitten-linux-amd64 \
+    && install -m 0755 /tmp/kitten /home/$USERNAME/.local/bin/kitten \
+    && rm -f /tmp/kitten
+
 WORKDIR /workspaces
 
 # Shared devcontainer defaults inherited by child images and merged with project-local devcontainer.json
@@ -156,7 +163,7 @@ LABEL devcontainer.metadata='[ \
     "updateRemoteUserUID": false, \
     "init": true, \
     "shutdownAction": "none", \
-    "containerEnv": { "TERM": "${localEnv:TERM}", "COLORTERM": "truecolor" }, \
+    "containerEnv": { "TERM": "${localEnv:TERM}", "COLORTERM": "truecolor", "KITTY_LISTEN_ON": "${localEnv:KITTY_LISTEN_ON}", "KITTY_WINDOW_ID": "${localEnv:KITTY_WINDOW_ID}" }, \
     "mounts": [ \
       { \
         "source": "${localEnv:HOME}/.gitconfig", \
@@ -238,6 +245,11 @@ LABEL devcontainer.metadata='[ \
       { \
         "source": "${localEnv:HOME}/.config/glab-cli", \
         "target": "${localEnv:HOME}/.config/glab-cli", \
+        "type": "bind" \
+      }, \
+      { \
+        "source": "/tmp", \
+        "target": "/tmp", \
         "type": "bind" \
       } \
     ], \

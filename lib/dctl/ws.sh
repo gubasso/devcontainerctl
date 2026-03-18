@@ -112,7 +112,7 @@ collect_term_env() {
   out=()
 
   local var_name
-  for var_name in TERM COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION; do
+  for var_name in TERM COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION KITTY_WINDOW_ID KITTY_LISTEN_ON; do
     if [[ -n "${!var_name:-}" ]]; then
       out+=(--remote-env "${var_name}=${!var_name}")
     fi
