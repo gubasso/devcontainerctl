@@ -208,10 +208,16 @@ teardown() {
   TERM=xterm-kitty
   # shellcheck disable=SC2034
   COLORTERM=truecolor
+  # shellcheck disable=SC2034
+  KITTY_WINDOW_ID=42
+  # shellcheck disable=SC2034
+  KITTY_LISTEN_ON=unix:/tmp/kitty-test
   collect_term_env args
-  [ "${#args[@]}" -eq 4 ]
+  [ "${#args[@]}" -eq 8 ]
   [[ "${args[*]}" == *"--remote-env TERM=xterm-kitty"* ]]
   [[ "${args[*]}" == *"--remote-env COLORTERM=truecolor"* ]]
+  [[ "${args[*]}" == *"--remote-env KITTY_WINDOW_ID=42"* ]]
+  [[ "${args[*]}" == *"--remote-env KITTY_LISTEN_ON=unix:/tmp/kitty-test"* ]]
 }
 
 @test "cmd_ws_run forwards terminal env" {
