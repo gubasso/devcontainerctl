@@ -14,6 +14,14 @@ USER $USERNAME
 RUN rustup default none \
     && rustup toolchain uninstall stable
 
-ENV PATH="/home/$USERNAME/.cargo/bin:$PATH"
+RUN cargo binstall --no-confirm --locked cargo-deny \
+    && cargo binstall --no-confirm --locked taplo-cli \
+    && cargo binstall --no-confirm --locked cargo-audit \
+    && cargo binstall --no-confirm --locked typos-cli \
+    && cargo binstall --no-confirm --locked ripsecrets
+
+# Pre-commit tools installed via mise (non-cargo binaries)
+RUN mise use --global gitleaks@latest \
+    && mise reshim
 
 WORKDIR /workspaces
