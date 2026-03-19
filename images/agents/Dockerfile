@@ -5,7 +5,7 @@
 # refresh are installed via curl-pipe. Codex is installed via Bun (npm-style).
 # gh is installed via the official GitHub APT repo. Node.js LTS, Neovim,
 # Python, fzf, pre-commit, glab, bats, and yq are installed via mise. eza, mise, zoxide,
-# and starship are installed via cargo-binstall (prebuilt binaries).
+# and starship are installed via cargo-binstall.
 # trash-cli via pipx. Rust toolchain via rustup. Neovim runs a minimal
 # config in containers (no plugins, LSP, or treesitter). For stronger
 # guarantees, pin versions and validate checksums. Current approach favors
@@ -107,14 +107,14 @@ ENV EDITOR=nvim
 ENV VISUAL=nvim
 
 # CLI tools via cargo (prebuilt where available, source where needed)
-# Preference: apt > cargo-binstall > cargo-install
+# Preference: cargo-binstall > cargo-install
 RUN cargo install cargo-binstall --locked \
-    && { cargo binstall --no-confirm mise || cargo install --locked mise; } \
-    && { cargo binstall --no-confirm zoxide || cargo install --locked zoxide; } \
-    && { cargo binstall --no-confirm eza || cargo install --locked eza; } \
-    && { cargo binstall --no-confirm starship || cargo install --locked starship; } \
-    && { cargo binstall --no-confirm ast-grep || cargo install --locked ast-grep; } \
-    && { cargo binstall --no-confirm shellharden || cargo install --locked shellharden; }
+    && cargo binstall --no-confirm --locked mise \
+    && cargo binstall --no-confirm --locked zoxide \
+    && cargo binstall --no-confirm --locked eza \
+    && cargo binstall --no-confirm --locked starship \
+    && cargo binstall --no-confirm --locked ast-grep \
+    && cargo binstall --no-confirm --locked shellharden
 
 # Node.js LTS via mise (needed for bun-installed packages with #!/usr/bin/env node shebangs)
 RUN mise use --global node@lts \
