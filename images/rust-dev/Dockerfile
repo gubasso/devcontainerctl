@@ -10,10 +10,7 @@ ARG USERNAME
 RUN test -n "$USERNAME" || { echo "USERNAME build arg is required"; exit 1; }
 USER $USERNAME
 
-# Rustup with no default toolchain (project declares in rust-toolchain.toml)
-RUN rustup default none \
-    && rustup toolchain uninstall stable
-
+# Rust dev tools (installed while stable toolchain is still available)
 RUN cargo binstall --no-confirm --locked cargo-deny \
     && cargo binstall --no-confirm --locked taplo-cli \
     && cargo binstall --no-confirm --locked cargo-audit \
@@ -23,5 +20,9 @@ RUN cargo binstall --no-confirm --locked cargo-deny \
 # Pre-commit tools installed via mise (non-cargo binaries)
 RUN mise use --global gitleaks@latest \
     && mise reshim
+
+# Remove default toolchain (project declares in rust-toolchain.toml)
+RUN rustup default none \
+    && rustup toolchain uninstall stable
 
 WORKDIR /workspaces
