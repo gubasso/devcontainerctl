@@ -15,6 +15,7 @@ RUN cargo binstall --no-confirm --locked cargo-deny \
     && cargo binstall --no-confirm --locked taplo-cli \
     && cargo binstall --no-confirm --locked cargo-audit \
     && cargo binstall --no-confirm --locked typos-cli \
+    && cargo binstall --no-confirm --locked cargo-nextest \
     && cargo binstall --no-confirm --locked ripsecrets
 
 # Pre-commit tools installed via mise (non-cargo binaries)
