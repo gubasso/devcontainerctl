@@ -29,6 +29,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ripgrep \
     fd-find \
     bat \
+    # Codex CLI: unprivileged sandbox backend (/usr/bin/bwrap)
+    bubblewrap \
     fish \
     jq \
     tree \
