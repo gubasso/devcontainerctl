@@ -119,7 +119,9 @@ RUN cargo install cargo-binstall --locked \
     && cargo binstall --no-confirm --locked shellharden
 
 # Node.js LTS via mise (needed for bun-installed packages with #!/usr/bin/env node shebangs)
-RUN mise use --global node@lts \
+RUN --mount=type=secret,id=gh_token,mode=0444 \
+    export GITHUB_TOKEN="$(cat /run/secrets/gh_token 2>/dev/null || true)" \
+    && mise use --global node@lts \
     && mise reshim
 
 # Neovim (latest stable) + Python + pre-commit + fzf + glab via mise
@@ -127,9 +129,14 @@ RUN mise use --global node@lts \
 # rolling model. If a backend drifts, the build breaks loud — fix forward.
 # Refresh mise binary: cached cargo-binstall version may have registry/parser bugs
 # hadolint ignore=DL3013
-RUN curl -fsSL https://mise.run | MISE_INSTALL_PATH="$HOME/.cargo/bin/mise" sh \
+RUN --mount=type=secret,id=gh_token,mode=0444 \
+    export GITHUB_TOKEN="$(cat /run/secrets/gh_token 2>/dev/null || true)" \
+    && curl -fsSL https://mise.run | MISE_INSTALL_PATH="$HOME/.cargo/bin/mise" sh \
     && mise use --global neovim@latest \
-    && mise use --global python@latest \
+    # Force standard (non-freethreaded) Python: 3.14+ defaults to freethreaded builds
+    # (no GIL), whose stripped precompiled binaries lack the lib/ dir mise expects.
+    # Standard build keeps full compatibility with C extensions and conventional layout.
+    && MISE_PYTHON_PRECOMPILED_FLAVOR=install_only_stripped mise use --global python@latest \
     && mise use --global pre-commit@latest \
     && mise use --global fzf@latest \
     && mise use --global gitlab:gitlab-org/cli@latest \

@@ -19,7 +19,9 @@ RUN cargo binstall --no-confirm --locked cargo-deny \
     && cargo binstall --no-confirm --locked ripsecrets
 
 # Pre-commit tools installed via mise (non-cargo binaries)
-RUN mise use --global gitleaks@latest \
+RUN --mount=type=secret,id=gh_token,mode=0444 \
+    export GITHUB_TOKEN="$(cat /run/secrets/gh_token 2>/dev/null || true)" \
+    && mise use --global gitleaks@latest \
     && mise reshim
 
 # Remove default toolchain (project declares in rust-toolchain.toml)
