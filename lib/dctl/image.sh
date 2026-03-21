@@ -8,6 +8,8 @@ readonly _DCTL_IMAGE_LOADED=1
 
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/common.sh"
+# shellcheck source=/dev/null
+source "${DCTL_LIB_DIR}/auth.sh"
 
 usage_image() {
   cat <<'EOF'
@@ -206,6 +208,20 @@ cmd_image_build() {
   local -a build_args
   build_args=(--build-arg "USERNAME=${username}" --build-arg "USER_UID=$(id -u)" --build-arg "USER_GID=$(id -g)")
 
+  # GitHub token for mise installs (avoids 60 req/hr anonymous rate limit)
+  local -a secret_flag=()
+  local gh_token_file=""
+  if [[ "$dry_run" != true ]]; then
+    local gh_token
+    if gh_token=$(_extract_gh_token 2>/dev/null) && [[ -n "$gh_token" ]]; then
+      gh_token_file=$(mktemp)
+      printf '%s' "$gh_token" > "$gh_token_file"
+      secret_flag=(--secret "id=gh_token,src=${gh_token_file}")
+    else
+      warn "No GitHub token found — builds may hit API rate limits (see: gh auth login)"
+    fi
+  fi
+
   local -a failed
   failed=()
 
@@ -267,12 +283,15 @@ cmd_image_build() {
       "${refresh_flag[@]}" \
       "${extra_contexts[@]}" \
       "${build_args[@]}" \
+      "${secret_flag[@]}" \
       -t "$tag" \
       "./${target}/"; then
       warn "Failed to build: $target"
       failed+=("$target")
     fi
   done
+
+  [[ -n "$gh_token_file" ]] && rm -f "$gh_token_file"
 
   if [[ "$dry_run" == true ]]; then
     log "Dry-run complete"

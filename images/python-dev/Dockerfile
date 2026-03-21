@@ -19,7 +19,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 USER $USERNAME
 
 # Poetry + yq (provides tomlq for pyproject parsing) via mise pipx backend
-RUN mise use --global pipx:poetry@latest \
+RUN --mount=type=secret,id=gh_token,mode=0444 \
+    export GITHUB_TOKEN="$(cat /run/secrets/gh_token 2>/dev/null || true)" \
+    && mise use --global pipx:poetry@latest \
     && mise use --global pipx:yq@latest \
     && mise reshim
 
