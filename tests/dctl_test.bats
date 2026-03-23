@@ -303,15 +303,24 @@ teardown() {
   [[ "$output" == *"rust"* ]]
 }
 
-@test "cmd_init with template creates devcontainer config and runs smoke test" {
+@test "cmd_init with template registers project and runs smoke test" {
   create_template_fixture python "devimg/python-dev:latest"
   # shellcheck disable=SC2329
   cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
 
   run cmd_init --template python
   [ "$status" -eq 0 ]
-  [ -f "$(workspace_devcontainer_file)" ]
-  grep -F '"image": "devimg/python-dev:latest"' "$(workspace_devcontainer_file)"
+  # No local .devcontainer created
+  [ ! -f "$(workspace_devcontainer_file)" ]
+  # Registry entry points to shared template
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  [ -f "$registry" ]
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  local template_file
+  template_file="$(template_path python)"
+  template_file="$(realpath "$template_file")"
+  [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "$template_file" ]
   assert_mock_called "CMD_TEST_CALLED"
 }
 
@@ -324,12 +333,12 @@ teardown() {
 
   run cmd_init
   [ "$status" -eq 0 ]
-  [[ "$output" == *"skipping scaffold"* ]]
+  [[ "$output" == *"skipping"* ]]
   grep -F '"image": "existing-image"' "$(workspace_devcontainer_file)"
   assert_mock_called "CMD_TEST_CALLED"
 }
 
-@test "cmd_init force overwrites existing config" {
+@test "cmd_init force re-registers even with existing local config" {
   create_template_fixture python "devimg/python-dev:latest"
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{\n  "image": "existing-image"\n}\n' >"$(workspace_devcontainer_file)"
@@ -338,7 +347,15 @@ teardown() {
 
   run cmd_init --force --template python
   [ "$status" -eq 0 ]
-  grep -F '"image": "devimg/python-dev:latest"' "$(workspace_devcontainer_file)"
+  # Registry entry created pointing to shared template
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  [ -f "$registry" ]
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  local template_file
+  template_file="$(template_path python)"
+  template_file="$(realpath "$template_file")"
+  [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "$template_file" ]
 }
 
 @test "cmd_init rejects unknown templates" {
@@ -807,4 +824,91 @@ YAML
   [ "$status" -eq 0 ]
   [[ "$output" == *"agents"* ]]
   [[ "$output" == *"custom-img"* ]]
+}
+
+@test "cmd_init --template python registers project pointing to shared template" {
+  create_template_fixture python "devimg/python-dev:latest"
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  run cmd_init --template python
+  [ "$status" -eq 0 ]
+
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  local template_file
+  template_file="$(template_path python)"
+  template_file="$(realpath "$template_file")"
+
+  [ -f "$registry" ]
+  [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "$template_file" ]
+  [ "$(yq -r ".\"${canonical}\".dockerfile" "$registry")" = "python-dev" ]
+  [ "$(yq -r ".\"${canonical}\".image" "$registry")" = "devimg/python-dev:latest" ]
+  [ "$(yq -r ".\"${canonical}\".sibling_discovery" "$registry")" = "true" ]
+}
+
+@test "cmd_init --template base registers with agents defaults" {
+  create_template_fixture base "devimg/agents:latest"
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  run cmd_init --template base
+  [ "$status" -eq 0 ]
+
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+
+  [ -f "$registry" ]
+  [ "$(yq -r ".\"${canonical}\".dockerfile" "$registry")" = "agents" ]
+  [ "$(yq -r ".\"${canonical}\".image" "$registry")" = "devimg/agents:latest" ]
+}
+
+@test "cmd_init --no-register --template python skips registration" {
+  create_template_fixture python "devimg/python-dev:latest"
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  run cmd_init --no-register --template python
+  [ "$status" -eq 0 ]
+  [ ! -f "${XDG_CONFIG_HOME}/dctl/projects.yaml" ]
+}
+
+@test "cmd_init with existing config skips scaffold and registration" {
+  create_template_fixture python "devimg/python-dev:latest"
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{\n  "image": "existing-image"\n}\n' >"$(workspace_devcontainer_file)"
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  run cmd_init
+  [ "$status" -eq 0 ]
+  [ ! -f "${XDG_CONFIG_HOME}/dctl/projects.yaml" ]
+}
+
+@test "cmd_init --force with existing registry entry preserves entry" {
+  create_template_fixture python "devimg/python-dev:latest"
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{\n  "image": "existing-image"\n}\n' >"$(workspace_devcontainer_file)"
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  cat >"$registry" <<YAML
+${canonical}:
+  devcontainer: /tmp/existing.json
+  dockerfile: existing-target
+  image: devimg/existing:latest
+  sibling_discovery: false
+YAML
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  run cmd_init --force --template python
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"already registered"* ]]
+  [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "/tmp/existing.json" ]
+  [ "$(yq -r ".\"${canonical}\".dockerfile" "$registry")" = "existing-target" ]
+  [ "$(yq -r ".\"${canonical}\".image" "$registry")" = "devimg/existing:latest" ]
+  [ "$(yq -r ".\"${canonical}\".sibling_discovery" "$registry")" = "false" ]
 }

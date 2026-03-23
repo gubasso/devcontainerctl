@@ -72,14 +72,22 @@ The `--config` flag sets the devcontainer.json path for any command that needs i
 ### `dctl init`
 
 ```bash
-dctl init --template python  # scaffold from a specific template
+dctl init --template python  # register project with a specific template
 dctl init --list             # list available templates
 dctl init                    # interactive fzf selector
 dctl init --force --template rust
+dctl init --no-register --template python  # skip registry registration
 ```
 
-If `.devcontainer/devcontainer.json` already exists, `dctl init` warns and keeps
-it unchanged by default, then runs the smoke test against the current project.
+`dctl init` registers the project in `~/.config/dctl/projects.yaml`, pointing
+it to the shared template config (e.g., `~/.local/share/dctl/templates/python/devcontainer.json`).
+No local `.devcontainer/` directory is created — the config resolution chain
+picks up the shared config from the registry. Use `--no-register` to skip
+registration. Use `--force` to re-register even if already registered.
+
+If the project is already registered or has a local `.devcontainer/devcontainer.json`,
+`dctl init` warns and skips by default, then runs the smoke test against the
+existing config.
 
 Templates are discovered from two locations (user overrides installed):
 1. `~/.config/dctl/templates/` — user templates
@@ -262,7 +270,7 @@ dctl init --template python
 dctl ws up
 ```
 
-`dctl init` copies a ready-made `devcontainer.json` into `.devcontainer/` with image, mounts, and lifecycle hooks pre-configured. Built-in templates: `base`, `coordinator`, `python`, `rust`, `zig`.
+`dctl init` registers the project in `~/.config/dctl/projects.yaml`, pointing it to a shared template with image, mounts, and lifecycle hooks pre-configured. No local files are created — the config resolution chain reads the shared template from the registry. Built-in templates: `base`, `coordinator`, `python`, `rust`, `zig`.
 
 ### Running a Command
 

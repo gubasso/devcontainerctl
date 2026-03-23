@@ -160,6 +160,71 @@ _registry_lookup_dockerfile() {
   _registry_read_field "$canonical_name" "dockerfile"
 }
 
+_registry_ensure_file() {
+  local registry
+  registry="$(_registry_file)"
+  mkdir -p "$(dirname "$registry")"
+  if [[ ! -f "$registry" ]]; then
+    touch "$registry"
+  fi
+}
+
+_registry_has_project() {
+  local canonical_name="$1"
+  local registry
+  registry="$(_registry_file)"
+  [[ -s "$registry" ]] || return 1
+  YQ_KEY="$canonical_name" yq -e '.[env(YQ_KEY)]' "$registry" >/dev/null 2>&1
+}
+
+register_project_defaults() {
+  local canonical_name="$1"
+  local devcontainer_path="$2"
+  local dockerfile="${3:-}"
+  local image="${4:-}"
+
+  require_cmd yq
+  _registry_ensure_file
+
+  local registry
+  registry="$(_registry_file)"
+
+  if [[ -s "$registry" ]]; then
+    _validate_registry "$registry"
+  fi
+
+  if _registry_has_project "$canonical_name"; then
+    warn "Project '$canonical_name' already registered in $registry; skipping"
+    return 0
+  fi
+
+  # Use env vars to pass values safely to yq (avoids injection via special chars)
+  local yq_expr
+  yq_expr='.[env(YQ_KEY)].devcontainer = env(YQ_DEVCONTAINER)'
+  yq_expr+=' | .[env(YQ_KEY)].sibling_discovery = true'
+  if [[ -n "$dockerfile" ]]; then
+    yq_expr+=' | .[env(YQ_KEY)].dockerfile = env(YQ_DOCKERFILE)'
+  fi
+  if [[ -n "$image" ]]; then
+    yq_expr+=' | .[env(YQ_KEY)].image = env(YQ_IMAGE)'
+  fi
+
+  local tmp_registry="${registry}.tmp.$$"
+  export YQ_KEY="$canonical_name" YQ_DEVCONTAINER="$devcontainer_path" \
+    YQ_DOCKERFILE="$dockerfile" YQ_IMAGE="$image"
+  if [[ -s "$registry" ]]; then
+    yq eval "$yq_expr" "$registry" >"$tmp_registry"
+  else
+    yq -n "$yq_expr" >"$tmp_registry"
+  fi
+  unset YQ_KEY YQ_DEVCONTAINER YQ_DOCKERFILE YQ_IMAGE
+
+  _validate_registry "$tmp_registry"
+  mv "$tmp_registry" "$registry"
+
+  log "Registered project '$canonical_name' in $registry"
+}
+
 usage_config() {
   cat <<'EOF'
 Usage: dctl config <command>

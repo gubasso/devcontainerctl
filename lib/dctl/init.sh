@@ -9,19 +9,22 @@ readonly _DCTL_INIT_LOADED=1
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/common.sh"
 # shellcheck source=/dev/null
+source "${DCTL_LIB_DIR}/config.sh"
+# shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/test.sh"
 
 usage_init() {
   cat <<'EOF'
 Usage: dctl init [options]
 
-Scaffold .devcontainer/devcontainer.json from a template, then run the setup
-smoke test.
+Register a project in the dctl project registry, pointing it to a shared
+devcontainer template, then run the setup smoke test.
 
 Options:
   --template <name>   Use a specific template
   --list              List available templates and exit
-  --force             Overwrite an existing devcontainer.json
+  --force             Re-register even if already registered
+  --no-register       Skip project registry registration
   --help, -h          Show this help text
 
 Examples:
@@ -128,10 +131,22 @@ copy_template_to_workspace() {
   cp "$source_path" "$(workspace_devcontainer_file)"
 }
 
+template_registry_defaults() {
+  local template="$1"
+  case "$template" in
+    base|coordinator) printf 'agents devimg/agents:latest\n' ;;
+    python)           printf 'python-dev devimg/python-dev:latest\n' ;;
+    rust)             printf 'rust-dev devimg/rust-dev:latest\n' ;;
+    zig)              printf 'zig-dev devimg/zig-dev:latest\n' ;;
+    *)                printf '\n' ;;
+  esac
+}
+
 cmd_init() {
   local template=""
   local force=false
   local list=false
+  local register=true
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -146,6 +161,10 @@ cmd_init() {
         ;;
       --force)
         force=true
+        shift
+        ;;
+      --no-register)
+        register=false
         shift
         ;;
       --help | -h)
@@ -163,12 +182,26 @@ cmd_init() {
     return 0
   fi
 
-  local config_path
-  config_path="$(workspace_devcontainer_file)"
+  # Check if project already has config (registry or local)
+  local canonical_name
+  canonical_name="$(resolve_canonical_project_name)"
 
-  if [[ -f "$config_path" && "$force" != true ]]; then
-    warn "Existing devcontainer config found at $config_path; skipping scaffold"
-    DCTL_CLI_CONFIG="$config_path" cmd_test
+  local existing_registry_path=""
+  if command -v yq >/dev/null 2>&1; then
+    existing_registry_path="$(_registry_lookup_devcontainer "$canonical_name")"
+  fi
+
+  if [[ -n "$existing_registry_path" && -f "$existing_registry_path" && "$force" != true ]]; then
+    warn "Project '$canonical_name' already registered with config at $existing_registry_path; skipping"
+    DCTL_CLI_CONFIG="$existing_registry_path" cmd_test
+    return $?
+  fi
+
+  local local_config
+  local_config="$(workspace_devcontainer_file)"
+  if [[ -f "$local_config" && "$force" != true ]]; then
+    warn "Existing devcontainer config found at $local_config; skipping"
+    DCTL_CLI_CONFIG="$local_config" cmd_test
     return $?
   fi
 
@@ -178,11 +211,24 @@ cmd_init() {
     template="$(select_template)" || return $?
   fi
 
-  copy_template_to_workspace "$template"
-  log "Wrote $(workspace_devcontainer_file) from template: $template"
+  local shared_config
+  shared_config="$(template_path "$template")"
+  [[ -f "$shared_config" ]] || {
+    printf 'Available templates:\n' >&2
+    print_available_templates
+    err "Unknown template: $template"
+  }
+  shared_config="$(realpath "$shared_config")"
 
-  # Smoke-test the file we just wrote, not a globally overridden config
-  DCTL_CLI_CONFIG="$(workspace_devcontainer_file)" cmd_test
+  if [[ "$register" == true ]]; then
+    local reg_dockerfile="" reg_image=""
+    read -r reg_dockerfile reg_image < <(template_registry_defaults "$template") || true
+    register_project_defaults "$canonical_name" "$shared_config" "$reg_dockerfile" "$reg_image"
+  fi
+
+  log "Project '$canonical_name' configured with template: $template"
+
+  DCTL_CLI_CONFIG="$shared_config" cmd_test
 }
 
 main_init() {
