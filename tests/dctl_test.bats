@@ -359,7 +359,9 @@ teardown() {
   # shellcheck disable=SC2329
   cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
 
-  run cmd_init
+  # Redirect stdin from /dev/null to ensure non-interactive detection
+  # works even when bats preserves the host terminal under `run`
+  run cmd_init </dev/null
   [ "$status" -ne 0 ]
   [[ "$output" == *"Pass --template"* ]]
   [[ "$output" == *"python"* ]]

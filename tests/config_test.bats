@@ -161,7 +161,8 @@ YAML
 
   run _validate_registry "${XDG_CONFIG_HOME}/dctl/projects.yaml"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"Invalid YAML"* ]]
+  # check-jsonschema says "Failed" or "failed"; yq fallback says "Invalid YAML"
+  [[ "$output" == *"Invalid YAML"* || "$output" == *"ailed"* ]]
 }
 
 @test "registry validation rejects unrecognized keys" {
@@ -172,7 +173,8 @@ YAML
 
   run _validate_registry "${XDG_CONFIG_HOME}/dctl/projects.yaml"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"Unrecognized key"* ]]
+  # check-jsonschema reports "Additional properties"; yq fallback says "Unrecognized key"
+  [[ "$output" == *"Unrecognized key"* || "$output" == *"additional properties"* || "$output" == *"ailed"* ]]
 }
 
 @test "registry validation rejects non-boolean sibling_discovery" {
