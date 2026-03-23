@@ -35,8 +35,12 @@ systemctl --user enable --now dctl-image-build.timer
 - shell library to `~/.local/lib/dctl/`
 - image Dockerfiles to `~/.local/share/dctl/images/`
 - devcontainer templates to `~/.local/share/dctl/templates/`
+- project registry schema to `~/.local/share/dctl/schemas/`
 
 `~/.local/bin` must be in `PATH`. The installer warns if it is missing.
+
+`make install` never writes to `~/.config/dctl/` — that directory is reserved for
+user-controlled configuration.
 
 ## Setup
 
@@ -56,16 +60,30 @@ dctl test
 
 ## CLI
 
+### Global Options
+
+```bash
+dctl --config /path/to/devcontainer.json <command>  # override config resolution
+```
+
+The `--config` flag sets the devcontainer.json path for any command that needs it
+(`ws up`, `ws reup`, `test`). It takes highest precedence in the resolution chain.
+
 ### `dctl init`
 
 ```bash
 dctl init --template python  # scaffold from a specific template
+dctl init --list             # list available templates
 dctl init                    # interactive fzf selector
 dctl init --force --template rust
 ```
 
 If `.devcontainer/devcontainer.json` already exists, `dctl init` warns and keeps
 it unchanged by default, then runs the smoke test against the current project.
+
+Templates are discovered from two locations (user overrides installed):
+1. `~/.config/dctl/templates/` — user templates
+2. `~/.local/share/dctl/templates/` — installed templates
 
 ### `dctl test`
 
@@ -87,10 +105,20 @@ dctl image list                   # show available targets
 
 The `agents` and `zig-dev` images require the dotfiles repo as a BuildKit named context. Set `DOTFILES=` or ensure `~/.dotfiles` exists.
 
+### `dctl config`
+
+```bash
+dctl config            # project registry management (placeholder)
+```
+
+The project registry at `~/.config/dctl/projects.yaml` maps canonical project names
+to per-project settings (devcontainer path, Dockerfile target, sibling discovery).
+See [`spec/10-project-registry.md`](spec/10-project-registry.md) for details.
+
 ### `dctl ws`
 
 ```bash
-dctl ws up             # start devcontainer
+dctl ws up             # start devcontainer (resolves config automatically)
 dctl ws reup           # recreate after config/image changes
 dctl ws shell          # interactive shell
 dctl ws exec -- pytest # run command in container
@@ -106,6 +134,54 @@ If the Claude wrapper wiring inside a container looks broken, recreate the conta
 ```bash
 dctl ws reup
 ```
+
+## Config Resolution
+
+`dctl` resolves `devcontainer.json` using a precedence chain (highest wins):
+
+1. `--config` CLI flag
+2. `DCTL_CONFIG` environment variable
+3. Per-project registry (`~/.config/dctl/projects.yaml`)
+4. Local workspace file (`.devcontainer/devcontainer.json`)
+5. Work-clone sibling discovery
+6. User global default (`~/.config/dctl/default/devcontainer.json`)
+
+The resolved config is passed to the Dev Container CLI via `--config`. The
+`--workspace-folder` always remains the current directory, preserving per-clone
+container identity.
+
+### Work-Clone Workflow
+
+Work-clones are sibling directories named `repo.42-feature` alongside a main `repo/`.
+When a work-clone has no local config, `dctl` discovers the main repo's
+`.devcontainer/devcontainer.json` automatically:
+
+```bash
+# Main repo has the config
+~/Projects/repo/.devcontainer/devcontainer.json
+
+# Work-clone uses it automatically
+cd ~/Projects/repo.42-add-auth
+dctl ws up  # resolves config from ../repo/
+```
+
+Each clone gets its own container — only the config is shared.
+
+### Dockerfile Resolution
+
+`dctl image build` resolves Dockerfiles through two layers (user overrides installed):
+
+1. `~/.config/dctl/images/<target>/Dockerfile` — user override
+2. `~/.local/share/dctl/images/<target>/Dockerfile` — installed
+
+### XDG Layout
+
+| Directory | Purpose |
+| --- | --- |
+| `~/.config/dctl/` | User config: project registry, templates, image overrides, defaults |
+| `~/.local/share/dctl/` | Installed data: templates, images, schemas |
+
+Both honor `XDG_CONFIG_HOME` and `XDG_DATA_HOME`.
 
 ## Automation
 
@@ -186,7 +262,7 @@ dctl init --template python
 dctl ws up
 ```
 
-`dctl init` copies a ready-made `devcontainer.json` into `.devcontainer/` with image, mounts, and lifecycle hooks pre-configured.
+`dctl init` copies a ready-made `devcontainer.json` into `.devcontainer/` with image, mounts, and lifecycle hooks pre-configured. Built-in templates: `base`, `coordinator`, `python`, `rust`, `zig`.
 
 ### Running a Command
 
@@ -340,16 +416,20 @@ dctl image list          # show available targets
 
 - Pre-built images with AI agent tools (Claude Code, Codex, Gemini CLI) ready to use.
 - Dotfiles integration baked into base image metadata.
-- Template system for instant project scaffolding (`dctl init`).
+- Template system for instant project scaffolding (`dctl init`), with user overrides.
+- Config resolution chain for flexible devcontainer.json discovery.
+- Work-clone support for parallel feature branches sharing config.
+- Per-project registry (`projects.yaml`) for host-side project configuration.
+- Dockerfile override hierarchy (user custom over installed).
 - Unified CLI for images, workspaces, and lifecycle in one tool.
 - Optional systemd timer for weekly unattended image rebuilds.
 - Multi-agent support: attach multiple AI agents to the same container.
 
 ## Design Specs
 
-Planned features and future behavior are described in
-[`spec/README.md`](spec/README.md). These documents are design documents, not a
-statement of current implementation status.
+Design documents for the config resolution and work-clone support features are in
+[`spec/README.md`](spec/README.md). The core resolution chain, project registry,
+template discovery, and Dockerfile hierarchy are now implemented.
 
 ## Further Reading
 

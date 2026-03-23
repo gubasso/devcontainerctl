@@ -134,10 +134,15 @@ cmd_ws_up() {
     args=("${args[@]:1}")
   fi
 
+  local config_path
+  if ! config_path="$(resolve_devcontainer_config)"; then
+    return 1
+  fi
+
   local -a git_wt_mounts=()
   collect_git_worktree_mounts git_wt_mounts
   log "Starting devcontainer for $(workspace_path)"
-  devcontainer up --workspace-folder "$WORKSPACE_FOLDER" "${git_wt_mounts[@]}" "${args[@]}"
+  devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" "${git_wt_mounts[@]}" "${args[@]}"
 }
 
 cmd_ws_reup() {
@@ -148,10 +153,15 @@ cmd_ws_reup() {
     args=("${args[@]:1}")
   fi
 
+  local config_path
+  if ! config_path="$(resolve_devcontainer_config)"; then
+    return 1
+  fi
+
   local -a git_wt_mounts=()
   collect_git_worktree_mounts git_wt_mounts
   log "Recreating devcontainer for $(workspace_path)"
-  devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --remove-existing-container "${git_wt_mounts[@]}" "${args[@]}"
+  devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" --remove-existing-container "${git_wt_mounts[@]}" "${args[@]}"
 }
 
 cmd_ws_exec() {

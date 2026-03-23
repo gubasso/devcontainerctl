@@ -6,8 +6,8 @@ SYSTEMD_DIR ?= $(HOME)/.local/share/systemd/user
 INSTALL := install
 
 IMAGE_NAMES := agents python-dev rust-dev zig-dev
-TEMPLATE_DIRS := python rust zig
-LIB_FILES := common.sh ws.sh image.sh init.sh test.sh auth.sh
+TEMPLATE_DIRS := python rust zig base coordinator
+LIB_FILES := common.sh ws.sh image.sh init.sh test.sh auth.sh config.sh
 
 .PHONY: install uninstall install-systemd uninstall-systemd test test-unit test-integration lint check
 
@@ -28,6 +28,8 @@ install:
 		$(INSTALL) -m 644 "templates/$$template/devcontainer.json" "$(DATA_DIR)/templates/$$template/devcontainer.json"; \
 	done
 	$(INSTALL) -m 644 templates/README.md "$(DATA_DIR)/templates/README.md"
+	$(INSTALL) -d "$(DATA_DIR)/schemas"
+	$(INSTALL) -m 644 schemas/projects.schema.yaml "$(DATA_DIR)/schemas/projects.schema.yaml"
 	@printf '\n'
 	@case ":$$PATH:" in *:"$(BIN_DIR)":*) ;; *) \
 		printf '\033[1;33mWARN:\033[0m %s is not in PATH\n' "$(BIN_DIR)"; \
@@ -51,6 +53,8 @@ uninstall:
 	done
 	rm -f "$(DATA_DIR)/templates/README.md"
 	rmdir "$(DATA_DIR)/templates" 2>/dev/null || true
+	rm -f "$(DATA_DIR)/schemas/projects.schema.yaml"
+	rmdir "$(DATA_DIR)/schemas" 2>/dev/null || true
 	rmdir "$(DATA_DIR)" 2>/dev/null || true
 
 install-systemd:
