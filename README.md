@@ -345,6 +345,12 @@ dctl image list          # show available targets
 - Optional systemd timer for weekly unattended image rebuilds.
 - Multi-agent support: attach multiple AI agents to the same container.
 
+## Design Specs
+
+Planned features and future behavior are described in
+[`spec/README.md`](spec/README.md). These documents are design documents, not a
+statement of current implementation status.
+
 ## Further Reading
 
 - [QUICKSTART.md](docs/QUICKSTART.md) — Project setup templates and common commands
