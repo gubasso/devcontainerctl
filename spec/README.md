@@ -33,7 +33,7 @@ Current implemented behavior is documented in
 | File | Description | Status |
 | --- | --- | --- |
 | [`00-resolution-model.md`](./00-resolution-model.md) | Shared precedence model, XDG layout, path normalization, and sibling discovery rules. | Draft |
-| [`10-project-registry.md`](./10-project-registry.md) | Per-project registry file layout, canonical name derivation, and `.conf` schema. | Draft |
+| [`10-project-registry.md`](./10-project-registry.md) | Per-project YAML registry, canonical name derivation, and JSON Schema validation. | Draft |
 | [`20-devcontainer-resolution.md`](./20-devcontainer-resolution.md) | `devcontainer.json` lookup algorithm and command integration rules. | Draft |
 | [`30-templates.md`](./30-templates.md) | Template categories, defaults, discovery order, and `dctl init` changes. | Draft |
 | [`40-dockerfile-hierarchy.md`](./40-dockerfile-hierarchy.md) | User-overridden versus installed Dockerfile resolution for managed images. | Draft |

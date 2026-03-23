@@ -24,8 +24,8 @@ Highest wins.
 
 1. Explicit CLI flag — `dctl --config <path>`
 2. Environment variable — `DCTL_CONFIG`
-3. Per-project registry entry — `DEVCONTAINER_CONFIG` in
-   `~/.config/dctl/projects/<canonical-name>.conf`
+3. Per-project registry entry — `devcontainer` key in
+   `~/.config/dctl/projects.yaml`
 4. Local project file — `.devcontainer/devcontainer.json`
 5. Work-clone sibling discovery
 6. User global default — `~/.config/dctl/default/devcontainer.json`
@@ -45,7 +45,7 @@ The design formalizes the following split:
 
 - `~/.config/dctl/`
   - User-controlled config
-  - Per-project registry entries
+  - Project registry (`projects.yaml`)
   - User defaults
   - User-defined templates
   - User-overridden managed image Dockerfiles
@@ -83,7 +83,7 @@ debug mode.
 Examples:
 
 - `Using devcontainer config from CLI flag: /path/to/devcontainer.json`
-- `Using devcontainer config from project registry: ~/.config/dctl/projects/org-repo.conf`
+- `Using devcontainer config from project registry: org-repo in ~/.config/dctl/projects.yaml`
 - `Using Dockerfile override from ~/.config/dctl/images/agents/Dockerfile`
 
 Logging rules:
@@ -134,8 +134,8 @@ The algorithm must apply these guards:
 - The candidate must be a git repository by containing `.git/`.
 - The candidate config must exist at the expected local-project path for the
   relevant artifact.
-- Sibling discovery is skipped if project registry config sets
-  `SIBLING_DISCOVERY=false`.
+- Sibling discovery is skipped if project registry sets
+  `sibling_discovery: false`.
 
 The git-repository guard exists to avoid false matches for sibling directories
 that happen to share the same basename prefix.
@@ -170,7 +170,7 @@ Rules:
 - If the CLI flag points to a missing path, error immediately.
 - If the environment variable points to a missing path, error immediately.
 - If the project registry entry exists but points to a missing path, error and
-  identify the registry file.
+  identify the project name and registry file.
 - If the chain exhausts all sources with no result, return a command-specific
   error such as `run 'dctl init'`.
 

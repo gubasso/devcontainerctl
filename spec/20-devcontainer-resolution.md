@@ -15,8 +15,8 @@ The required algorithm is:
 resolve_devcontainer_config():
     if --config flag provided:                          return flag value
     if DCTL_CONFIG env var set:                          return env var value
-    if project registry .conf exists
-       AND contains DEVCONTAINER_CONFIG key:             return registry value
+    if projects.yaml has entry for canonical project
+       AND entry contains devcontainer key:              return registry value
     if local .devcontainer/devcontainer.json exists:     return it
     if work-clone sibling has config:                    return sibling's config
     if ~/.config/dctl/default/devcontainer.json exists:  return it
@@ -41,15 +41,15 @@ All path checks and comparisons use normalized `realpath` values.
 
 ### Project Registry
 
-- Source: `DEVCONTAINER_CONFIG` inside
-  `~/.config/dctl/projects/<canonical-name>.conf`
+- Source: `devcontainer` key for the canonical project name in
+  `~/.config/dctl/projects.yaml`
 - Used only if neither explicit source is set
-- The registry only participates if the `.conf` file exists **and** contains a
-  `DEVCONTAINER_CONFIG` key. If the file exists but defines only other keys
-  (e.g., `DOCKERFILE`, `SIBLING_DISCOVERY`), resolution continues to the next
-  source in the chain.
-- If `DEVCONTAINER_CONFIG` is set but points to a missing path, that is an error
-  that names the registry file
+- The registry only participates if `projects.yaml` exists, contains an entry
+  for the canonical project, **and** that entry has a `devcontainer` key. If
+  the entry exists but defines only other keys (e.g., `dockerfile`,
+  `sibling_discovery`), resolution continues to the next source in the chain.
+- If `devcontainer` is set but points to a missing path, that is an error
+  that names the project and registry file
 
 ### Local Project File
 
@@ -163,7 +163,7 @@ When a config source wins, `dctl` should log it at normal `log` verbosity.
 Examples:
 
 - `Using devcontainer config from local workspace file`
-- `Using devcontainer config from project registry org-repo.conf`
+- `Using devcontainer config from project registry: org-repo in projects.yaml`
 - `Using devcontainer config from sibling repo /home/alice/projects/repo`
 - `Using devcontainer config from ~/.config/dctl/default/devcontainer.json`
 

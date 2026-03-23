@@ -63,8 +63,8 @@ Expected result:
 
 Scenario:
 
-- `~/.config/dctl/projects/myrepo.conf` exists
-- It contains `DEVCONTAINER_CONFIG=...`
+- `~/.config/dctl/projects.yaml` exists
+- It contains an entry for the canonical project with `devcontainer: /path/to/config.json`
 - User runs `dctl ws up` from a matching workspace
 
 Expected result:
@@ -121,8 +121,7 @@ Expected result:
 
 Scenario:
 
-- `~/.config/dctl/projects/acme-repo.conf` exists
-- It contains `SIBLING_DISCOVERY=false`
+- `~/.config/dctl/projects.yaml` contains `acme-repo: { sibling_discovery: false }`
 - Workspace `repo.docs/` has no local config
 - Sibling `repo/.devcontainer/devcontainer.json` exists
 
@@ -156,33 +155,46 @@ Expected result:
 - The user Dockerfile at `~/.config/dctl/images/agents/Dockerfile` is used
 - The installed version is not used
 
-### 13. Registry DOCKERFILE field (managed target)
+### 13. Registry dockerfile field (managed target)
 
 Scenario:
 
-- `~/.config/dctl/projects/org-repo.conf` contains `DOCKERFILE=python-dev`
+- `~/.config/dctl/projects.yaml` contains `org-repo: { dockerfile: python-dev }`
 - User runs `dctl image build` from a matching workspace without specifying a
   target on the CLI
 
 Expected result:
 
-- The registry `DOCKERFILE` value directs target selection
+- The registry `dockerfile` value directs target selection
 - Dockerfile resolution uses the two-layer hierarchy for the specified target
 - If the user provides an explicit CLI target, the CLI target wins over the
   registry value
 
-### 14. Registry DOCKERFILE field (direct path)
+### 14. Registry dockerfile field (direct path)
 
 Scenario:
 
-- `~/.config/dctl/projects/org-repo.conf` contains
-  `DOCKERFILE=/home/alice/custom/Dockerfile`
+- `~/.config/dctl/projects.yaml` contains
+  `org-repo: { dockerfile: /home/alice/custom/Dockerfile }`
 - User runs `dctl image build` from a matching workspace
 
 Expected result:
 
 - The direct path is validated and used as the build context Dockerfile
 - The two-layer managed lookup is not consulted
+
+### 15. Schema validation
+
+Scenario:
+
+- `~/.config/dctl/projects.yaml` contains an unrecognized key or invalid type
+  (e.g., `org-repo: { sibling_discovery: "yes" }`)
+- User runs any `dctl` command that reads the registry
+
+Expected result:
+
+- `dctl` reports a schema validation error identifying the offending key/value
+- The command does not proceed with invalid config
 
 ## Cross-Cutting Expectations
 
@@ -199,7 +211,7 @@ Expected result:
   and `ws` behavior
 - Extend `tests/dctl_test.bats` for Dockerfile resolution: user override,
   registry managed-target, registry direct-path, CLI-target-wins precedence
-- Add `tests/config_test.bats` for project registry parsing, canonical-name
-  derivation, and `SIBLING_DISCOVERY` opt-out
+- Add `tests/config_test.bats` for project registry YAML parsing, schema
+  validation, canonical-name derivation, and `sibling_discovery` opt-out
 - Preserve current integration coverage for `make install` and local-template
   behavior

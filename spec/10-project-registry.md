@@ -2,44 +2,146 @@
 
 ## Purpose
 
-This document defines the host-side per-project registry used by `dctl` to
-inject project-specific config without requiring every work-clone to carry its
-own local `.devcontainer` files.
+This document defines the host-side project registry used by `dctl` to inject
+project-specific config without requiring every work-clone to carry its own
+local `.devcontainer` files.
 
 ## Location
 
-Project registry entries live at:
+The project registry is a single YAML file:
 
 ```text
-~/.config/dctl/projects/<canonical-name>.conf
+~/.config/dctl/projects.yaml
 ```
 
-The design must honor `${XDG_CONFIG_HOME:-$HOME/.config}/dctl/projects/` in
+The design must honor `${XDG_CONFIG_HOME:-$HOME/.config}/dctl/projects.yaml` in
 future implementation.
+
+A single file is preferred over a directory of per-project files because:
+
+- All project entries are visible in one place.
+- Easier to edit, version-control, and back up.
+- YAML supports comments and structured data natively.
 
 ## Format
 
-The format is shell-parseable `key=value` in `.env` style. The design chooses
-this format so a Bash implementation can parse it without adding a JSON, TOML,
-or YAML parser dependency on the host.
+The file is YAML, parsed by `yq` on the host. Each top-level key is a
+canonical project name, and its value is a mapping of project settings.
 
 Example:
 
-```bash
-# ~/.config/dctl/projects/myrepo.conf
-DEVCONTAINER_CONFIG=/path/to/devcontainer.json
-DOCKERFILE=python-dev
-IMAGE=devimg/python-dev:latest
-SIBLING_DISCOVERY=true
+```yaml
+# ~/.config/dctl/projects.yaml
+
+org-repo:
+  devcontainer: /home/alice/.config/dctl/shared/org-repo/devcontainer.json
+  dockerfile: python-dev
+  image: devimg/python-dev:latest
+  sibling_discovery: true
+
+acme-docs:
+  sibling_discovery: false
+
+personal-api:
+  dockerfile: /home/alice/custom/Dockerfile
 ```
 
 Format rules:
 
-- One assignment per line.
+- Top-level keys are canonical project names (see derivation below).
+- Values are flat mappings — no nesting beyond one level.
 - Comments start with `#`.
-- Values should be quoted if they contain spaces.
-- Unknown keys are ignored by the initial implementation.
-- Invalid shell syntax is treated as a config error.
+- Unknown keys are ignored by the initial implementation but preserved by
+  `yq` operations.
+- Invalid YAML is an error with a message pointing to the file.
+
+## Host Dependency: `yq`
+
+This design requires `yq` (https://github.com/mikefarah/yq) on the host.
+
+Justification:
+
+- `yq` is a single static binary, trivial to install.
+- Avoids arbitrary code execution risks of shell-sourced `.conf` files.
+- YAML is a natural fit for structured project config.
+- `yq` is already installed in the container images via `mise`; requiring it
+  on the host aligns the toolchain.
+
+`dctl` should check for `yq` at startup (via `require_cmd yq`) and provide a
+clear install hint if missing.
+
+## Schema
+
+The registry file must conform to a JSON Schema shipped with `dctl`. The
+schema file lives at:
+
+```text
+schemas/projects.schema.yaml
+```
+
+Installed to:
+
+```text
+~/.local/share/dctl/schemas/projects.schema.yaml
+```
+
+### Schema Definition
+
+```yaml
+# schemas/projects.schema.yaml
+$schema: https://json-schema.org/draft/2020-12/schema
+title: dctl project registry
+description: Per-project configuration for devcontainerctl
+type: object
+additionalProperties:
+  type: object
+  properties:
+    devcontainer:
+      type: string
+      description: >
+        Path to a devcontainer.json file. Overrides local file discovery
+        and sibling discovery.
+    dockerfile:
+      type: string
+      description: >
+        Managed Dockerfile target name (e.g., python-dev) or direct
+        filesystem path to a custom Dockerfile. Applies only to
+        dctl image build.
+    image:
+      type: string
+      description: >
+        Optional image tag override (e.g., devimg/python-dev:latest).
+    sibling_discovery:
+      type: boolean
+      default: true
+      description: >
+        Whether to attempt work-clone sibling discovery. Set to false
+        for repositories whose names contain a dot but are not
+        work-clones.
+  additionalProperties: false
+```
+
+### Validation
+
+`dctl` should validate the registry file against the schema on every read.
+Validation uses `yq` to convert YAML to JSON and a lightweight JSON Schema
+validator, or `yq` structural checks if a full validator is too heavy for
+the host.
+
+Validation strategy (ordered by preference):
+
+1. **`yq` + `check-jsonschema`**: If `check-jsonschema` (Python pip package)
+   is available, use it for full schema validation.
+2. **`yq` structural checks**: If no schema validator is available, use `yq`
+   to verify that all keys are recognized and values have the expected types.
+   This is a best-effort fallback, not full schema compliance.
+
+Validation rules:
+
+- Validate on every registry read, not just on write.
+- Invalid schema is an error that names the file and the offending key/value.
+- Missing file is a normal miss in the resolution chain (not an error).
+- Empty file is treated as an empty registry (no projects configured).
 
 ## Canonical Name Derivation
 
@@ -67,13 +169,13 @@ Normalization rules:
 
 ## Fields
 
-### `DEVCONTAINER_CONFIG`
+### `devcontainer`
 
 - Path to a `devcontainer.json`.
 - Overrides local file discovery and sibling discovery.
 - Ignored if the CLI flag or `DCTL_CONFIG` environment variable is set.
 
-### `DOCKERFILE`
+### `dockerfile`
 
 - Either the name of a managed Dockerfile target such as `python-dev`, or a
   direct path to a custom Dockerfile.
@@ -84,14 +186,14 @@ Normalization rules:
 - If the value is a filesystem path, it is validated directly without going
   through the two-layer lookup.
 
-### `IMAGE`
+### `image`
 
 - Optional image tag override, such as `devimg/python-dev:latest`.
 - Intended for future code paths that need to select or validate an image based
   on project config.
-- Does not replace `DEVCONTAINER_CONFIG`; it complements it.
+- Does not replace `devcontainer`; it complements it.
 
-### `SIBLING_DISCOVERY`
+### `sibling_discovery`
 
 - Accepts `true` or `false`.
 - Default is `true`.
@@ -100,26 +202,32 @@ Normalization rules:
 
 ## Parsing Model
 
-The registry file should be parsed by sourcing it inside a subshell so the
-parent shell environment is not polluted.
+The registry file is parsed by `yq` in read-only mode. No shell sourcing
+is involved.
 
-Recommended pattern:
+Recommended patterns:
 
 ```bash
-(
-  set -a
-  # shellcheck disable=SC1090
-  source "$registry_file"
-  printf '%s\n' "$DEVCONTAINER_CONFIG"
-)
+# Read a specific field for a project
+yq -r ".\"${canonical_name}\".devcontainer // \"\"" \
+  "$DCTL_CONFIG_DIR/projects.yaml"
+
+# Check if a project entry exists
+yq -e ".\"${canonical_name}\"" \
+  "$DCTL_CONFIG_DIR/projects.yaml" >/dev/null 2>&1
+
+# Read sibling_discovery with default
+yq -r ".\"${canonical_name}\".sibling_discovery // true" \
+  "$DCTL_CONFIG_DIR/projects.yaml"
 ```
 
 Parsing rules:
 
-- Source in a subshell or equivalent isolated scope.
-- Read only the recognized variables.
-- Treat missing files as a normal miss in the resolution chain.
-- Treat invalid syntax as an error that points to the registry file path.
+- Use `yq` for all reads — never source or eval the file.
+- Read only the recognized fields.
+- Treat missing file as a normal miss in the resolution chain.
+- Treat invalid YAML as an error that points to the file path.
+- Treat schema violations as errors that identify the offending key.
 
 ## Resolution Behavior
 
@@ -132,29 +240,30 @@ That means:
 - A developer can still bypass the registry with a CLI flag or environment
   variable.
 - Sibling discovery only runs if registry and local file lookup both miss, or if
-  the registry provides no relevant key.
+  the registry provides no `devcontainer` key for the project.
 
 ## Security and Trust Model
 
-Because `.conf` files are sourced by a shell implementation, they must be
-treated as trusted user config. This is acceptable because they live in the
-user's own config directory.
+Because the registry file is parsed by `yq` (not shell-sourced), there is no
+arbitrary code execution risk. YAML is data-only.
 
 Guardrails:
 
-- Only source files from the expected `~/.config/dctl/projects/` directory.
-- Do not source registry files from the workspace.
-- Document that malformed or malicious shell in the registry file is equivalent
-  to arbitrary code execution under the user's account.
+- Only read from the expected `~/.config/dctl/projects.yaml` path.
+- Never read registry files from the workspace.
+- Validate against the schema before consuming values.
+- Path values (`devcontainer`, `dockerfile`) are validated for existence
+  before use.
 
 ## Worked Examples
 
 ### Example 1: Shared config across work-clones
 
-```bash
-# ~/.config/dctl/projects/org-repo.conf
-DEVCONTAINER_CONFIG=/home/alice/.config/dctl/shared/org-repo/devcontainer.json
-SIBLING_DISCOVERY=true
+```yaml
+# ~/.config/dctl/projects.yaml
+org-repo:
+  devcontainer: /home/alice/.config/dctl/shared/org-repo/devcontainer.json
+  sibling_discovery: true
 ```
 
 - `/home/alice/projects/repo`
@@ -166,10 +275,10 @@ entry.
 
 ### Example 2: Managed image override
 
-```bash
-# ~/.config/dctl/projects/org-repo.conf
-DOCKERFILE=agents
-IMAGE=devimg/agents:latest
+```yaml
+org-repo:
+  dockerfile: agents
+  image: devimg/agents:latest
 ```
 
 This leaves devcontainer config selection to the normal chain but tells future
@@ -177,9 +286,19 @@ image-management code to prefer the `agents` managed Dockerfile target.
 
 ### Example 3: Disable sibling discovery
 
-```bash
-# ~/.config/dctl/projects/acme-repo.conf
-SIBLING_DISCOVERY=false
+```yaml
+acme-repo:
+  sibling_discovery: false
 ```
 
 This prevents `repo.docs/` from being treated like a work-clone of `repo/`.
+
+### Example 4: Direct Dockerfile path
+
+```yaml
+personal-api:
+  dockerfile: /home/alice/custom/Dockerfile
+```
+
+This bypasses the two-layer managed lookup entirely and uses the custom
+Dockerfile directly.

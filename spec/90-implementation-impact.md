@@ -146,9 +146,19 @@ Responsibility:
 
 Responsibility:
 
-- Encapsulate registry lookup and parsing
-- Parse `.conf` files in an isolated scope
+- Encapsulate registry lookup and parsing via `yq`
+- Read `~/.config/dctl/projects.yaml` for project entries
+- Validate against `schemas/projects.schema.yaml` on every read
 - Provide helpers reusable from `common.sh` and future commands
+- Add `require_cmd yq` check with install hint
+
+### 13b. New file `schemas/projects.schema.yaml`: registry schema
+
+Responsibility:
+
+- Define JSON Schema for `projects.yaml` structure
+- Ship with `dctl` and install to `~/.local/share/dctl/schemas/`
+- Used for validation at read time
 
 ### 14. `bin/dctl`: source new module and add `dctl config`
 
@@ -157,11 +167,12 @@ Responsibility:
 - Source `config.sh`
 - Add a `config` subcommand group for future registry management commands
 
-### 15. `Makefile`: add `config.sh` to `LIB_FILES`
+### 15. `Makefile`: add `config.sh` to `LIB_FILES` and install schema
 
 Responsibility:
 
 - Install the new module with the rest of the shell library
+- Install `schemas/projects.schema.yaml` to `$(DATA_DIR)/schemas/`
 
 ## Phase E — Tests
 
@@ -178,8 +189,9 @@ Responsibility:
 Responsibility:
 
 - Cover canonical name derivation
-- Cover parsing of `.conf` files
-- Cover `SIBLING_DISCOVERY=true/false`
+- Cover `yq`-based parsing of `projects.yaml`
+- Cover schema validation (valid file, invalid keys, type errors)
+- Cover `sibling_discovery: true/false`
 
 ### 18. `tests/dctl_test.bats`: add Dockerfile resolution tests
 
