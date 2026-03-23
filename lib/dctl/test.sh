@@ -36,8 +36,7 @@ check_fail() {
 }
 
 extract_workspace_image() {
-  local config_path
-  config_path="$(workspace_devcontainer_file)"
+  local config_path="${1:-$(workspace_devcontainer_file)}"
 
   [[ -f "$config_path" ]] || return 1
 
@@ -53,17 +52,18 @@ cleanup_test_workspace_containers() {
 }
 
 build_workspace_image_if_managed() {
+  local cfg="${1:-$(workspace_devcontainer_file)}"
   local image
-  image="$(extract_workspace_image || true)"
+  image="$(extract_workspace_image "$cfg" || true)"
 
   if [[ -z "$image" ]]; then
-    warn "No image field found in $(workspace_devcontainer_file); skipping image build"
+    warn "No image field found in $cfg; skipping image build"
     return 0
   fi
 
   if [[ "$image" =~ ^devimg/([[:alnum:]._-]+):latest$ ]]; then
     local target="${BASH_REMATCH[1]}"
-    if [[ -f "$IMAGES_DIR/$target/Dockerfile" ]]; then
+    if resolve_dockerfile "$target" >/dev/null 2>&1; then
       (cmd_image_build "$target")
       return $?
     fi
@@ -86,9 +86,7 @@ cmd_test() {
   done
 
   local config_path
-  config_path="$(workspace_devcontainer_file)"
-  if [[ ! -f "$config_path" ]]; then
-    check_fail "Missing $config_path. Run dctl init first."
+  if ! config_path="$(resolve_devcontainer_config)"; then
     return 1
   fi
 
@@ -120,14 +118,14 @@ cmd_test() {
   fi
 
   if [[ "$docker_ready" == true && "$devcontainer_ready" == true ]]; then
-    if build_workspace_image_if_managed; then
+    if build_workspace_image_if_managed "$config_path"; then
       check_pass "Workspace image is ready"
     else
       check_fail "Failed to build managed workspace image"
       failures=$((failures + 1))
     fi
 
-    if devcontainer up --workspace-folder "$WORKSPACE_FOLDER"; then
+    if devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path"; then
       check_pass "devcontainer up succeeded"
       container_started=true
     else

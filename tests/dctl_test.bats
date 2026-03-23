@@ -21,6 +21,8 @@ source_dctl_functions() {
   source "${DCTL_LIB_DIR}/init.sh"
   # shellcheck source=/dev/null
   source "${DCTL_LIB_DIR}/test.sh"
+  # shellcheck source=/dev/null
+  source "${DCTL_LIB_DIR}/config.sh"
 }
 
 create_template_fixture() {
@@ -39,8 +41,10 @@ create_image_fixture() {
 setup() {
   setup_test_fixtures
   export XDG_DATA_HOME="${TEST_TMPDIR}/xdg-data"
+  export XDG_CONFIG_HOME="${TEST_TMPDIR}/xdg-config"
   export WORKSPACE_FOLDER="${TEST_TMPDIR}/workspace"
-  mkdir -p "${XDG_DATA_HOME}/dctl/images" "$WORKSPACE_FOLDER"
+  mkdir -p "${XDG_DATA_HOME}/dctl/images" "${XDG_CONFIG_HOME}/dctl" "$WORKSPACE_FOLDER"
+  unset DCTL_CONFIG DCTL_CLI_CONFIG 2>/dev/null || true
   source_dctl_functions
   # shellcheck disable=SC2329
   workspace_path() { printf '%s\n' "$WORKSPACE_FOLDER"; }
@@ -103,6 +107,8 @@ teardown() {
 }
 
 @test "ensure_ws_container_running starts container when needed" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
   create_mock docker 0 ""
   create_mock devcontainer 0 ""
@@ -185,21 +191,25 @@ teardown() {
 }
 
 @test "cmd_ws_up passes args to devcontainer up" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
   create_mock devcontainer 0 ""
 
   run cmd_ws_up -- --build-no-cache
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --build-no-cache"
+  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config $(workspace_devcontainer_file) --build-no-cache"
 }
 
 @test "cmd_ws_reup adds remove-existing-container" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
   create_mock devcontainer 0 ""
 
   run cmd_ws_reup
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --remove-existing-container"
+  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config $(workspace_devcontainer_file) --remove-existing-container"
 }
 
 @test "collect_term_env includes remote env flags for set vars" {
@@ -349,7 +359,9 @@ teardown() {
   # shellcheck disable=SC2329
   cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
 
-  run cmd_init
+  # Redirect stdin from /dev/null to ensure non-interactive detection
+  # works even when bats preserves the host terminal under `run`
+  run cmd_init </dev/null
   [ "$status" -ne 0 ]
   [[ "$output" == *"Pass --template"* ]]
   [[ "$output" == *"python"* ]]
@@ -358,7 +370,7 @@ teardown() {
 @test "cmd_test fails with init guidance when config is missing" {
   run cmd_test
   [ "$status" -ne 0 ]
-  [[ "$output" == *"Run dctl init first"* ]]
+  [[ "$output" == *"Run 'dctl init' or pass --config"* ]]
 }
 
 @test "cmd_test fails when devcontainer command is missing" {
@@ -366,7 +378,7 @@ teardown() {
   printf '{\n  "image": "devimg/python-dev:latest"\n}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
   create_mock docker 0 "container123"
-  PATH="${TEST_TMPDIR}/bin" run cmd_test
+  PATH="${TEST_TMPDIR}/bin:/usr/bin:/bin" run cmd_test
   [ "$status" -ne 0 ]
   [[ "$output" == *"Missing required command: devcontainer"* ]]
 }
@@ -382,7 +394,7 @@ teardown() {
   run cmd_test
   [ "$status" -eq 0 ]
   assert_mock_called "docker buildx build"
-  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER}"
+  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config"
   assert_mock_called "devcontainer exec --workspace-folder ${WORKSPACE_FOLDER} printf dctl-smoke\n"
   assert_mock_called "docker rm -f"
 }
@@ -397,7 +409,7 @@ teardown() {
   run cmd_test
   [ "$status" -eq 0 ]
   assert_mock_not_called "docker buildx build"
-  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER}"
+  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config"
 }
 
 # bats test_tags=integration
@@ -494,6 +506,8 @@ teardown() {
   git -C "$main_repo" init -q
   git -C "$main_repo" commit --allow-empty -m "init"
   git -C "$main_repo" worktree add "$WORKSPACE_FOLDER" -b test-branch
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
 
   enable_mocks
   create_mock devcontainer 0 ""
@@ -504,6 +518,8 @@ teardown() {
 }
 
 @test "ws up calls devcontainer when DOTFILES is valid" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
   create_mock devcontainer 0 ""
 
@@ -512,7 +528,7 @@ teardown() {
 
   run cmd_ws_up
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER}"
+  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config"
 }
 
 # --- Auth token forwarding via devcontainer exec ---
@@ -574,4 +590,221 @@ MOCK
   [ "$status" -eq 0 ]
   assert_mock_called "--remote-env GH_TOKEN=ghp_both999"
   assert_mock_called "--remote-env GITLAB_TOKEN=glpat_both888"
+}
+
+# --- Config resolution chain ---
+
+@test "resolve_devcontainer_config returns local file when present" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
+
+  run resolve_devcontainer_config
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"devcontainer.json" ]]
+}
+
+@test "resolve_devcontainer_config CLI flag wins over local file" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "local"}\n' >"$(workspace_devcontainer_file)"
+  local cli_config="${TEST_TMPDIR}/cli-config.json"
+  printf '{"image": "cli"}\n' >"$cli_config"
+
+  DCTL_CLI_CONFIG="$cli_config" run resolve_devcontainer_config
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"cli-config.json" ]]
+}
+
+@test "resolve_devcontainer_config env var wins over local file" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "local"}\n' >"$(workspace_devcontainer_file)"
+  local env_config="${TEST_TMPDIR}/env-config.json"
+  printf '{"image": "env"}\n' >"$env_config"
+
+  DCTL_CONFIG="$env_config" run resolve_devcontainer_config
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"env-config.json" ]]
+}
+
+@test "resolve_devcontainer_config CLI flag wins over env var" {
+  local cli_config="${TEST_TMPDIR}/cli-config.json"
+  local env_config="${TEST_TMPDIR}/env-config.json"
+  printf '{"image": "cli"}\n' >"$cli_config"
+  printf '{"image": "env"}\n' >"$env_config"
+
+  DCTL_CLI_CONFIG="$cli_config" DCTL_CONFIG="$env_config" run resolve_devcontainer_config
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"cli-config.json" ]]
+}
+
+@test "resolve_devcontainer_config errors on missing CLI flag path" {
+  DCTL_CLI_CONFIG="/nonexistent/path.json" run resolve_devcontainer_config
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"does not exist"* ]]
+}
+
+@test "resolve_devcontainer_config errors on missing env var path" {
+  DCTL_CONFIG="/nonexistent/path.json" run resolve_devcontainer_config
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"does not exist"* ]]
+}
+
+@test "resolve_devcontainer_config errors when no config found" {
+  run resolve_devcontainer_config
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"No devcontainer config found"* ]]
+}
+
+@test "resolve_devcontainer_config user global default fallback" {
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/default"
+  printf '{"image": "default"}\n' >"${XDG_CONFIG_HOME}/dctl/default/devcontainer.json"
+
+  run resolve_devcontainer_config
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"default/devcontainer.json" ]]
+}
+
+# bats test_tags=integration
+@test "resolve_devcontainer_config sibling discovery finds main repo config" {
+  local parent="${TEST_TMPDIR}/projects"
+  local main_repo="${parent}/repo"
+  local work_clone="${parent}/repo.42-feature"
+  mkdir -p "$main_repo/.devcontainer" "$work_clone"
+  printf '{"image": "sibling"}\n' >"$main_repo/.devcontainer/devcontainer.json"
+  git -C "$main_repo" init -q
+
+  run env WORKSPACE_FOLDER="$work_clone" XDG_DATA_HOME="$XDG_DATA_HOME" \
+    XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
+    bash -c 'source "'"$DCTL_LIB_DIR"'/common.sh"; source "'"$DCTL_LIB_DIR"'/config.sh"; resolve_devcontainer_config'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo/.devcontainer/devcontainer.json" ]]
+}
+
+# bats test_tags=integration
+@test "resolve_devcontainer_config sibling skipped for non-git directory" {
+  local parent="${TEST_TMPDIR}/projects"
+  local main_repo="${parent}/repo"
+  local work_clone="${parent}/repo.42-feature"
+  mkdir -p "$main_repo/.devcontainer" "$work_clone"
+  printf '{"image": "sibling"}\n' >"$main_repo/.devcontainer/devcontainer.json"
+  # No git init — should not be discovered
+
+  run env WORKSPACE_FOLDER="$work_clone" XDG_DATA_HOME="$XDG_DATA_HOME" \
+    XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
+    bash -c 'source "'"$DCTL_LIB_DIR"'/common.sh"; source "'"$DCTL_LIB_DIR"'/config.sh"; resolve_devcontainer_config'
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"No devcontainer config found"* ]]
+}
+
+# --- Template discovery ---
+
+@test "discover_templates includes user templates" {
+  create_template_fixture python "devimg/python-dev:latest"
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/templates/custom"
+  printf '{"image": "custom"}\n' >"${XDG_CONFIG_HOME}/dctl/templates/custom/devcontainer.json"
+
+  run discover_templates
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"python"* ]]
+  [[ "$output" == *"custom"* ]]
+}
+
+@test "user template overrides installed template with same name" {
+  create_template_fixture python "devimg/python-dev:latest"
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/templates/python"
+  printf '{"image": "user-python"}\n' >"${XDG_CONFIG_HOME}/dctl/templates/python/devcontainer.json"
+
+  local path
+  path="$(template_path python)"
+  [[ "$path" == *"xdg-config"* ]]
+  grep -q "user-python" "$path"
+}
+
+@test "cmd_init --list prints templates to stdout" {
+  create_template_fixture python "devimg/python-dev:latest"
+
+  run cmd_init --list
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"python"* ]]
+}
+
+# --- Dockerfile resolution ---
+
+@test "resolve_dockerfile returns installed path" {
+  create_image_fixture agents
+
+  run resolve_dockerfile agents
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"agents/Dockerfile" ]]
+}
+
+@test "resolve_dockerfile user override wins over installed" {
+  create_image_fixture agents
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/images/agents"
+  touch "${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile"
+
+  run resolve_dockerfile agents
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"xdg-config"* ]]
+}
+
+@test "resolve_dockerfile fails for unknown target" {
+  run resolve_dockerfile nonexistent
+  [ "$status" -ne 0 ]
+}
+
+@test "cmd_image_build uses registry managed target when no CLI target" {
+  create_image_fixture python-dev
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
+${canonical}:
+  dockerfile: python-dev
+YAML
+
+  run cmd_image_build --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"devimg/python-dev:latest"* ]]
+}
+
+@test "cmd_image_build uses registry direct path when set" {
+  local custom_dir="${TEST_TMPDIR}/custom-docker"
+  mkdir -p "$custom_dir"
+  printf 'FROM alpine\n' >"$custom_dir/Dockerfile"
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
+${canonical}:
+  dockerfile: ${custom_dir}/Dockerfile
+YAML
+
+  run cmd_image_build --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"direct path"* ]]
+}
+
+@test "cmd_image_build CLI target wins over registry dockerfile" {
+  create_image_fixture agents
+  create_image_fixture python-dev
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
+${canonical}:
+  dockerfile: python-dev
+YAML
+
+  run cmd_image_build --dry-run agents
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"devimg/agents:latest"* ]]
+  [[ "$output" != *"python-dev"* ]]
+}
+
+@test "discover_image_targets includes user image targets" {
+  create_image_fixture agents
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/images/custom-img"
+  touch "${XDG_CONFIG_HOME}/dctl/images/custom-img/Dockerfile"
+
+  run discover_image_targets
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"agents"* ]]
+  [[ "$output" == *"custom-img"* ]]
 }

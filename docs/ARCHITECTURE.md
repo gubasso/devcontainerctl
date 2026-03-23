@@ -22,6 +22,7 @@ A practical guide to using Dev Containers as isolated, reproducible development 
 14. [Troubleshooting](#troubleshooting)
 15. [Quick Reference](#quick-reference)
 16. [Full Configuration Examples](#full-configuration-examples)
+17. [Planned Features](#planned-features)
 
 ---
 
@@ -95,6 +96,20 @@ Terminal 1: nvim (host) ──────────────► edits file
 Terminal 2: claude-code ──────────────► attached to container
 Terminal 3: pytest ───────────────────► attached to container
 ```
+
+## Planned Features
+
+The files in [`../spec/`](../spec/README.md) describe planned future behavior,
+not current implementation. Use this document as the as-is architecture
+reference, and use the spec set for proposed work-clone support, config
+resolution, template evolution, and Dockerfile hierarchy changes.
+
+- [`../spec/README.md`](../spec/README.md) — spec index and glossary
+- [`../spec/00-resolution-model.md`](../spec/00-resolution-model.md) — shared precedence and discovery model
+- [`../spec/10-project-registry.md`](../spec/10-project-registry.md) — per-project registry design
+- [`../spec/20-devcontainer-resolution.md`](../spec/20-devcontainer-resolution.md) — devcontainer resolution flow
+- [`../spec/30-templates.md`](../spec/30-templates.md) — template system expansion
+- [`../spec/40-dockerfile-hierarchy.md`](../spec/40-dockerfile-hierarchy.md) — Dockerfile override hierarchy
 
 ---
 

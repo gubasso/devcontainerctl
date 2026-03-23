@@ -21,16 +21,22 @@ source "${DCTL_LIB_DIR}/image.sh"
 source "${DCTL_LIB_DIR}/init.sh"
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/test.sh"
+# shellcheck source=/dev/null
+source "${DCTL_LIB_DIR}/config.sh"
 
 usage() {
   cat <<'EOF'
-Usage: dctl <command-group> [command] [options]
+Usage: dctl [--config <path>] <command-group> [command] [options]
+
+Global options:
+  --config <path>  Use a specific devcontainer.json
 
 Commands:
   init         Scaffold .devcontainer/devcontainer.json from a template
   test         Validate the current workspace setup
   ws           Manage the current workspace's devcontainer lifecycle
   image        Build and inspect devcontainer base images
+  config       Project registry management
   help         Show this help text
   version      Show dctl version
 
@@ -46,6 +52,26 @@ EOF
 }
 
 main() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --config)
+        [[ $# -ge 2 ]] || err "--config requires a value"
+        [[ -n "$2" ]] || err "--config requires a non-empty path"
+        export DCTL_CLI_CONFIG="$2"
+        shift 2
+        ;;
+      help | -h | --help | version | -v | --version)
+        break
+        ;;
+      --*)
+        err "Unknown global option: $1"
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
   local command_group="${1:-help}"
 
   case "$command_group" in
@@ -64,6 +90,10 @@ main() {
     image)
       shift
       main_image "$@"
+      ;;
+    config)
+      shift
+      main_config "$@"
       ;;
     help | -h | --help)
       usage
