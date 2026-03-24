@@ -69,6 +69,8 @@ dctl --config /path/to/devcontainer.json <command>  # override config resolution
 The `--config` flag sets the devcontainer.json path for any command that needs it
 (`ws up`, `ws reup`, `test`). It takes highest precedence in the resolution chain.
 
+`dctl help` shows the top-level help text. `dctl version` prints the installed version.
+
 ### `dctl init`
 
 ```bash
@@ -114,26 +116,29 @@ The `agents` and `zig-dev` images require the dotfiles repo as a BuildKit named 
 ### `dctl config`
 
 ```bash
-dctl config            # project registry management (placeholder)
+dctl config            # show config help (no subcommands yet)
 ```
 
-The project registry at `~/.config/dctl/projects.yaml` maps canonical project names
-to per-project settings (devcontainer path, Dockerfile target, sibling discovery).
-See [`spec/10-project-registry.md`](spec/10-project-registry.md) for details.
+Only `help` is currently implemented. The project registry at `~/.config/dctl/projects.yaml` maps canonical project names to per-project settings (devcontainer path, Dockerfile target, sibling discovery). See [`spec/10-project-registry.md`](spec/10-project-registry.md) for details.
 
 ### `dctl ws`
 
 ```bash
-dctl ws up             # start devcontainer (resolves config automatically)
-dctl ws reup           # recreate after config/image changes
-dctl ws shell          # interactive shell
-dctl ws exec -- pytest # run command in container
-dctl ws run -- claude-session  # run via bash -lc
-dctl ws status         # show containers for this project
-dctl ws down           # stop and remove
+dctl ws up                        # start devcontainer (resolves config automatically)
+dctl ws reup                      # recreate after config/image changes
+dctl ws shell                     # interactive shell
+dctl ws shell claude      # run command in interactive login shell
+dctl ws exec -- pytest            # run command in container
+dctl ws run -- claude     # run via bash -lc
+dctl ws status                    # show containers for this project
+dctl ws down                      # stop and remove
 ```
 
 When using `dctl ws shell`/`exec`/`run`, tokens are automatically extracted from the host via `gh auth token` and `glab auth status --show-token` and passed into the container as `GH_TOKEN`/`GITLAB_TOKEN` environment variables. This is necessary because modern `gh` (v2.24.0+) stores OAuth tokens in the system keyring, which is inaccessible from containers; `glab` stores tokens in `~/.config/glab-cli/config.yml` by default, but extracting them uniformly via the CLI avoids depending on config file internals. If a CLI is not installed or not authenticated, its token is silently skipped.
+
+Terminal environment variables (`TERM`, `COLORTERM`, `TERM_PROGRAM`, `TERM_PROGRAM_VERSION`, `KITTY_WINDOW_ID`, `KITTY_LISTEN_ON`) are also forwarded into the container, preserving terminal capabilities and Kitty integration.
+
+When `dctl ws up` or `dctl ws reup` runs from a Git linked worktree, the shared Git common directory is automatically bind-mounted into the container so Git commands resolve correctly.
 
 If the Claude wrapper wiring inside a container looks broken, recreate the container:
 
@@ -294,7 +299,7 @@ dctl ws exec -- pytest
 
 ### Interactive Shell
 
-Open a shell session inside the container:
+Open a shell session inside the container, or run a command in a login shell:
 
 **Docker:**
 
@@ -312,6 +317,7 @@ devcontainer exec --workspace-folder . bash
 
 ```bash
 dctl ws shell
+dctl ws shell claude
 ```
 
 ### Multiple Terminal Sessions
@@ -328,7 +334,7 @@ docker exec -it myproject-dev bash
 docker exec -it myproject-dev bash
 
 # terminal 3 — run an agent
-docker exec -it myproject-dev claude-session
+docker exec -it myproject-dev claude
 ```
 
 **devcontainer CLI:**
@@ -341,7 +347,7 @@ devcontainer exec --workspace-folder . bash
 devcontainer exec --workspace-folder . bash
 
 # terminal 3 — run an agent
-devcontainer exec --workspace-folder . claude-session
+devcontainer exec --workspace-folder . claude
 ```
 
 **dctl:**
@@ -354,7 +360,7 @@ dctl ws shell
 dctl ws shell
 
 # terminal 3 — run an agent
-dctl ws shell claude-session
+dctl ws shell claude
 ```
 
 Each session shares the same container, filesystem, and installed tools.
