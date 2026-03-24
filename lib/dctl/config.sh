@@ -124,6 +124,8 @@ _registry_read_field() {
 
   local value
   value="$(yq -r ".\"${canonical_name}\".${field} // \"\"" "$registry" 2>/dev/null || true)"
+  # Expand $HOME in registry values for portability
+  value="${value/\$HOME/$HOME}"
   [[ -n "$value" ]] && printf '%s\n' "$value"
   return 0
 }
@@ -188,6 +190,9 @@ register_project_defaults() {
   local dockerfile="${3:-}"
   local image="${4:-}"
   local force="${5:-false}"
+
+  # Store paths with $HOME for portability across machines
+  devcontainer_path="${devcontainer_path/#$HOME/\$HOME}"
 
   require_cmd yq
   _registry_ensure_file

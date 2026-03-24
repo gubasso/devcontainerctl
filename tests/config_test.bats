@@ -98,6 +98,18 @@ YAML
   [ "$output" = "$config" ]
 }
 
+@test "registry lookup expands \$HOME in devcontainer path" {
+  local config="${HOME}/some/config.json"
+  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<'YAML'
+test-project:
+  devcontainer: $HOME/some/config.json
+YAML
+
+  run _registry_lookup_devcontainer "test-project"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$config" ]
+}
+
 @test "registry lookup returns empty for unknown project" {
   cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
 other-project:
@@ -268,6 +280,18 @@ YAML
   [ "$(yq -r '."proj-a".dockerfile' "$registry")" = "python-dev" ]
   [ "$(yq -r '."proj-a".image' "$registry")" = "devimg/python-dev:latest" ]
   [ "$(yq -r '."proj-a".sibling_discovery' "$registry")" = "true" ]
+}
+
+@test "register_project_defaults stores \$HOME in devcontainer path" {
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  local home_path="${HOME}/config/devcontainer.json"
+
+  run register_project_defaults "proj-home" "$home_path" "" ""
+  [ "$status" -eq 0 ]
+  [ -f "$registry" ]
+  # Raw YAML should contain $HOME, not expanded path
+  # shellcheck disable=SC2016
+  [[ "$(yq -r '."proj-home".devcontainer' "$registry")" == '$HOME'* ]]
 }
 
 @test "register_project_defaults skips existing project with warning" {
