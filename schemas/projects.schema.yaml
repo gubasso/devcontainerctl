@@ -1,7 +1,9 @@
 $schema: https://json-schema.org/draft/2020-12/schema
 title: dctl project registry
 description: Per-project configuration for devcontainerctl
-type: object
+type:
+  - object
+  - "null"
 additionalProperties:
   type: object
   properties:

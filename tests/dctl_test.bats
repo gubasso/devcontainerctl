@@ -119,6 +119,8 @@ teardown() {
 }
 
 @test "cmd_ws_exec defaults to bash" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
   create_mock docker 0 "running"
   create_mock devcontainer 0 ""
@@ -130,6 +132,8 @@ teardown() {
 }
 
 @test "cmd_ws_exec passes args through" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
   create_mock docker 0 "running"
   create_mock devcontainer 0 ""
@@ -141,6 +145,8 @@ teardown() {
 }
 
 @test "cmd_ws_shell runs commands in a login shell" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
   create_mock docker 0 "running"
   create_mock devcontainer 0 ""
@@ -152,6 +158,8 @@ teardown() {
 }
 
 @test "cmd_ws_run requires a command" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
   create_mock docker 0 "running"
   create_mock devcontainer 0 ""
@@ -162,6 +170,8 @@ teardown() {
 }
 
 @test "cmd_ws_run wraps commands with bash -lc" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
   create_mock docker 0 "running"
   create_mock devcontainer 0 ""
@@ -231,6 +241,8 @@ teardown() {
 }
 
 @test "cmd_ws_run forwards terminal env" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
   create_mock docker 0 "running"
   create_mock devcontainer 0 ""
@@ -303,42 +315,64 @@ teardown() {
   [[ "$output" == *"rust"* ]]
 }
 
-@test "cmd_init with template creates devcontainer config and runs smoke test" {
+@test "cmd_init with template registers project and runs smoke test" {
   create_template_fixture python "devimg/python-dev:latest"
   # shellcheck disable=SC2329
   cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
 
   run cmd_init --template python
   [ "$status" -eq 0 ]
-  [ -f "$(workspace_devcontainer_file)" ]
-  grep -F '"image": "devimg/python-dev:latest"' "$(workspace_devcontainer_file)"
+  # Deployed config created
+  local deployed="${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
+  [ -f "$deployed" ]
+  # Registry entry points to deployed config
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  [ -f "$registry" ]
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "$deployed" ]
   assert_mock_called "CMD_TEST_CALLED"
 }
 
-@test "cmd_init warns and preserves existing config without force" {
+@test "cmd_init skips when already registered without force" {
   create_template_fixture python "devimg/python-dev:latest"
-  mkdir -p "$(workspace_devcontainer_dir)"
-  printf '{\n  "image": "existing-image"\n}\n' >"$(workspace_devcontainer_file)"
+  local existing="${TEST_TMPDIR}/existing-config.json"
+  printf '{"image": "existing-image"}\n' >"$existing"
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  cat >"$registry" <<YAML
+${canonical}:
+  devcontainer: ${existing}
+YAML
   # shellcheck disable=SC2329
   cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
 
   run cmd_init
   [ "$status" -eq 0 ]
-  [[ "$output" == *"skipping scaffold"* ]]
-  grep -F '"image": "existing-image"' "$(workspace_devcontainer_file)"
+  [[ "$output" == *"skipping"* ]]
   assert_mock_called "CMD_TEST_CALLED"
 }
 
-@test "cmd_init force overwrites existing config" {
+@test "cmd_init --force re-deploys and re-registers" {
   create_template_fixture python "devimg/python-dev:latest"
-  mkdir -p "$(workspace_devcontainer_dir)"
-  printf '{\n  "image": "existing-image"\n}\n' >"$(workspace_devcontainer_file)"
+  # Pre-create deployed config with different content
+  local deployed="${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
+  mkdir -p "$(dirname "$deployed")"
+  printf '{"image": "old-custom"}\n' >"$deployed"
   # shellcheck disable=SC2329
   cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
 
   run cmd_init --force --template python
   [ "$status" -eq 0 ]
-  grep -F '"image": "devimg/python-dev:latest"' "$(workspace_devcontainer_file)"
+  # Deployed config overwritten with template content
+  grep -q "python-dev" "$deployed"
+  # Registry created
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  [ -f "$registry" ]
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "$deployed" ]
 }
 
 @test "cmd_init rejects unknown templates" {
@@ -395,7 +429,7 @@ teardown() {
   [ "$status" -eq 0 ]
   assert_mock_called "docker buildx build"
   assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config"
-  assert_mock_called "devcontainer exec --workspace-folder ${WORKSPACE_FOLDER} printf dctl-smoke\n"
+  assert_mock_called "devcontainer exec --workspace-folder ${WORKSPACE_FOLDER} --config"
   assert_mock_called "docker rm -f"
 }
 
@@ -534,6 +568,8 @@ teardown() {
 # --- Auth token forwarding via devcontainer exec ---
 
 @test "cmd_ws_shell forwards GH_TOKEN via remote-env" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
   create_mock docker 0 "running"
   create_mock devcontainer 0 ""
@@ -551,6 +587,8 @@ MOCK
 }
 
 @test "cmd_ws_shell forwards GITLAB_TOKEN via remote-env" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
   create_mock docker 0 "running"
   create_mock devcontainer 0 ""
@@ -568,6 +606,8 @@ MOCK
 }
 
 @test "cmd_ws_shell forwards both tokens when both CLIs authenticated" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
   create_mock docker 0 "running"
   create_mock devcontainer 0 ""
@@ -697,26 +737,18 @@ MOCK
 
 # --- Template discovery ---
 
-@test "discover_templates includes user templates" {
+@test "discover_templates lists only installed templates" {
   create_template_fixture python "devimg/python-dev:latest"
+  create_template_fixture rust "devimg/rust-dev:latest"
+  # User config dir templates should NOT appear
   mkdir -p "${XDG_CONFIG_HOME}/dctl/templates/custom"
   printf '{"image": "custom"}\n' >"${XDG_CONFIG_HOME}/dctl/templates/custom/devcontainer.json"
 
   run discover_templates
   [ "$status" -eq 0 ]
   [[ "$output" == *"python"* ]]
-  [[ "$output" == *"custom"* ]]
-}
-
-@test "user template overrides installed template with same name" {
-  create_template_fixture python "devimg/python-dev:latest"
-  mkdir -p "${XDG_CONFIG_HOME}/dctl/templates/python"
-  printf '{"image": "user-python"}\n' >"${XDG_CONFIG_HOME}/dctl/templates/python/devcontainer.json"
-
-  local path
-  path="$(template_path python)"
-  [[ "$path" == *"xdg-config"* ]]
-  grep -q "user-python" "$path"
+  [[ "$output" == *"rust"* ]]
+  [[ "$output" != *"custom"* ]]
 }
 
 @test "cmd_init --list prints templates to stdout" {
@@ -807,4 +839,135 @@ YAML
   [ "$status" -eq 0 ]
   [[ "$output" == *"agents"* ]]
   [[ "$output" == *"custom-img"* ]]
+}
+
+@test "cmd_init --template python deploys and registers with correct defaults" {
+  create_template_fixture python "devimg/python-dev:latest"
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  run cmd_init --template python
+  [ "$status" -eq 0 ]
+
+  local deployed="${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+
+  [ -f "$deployed" ]
+  [ -f "$registry" ]
+  [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "$deployed" ]
+  [ "$(yq -r ".\"${canonical}\".dockerfile" "$registry")" = "python-dev" ]
+  [ "$(yq -r ".\"${canonical}\".image" "$registry")" = "devimg/python-dev:latest" ]
+  [ "$(yq -r ".\"${canonical}\".sibling_discovery" "$registry")" = "true" ]
+}
+
+@test "cmd_init --template base deploys and registers with agents defaults" {
+  create_template_fixture base "devimg/agents:latest"
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  run cmd_init --template base
+  [ "$status" -eq 0 ]
+
+  local deployed="${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json"
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+
+  [ -f "$deployed" ]
+  [ -f "$registry" ]
+  [ "$(yq -r ".\"${canonical}\".dockerfile" "$registry")" = "agents" ]
+  [ "$(yq -r ".\"${canonical}\".image" "$registry")" = "devimg/agents:latest" ]
+}
+
+@test "cmd_init --no-register deploys config but skips registry" {
+  create_template_fixture python "devimg/python-dev:latest"
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  run cmd_init --no-register --template python
+  [ "$status" -eq 0 ]
+  # Config deployed
+  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json" ]
+  # No registry
+  [ ! -s "${XDG_CONFIG_HOME}/dctl/projects.yaml" ] || {
+    local canonical
+    canonical="$(resolve_canonical_project_name)"
+    [ "$(yq -r ".\"${canonical}\" // \"\"" "${XDG_CONFIG_HOME}/dctl/projects.yaml")" = "" ]
+  }
+}
+
+@test "cmd_init with existing registry skips without force" {
+  create_template_fixture python "devimg/python-dev:latest"
+  local existing="${TEST_TMPDIR}/existing-config.json"
+  printf '{"image": "existing"}\n' >"$existing"
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
+${canonical}:
+  devcontainer: ${existing}
+YAML
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  run cmd_init
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"skipping"* ]]
+  # Registry unchanged
+  [ "$(yq -r ".\"${canonical}\".devcontainer" "${XDG_CONFIG_HOME}/dctl/projects.yaml")" = "$existing" ]
+}
+
+@test "cmd_init auto-forces registry when path is stale but preserves deployed config" {
+  create_template_fixture python "devimg/python-dev:latest"
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  cat >"$registry" <<YAML
+${canonical}:
+  devcontainer: /tmp/nonexistent-stale-path.json
+  dockerfile: old-target
+  sibling_discovery: true
+YAML
+  # Pre-create a customized deployed config that should NOT be overwritten
+  local deployed="${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
+  mkdir -p "$(dirname "$deployed")"
+  printf '{"image": "user-customized"}\n' >"$deployed"
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  run cmd_init --template python
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"no longer exists"* ]]
+  # Registry updated with deployed path
+  [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "$deployed" ]
+  [ "$(yq -r ".\"${canonical}\".dockerfile" "$registry")" = "python-dev" ]
+  # Deployed config was NOT overwritten (user customization preserved)
+  grep -q "user-customized" "$deployed"
+}
+
+@test "cmd_init --force updates registry but preserves sibling_discovery" {
+  create_template_fixture python "devimg/python-dev:latest"
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  cat >"$registry" <<YAML
+${canonical}:
+  devcontainer: /tmp/existing.json
+  dockerfile: existing-target
+  image: devimg/existing:latest
+  sibling_discovery: false
+YAML
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  run cmd_init --force --template python
+  [ "$status" -eq 0 ]
+  # Registry updated
+  local deployed="${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
+  [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "$deployed" ]
+  [ "$(yq -r ".\"${canonical}\".dockerfile" "$registry")" = "python-dev" ]
+  [ "$(yq -r ".\"${canonical}\".image" "$registry")" = "devimg/python-dev:latest" ]
+  # sibling_discovery preserved
+  [ "$(yq -r ".\"${canonical}\".sibling_discovery" "$registry")" = "false" ]
 }

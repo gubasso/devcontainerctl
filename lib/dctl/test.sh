@@ -27,12 +27,36 @@ Examples:
 EOF
 }
 
+_check_names=()
+_check_results=()
+
 check_pass() {
+  _check_names+=("$1")
+  _check_results+=("PASS")
   printf '\033[1;32mPASS:\033[0m %s\n' "$1"
 }
 
 check_fail() {
+  _check_names+=("$1")
+  _check_results+=("FAIL")
   printf '\033[1;31mFAIL:\033[0m %s\n' "$1"
+}
+
+_print_summary() {
+  local passed=0 failed=0
+  local i
+
+  printf '\n\033[1m── Summary ──────────────────────────────\033[0m\n'
+  for i in "${!_check_names[@]}"; do
+    if [[ "${_check_results[$i]}" == "PASS" ]]; then
+      printf '  \033[1;32m✔\033[0m %s\n' "${_check_names[$i]}"
+      passed=$((passed + 1))
+    else
+      printf '  \033[1;31m✘\033[0m %s\n' "${_check_names[$i]}"
+      failed=$((failed + 1))
+    fi
+  done
+  printf '\033[1m── %d passed, %d failed ──────────────────\033[0m\n' "$passed" "$failed"
 }
 
 extract_workspace_image() {
@@ -90,6 +114,8 @@ cmd_test() {
     return 1
   fi
 
+  _check_names=()
+  _check_results=()
   local failures=0
   local docker_ready=false
   local devcontainer_ready=false
@@ -134,7 +160,7 @@ cmd_test() {
     fi
 
     if [[ "$container_started" == true ]]; then
-      if devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" printf 'dctl-smoke\n' >/dev/null; then
+      if devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" printf 'dctl-smoke\n' >/dev/null; then
         check_pass "devcontainer exec succeeded"
       else
         check_fail "devcontainer exec failed"
@@ -149,6 +175,8 @@ cmd_test() {
       failures=$((failures + 1))
     fi
   fi
+
+  _print_summary
 
   if [[ "$failures" -gt 0 ]]; then
     err "Smoke test failed with ${failures} check(s)"

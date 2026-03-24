@@ -30,6 +30,13 @@ _validate_registry() {
     return 0
   fi
 
+  # File with only whitespace/comments parses as null — treat as empty
+  local root_tag
+  root_tag="$(yq eval 'type' "$registry" 2>/dev/null || true)"
+  if [[ "$root_tag" == "!!null" ]]; then
+    return 0
+  fi
+
   # Prefer check-jsonschema for full validation
   if command -v check-jsonschema >/dev/null 2>&1; then
     local schema="${DCTL_SCHEMAS_DIR}/projects.schema.yaml"
@@ -48,11 +55,9 @@ _validate_registry() {
     err "Invalid YAML in $registry"
   fi
 
-  # Root must be a mapping
-  local root_type
-  root_type="$(yq eval 'type' "$registry" 2>/dev/null || true)"
-  if [[ "$root_type" != "!!map" ]]; then
-    err "Invalid registry format in $registry: root must be a mapping, got $root_type"
+  # Root must be a mapping (null already handled above)
+  if [[ "$root_tag" != "!!map" ]]; then
+    err "Invalid registry format in $registry: root must be a mapping, got $root_tag"
   fi
 
   # Check that all project values are mappings
@@ -119,6 +124,8 @@ _registry_read_field() {
 
   local value
   value="$(yq -r ".\"${canonical_name}\".${field} // \"\"" "$registry" 2>/dev/null || true)"
+  # Expand $HOME in registry values for portability
+  value="${value/\$HOME/$HOME}"
   [[ -n "$value" ]] && printf '%s\n' "$value"
   return 0
 }
@@ -158,6 +165,92 @@ _registry_lookup_sibling_discovery() {
 _registry_lookup_dockerfile() {
   local canonical_name="$1"
   _registry_read_field "$canonical_name" "dockerfile"
+}
+
+_registry_ensure_file() {
+  local registry
+  registry="$(_registry_file)"
+  mkdir -p "$(dirname "$registry")"
+  if [[ ! -f "$registry" ]]; then
+    touch "$registry"
+  fi
+}
+
+_registry_has_project() {
+  local canonical_name="$1"
+  local registry
+  registry="$(_registry_file)"
+  [[ -s "$registry" ]] || return 1
+  YQ_KEY="$canonical_name" yq -e '.[env(YQ_KEY)]' "$registry" >/dev/null 2>&1
+}
+
+register_project_defaults() {
+  local canonical_name="$1"
+  local devcontainer_path="$2"
+  local dockerfile="${3:-}"
+  local image="${4:-}"
+  local force="${5:-false}"
+
+  # Store paths with $HOME for portability across machines
+  devcontainer_path="${devcontainer_path/#$HOME/\$HOME}"
+
+  require_cmd yq
+  _registry_ensure_file
+
+  local registry
+  registry="$(_registry_file)"
+
+  if [[ -s "$registry" ]]; then
+    _validate_registry "$registry"
+  fi
+
+  local project_exists=false
+  if _registry_has_project "$canonical_name"; then
+    project_exists=true
+    if [[ "$force" != true ]]; then
+      warn "Project '$canonical_name' already registered in $registry; skipping"
+      return 0
+    fi
+  fi
+
+  # Use env vars to pass values safely to yq (avoids injection via special chars)
+  local existing_sibling="true"
+  if [[ "$force" == true && "$project_exists" == true ]]; then
+    existing_sibling="$(_registry_lookup_sibling_discovery "$canonical_name")"
+  fi
+
+  local yq_expr
+  yq_expr='.[env(YQ_KEY)].devcontainer = env(YQ_DEVCONTAINER)'
+  if [[ "$existing_sibling" == "false" ]]; then
+    yq_expr+=' | .[env(YQ_KEY)].sibling_discovery = false'
+  else
+    yq_expr+=' | .[env(YQ_KEY)].sibling_discovery = true'
+  fi
+  if [[ -n "$dockerfile" ]]; then
+    yq_expr+=' | .[env(YQ_KEY)].dockerfile = env(YQ_DOCKERFILE)'
+  elif [[ "$force" == true && "$project_exists" == true ]]; then
+    yq_expr+=' | del(.[env(YQ_KEY)].dockerfile)'
+  fi
+  if [[ -n "$image" ]]; then
+    yq_expr+=' | .[env(YQ_KEY)].image = env(YQ_IMAGE)'
+  elif [[ "$force" == true && "$project_exists" == true ]]; then
+    yq_expr+=' | del(.[env(YQ_KEY)].image)'
+  fi
+
+  local tmp_registry="${registry}.tmp.$$"
+  export YQ_KEY="$canonical_name" YQ_DEVCONTAINER="$devcontainer_path" \
+    YQ_DOCKERFILE="$dockerfile" YQ_IMAGE="$image"
+  if [[ -s "$registry" ]]; then
+    yq eval "$yq_expr" "$registry" >"$tmp_registry"
+  else
+    yq -n "$yq_expr" >"$tmp_registry"
+  fi
+  unset YQ_KEY YQ_DEVCONTAINER YQ_DOCKERFILE YQ_IMAGE
+
+  mv "$tmp_registry" "$registry"
+  _validate_registry "$registry"
+
+  log "Registered project '$canonical_name' in $registry"
 }
 
 usage_config() {

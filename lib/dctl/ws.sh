@@ -120,10 +120,14 @@ collect_term_env() {
 }
 
 devcontainer_exec() {
+  local config_path
+  if ! config_path="$(resolve_devcontainer_config)"; then
+    return 1
+  fi
   local -a term_args auth_args
   collect_term_env term_args
   collect_auth_env auth_args
-  devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" "${term_args[@]}" "${auth_args[@]}" "$@"
+  devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" "${term_args[@]}" "${auth_args[@]}" "$@"
 }
 
 cmd_ws_up() {

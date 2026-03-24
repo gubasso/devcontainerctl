@@ -32,7 +32,7 @@ Global options:
   --config <path>  Use a specific devcontainer.json
 
 Commands:
-  init         Scaffold .devcontainer/devcontainer.json from a template
+  init         Deploy a devcontainer template and register the project
   test         Validate the current workspace setup
   ws           Manage the current workspace's devcontainer lifecycle
   image        Build and inspect devcontainer base images

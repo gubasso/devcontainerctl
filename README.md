@@ -72,18 +72,24 @@ The `--config` flag sets the devcontainer.json path for any command that needs i
 ### `dctl init`
 
 ```bash
-dctl init --template python  # scaffold from a specific template
+dctl init --template python  # register project with a specific template
 dctl init --list             # list available templates
 dctl init                    # interactive fzf selector
 dctl init --force --template rust
+dctl init --no-register --template python  # skip registry registration
 ```
 
-If `.devcontainer/devcontainer.json` already exists, `dctl init` warns and keeps
-it unchanged by default, then runs the smoke test against the current project.
+`dctl init` deploys the selected template to
+`~/.config/dctl/devcontainer/<name>/devcontainer.json` and registers it in
+`~/.config/dctl/projects.yaml`. The config resolution chain picks up the
+deployed config from the registry. Use `--no-register` to skip registration.
+Use `--force` to re-deploy and update the registry even if already configured.
 
-Templates are discovered from two locations (user overrides installed):
-1. `~/.config/dctl/templates/` — user templates
-2. `~/.local/share/dctl/templates/` — installed templates
+If the project is already registered, `dctl init` warns and skips by default,
+then runs the smoke test against the existing config.
+
+Templates are discovered from installed templates only:
+- `~/.local/share/dctl/templates/` — installed by `make install`
 
 ### `dctl test`
 
@@ -178,7 +184,7 @@ Each clone gets its own container — only the config is shared.
 
 | Directory | Purpose |
 | --- | --- |
-| `~/.config/dctl/` | User config: project registry, templates, image overrides, defaults |
+| `~/.config/dctl/` | User config: project registry, deployed devcontainer configs, image overrides, defaults |
 | `~/.local/share/dctl/` | Installed data: templates, images, schemas |
 
 Both honor `XDG_CONFIG_HOME` and `XDG_DATA_HOME`.
@@ -262,7 +268,7 @@ dctl init --template python
 dctl ws up
 ```
 
-`dctl init` copies a ready-made `devcontainer.json` into `.devcontainer/` with image, mounts, and lifecycle hooks pre-configured. Built-in templates: `base`, `coordinator`, `python`, `rust`, `zig`.
+`dctl init` deploys a template to `~/.config/dctl/devcontainer/<name>/devcontainer.json` and registers it in `~/.config/dctl/projects.yaml`. No local files are created — the config resolution chain reads the deployed config from the registry. Built-in templates: `base`, `coordinator`, `python`, `rust`, `zig`.
 
 ### Running a Command
 
@@ -416,7 +422,7 @@ dctl image list          # show available targets
 
 - Pre-built images with AI agent tools (Claude Code, Codex, Gemini CLI) ready to use.
 - Dotfiles integration baked into base image metadata.
-- Template system for instant project scaffolding (`dctl init`), with user overrides.
+- Template system for instant project scaffolding (`dctl init`).
 - Config resolution chain for flexible devcontainer.json discovery.
 - Work-clone support for parallel feature branches sharing config.
 - Per-project registry (`projects.yaml`) for host-side project configuration.
