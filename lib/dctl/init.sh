@@ -42,6 +42,8 @@ discover_templates() {
   for dir in "$TEMPLATES_DIR"/*/; do
     if [[ -f "${dir}devcontainer.json" ]]; then
       name="$(basename "$dir")"
+      # Skip internal templates (underscore prefix)
+      [[ "$name" == _* ]] && continue
       templates+=("$name")
     fi
   done
@@ -99,37 +101,97 @@ select_template() {
   printf '%s\n' "$selected"
 }
 
+_strip_jsonc_comments() {
+  sed '/^[[:space:]]*\/\//d' "$1"
+}
+
+merge_base_and_template() {
+  local base_path="$1"
+  local template_path="$2"
+
+  jq -s '
+    .[0] as $base | .[1] as $tmpl |
+    $base * $tmpl |
+    .mounts = (($base.mounts // []) + ($tmpl.mounts // [])) |
+    .postCreateCommand = (($base.postCreateCommand // {}) * ($tmpl.postCreateCommand // {})) |
+    .containerEnv = (($base.containerEnv // {}) * ($tmpl.containerEnv // {}))
+  ' <(_strip_jsonc_comments "$base_path") <(_strip_jsonc_comments "$template_path")
+}
+
+cache_is_fresh() {
+  local cached_path="$1"
+  local base_path="$2"
+  local template_path="$3"
+
+  [[ -f "$cached_path" ]] || return 1
+  [[ "$cached_path" -nt "$base_path" ]] || return 1
+  [[ "$cached_path" -nt "$template_path" ]] || return 1
+}
+
+_seed_config_file() {
+  local source="$1"
+  local dest="$2"
+  local force="${3:-false}"
+
+  if [[ -f "$dest" && "$force" != true ]]; then
+    return 0
+  fi
+  mkdir -p "$(dirname "$dest")"
+  cp "$source" "$dest"
+}
+
 deploy_template_config() {
   local template="$1"
   local force="${2:-false}"
-  local source_path
-  source_path="$(installed_template_path "$template")"
 
-  if [[ ! -f "$source_path" ]]; then
-    printf 'Available templates:\n' >&2
-    print_available_templates
-    err "Unknown template: $template"
+  require_cmd jq
+
+  local config_base config_tmpl
+  config_base="$(config_devcontainer_path _base)"
+  config_tmpl="$(config_devcontainer_path "$template")"
+
+  # Seed config from installed templates (only if config doesn't exist or --force)
+  if [[ ! -f "$config_base" ]] || [[ "$force" == true ]]; then
+    local installed_base
+    installed_base="$(installed_template_path _base)"
+    [[ -f "$installed_base" ]] || err "Base template not found. Install with: make install"
+    _seed_config_file "$installed_base" "$config_base" "$force"
+  fi
+  if [[ ! -f "$config_tmpl" ]] || [[ "$force" == true ]]; then
+    local installed_tmpl
+    installed_tmpl="$(installed_template_path "$template")"
+    if [[ ! -f "$installed_tmpl" ]]; then
+      print_available_templates
+      err "Unknown template: $template"
+    fi
+    _seed_config_file "$installed_tmpl" "$config_tmpl" "$force"
   fi
 
-  local deployed_path
-  deployed_path="$(deployed_devcontainer_path "$template")"
+  local cached_path
+  cached_path="$(deployed_devcontainer_path "$template")"
 
-  if [[ -f "$deployed_path" && "$force" != true ]]; then
-    log "Using existing deployed config: $deployed_path" >&2
-    printf '%s\n' "$deployed_path"
+  if [[ "$force" != true ]] && cache_is_fresh "$cached_path" "$config_base" "$config_tmpl"; then
+    log "Using cached config: $cached_path" >&2
+    printf '%s\n' "$cached_path"
     return 0
   fi
 
-  mkdir -p "$(dirname "$deployed_path")"
-  cp "$source_path" "$deployed_path"
-  log "Deployed template '$template' to $deployed_path" >&2
-  printf '%s\n' "$deployed_path"
+  mkdir -p "$(dirname "$cached_path")"
+  local tmp_path
+  tmp_path="$(mktemp "${cached_path}.tmp.XXXXXX")"
+  if ! merge_base_and_template "$config_base" "$config_tmpl" > "$tmp_path"; then
+    rm -f "$tmp_path"
+    err "Failed to merge base and template for '$template'"
+  fi
+  mv "$tmp_path" "$cached_path"
+  log "Generated config for '$template' at $cached_path" >&2
+  printf '%s\n' "$cached_path"
 }
 
 template_registry_defaults() {
   local template="$1"
   case "$template" in
-    base|coordinator) printf 'agents devimg/agents:latest\n' ;;
+    general|coordinator) printf 'agents devimg/agents:latest\n' ;;
     python)           printf 'python-dev devimg/python-dev:latest\n' ;;
     rust)             printf 'rust-dev devimg/rust-dev:latest\n' ;;
     zig)              printf 'zig-dev devimg/zig-dev:latest\n' ;;
@@ -189,8 +251,17 @@ cmd_init() {
   local registry_force="$force"
   if [[ -n "$existing_registry_path" && "$force" != true ]]; then
     if [[ -f "$existing_registry_path" ]]; then
-      warn "Project '$canonical_name' already registered with config at $existing_registry_path; skipping"
-      DCTL_CLI_CONFIG="$existing_registry_path" cmd_test
+      # If path is inside our cache dir, refresh cache from config if stale
+      if [[ "$existing_registry_path" == "${DCTL_DEVCONTAINER_CACHE_DIR}/"* ]]; then
+        local registered_template
+        registered_template="$(basename "$(dirname "$existing_registry_path")")"
+        local refreshed_path
+        refreshed_path="$(deploy_template_config "$registered_template" false)" || return $?
+        DCTL_CLI_CONFIG="$refreshed_path" cmd_test
+      else
+        warn "Project '$canonical_name' already registered with config at $existing_registry_path; skipping"
+        DCTL_CLI_CONFIG="$existing_registry_path" cmd_test
+      fi
       return $?
     fi
     # Registry entry exists but path is stale — force registry update only

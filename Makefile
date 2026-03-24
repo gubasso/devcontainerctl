@@ -6,7 +6,7 @@ SYSTEMD_DIR ?= $(HOME)/.local/share/systemd/user
 INSTALL := install
 
 IMAGE_NAMES := agents python-dev rust-dev zig-dev
-TEMPLATE_DIRS := python rust zig base coordinator
+TEMPLATE_DIRS := python rust zig general coordinator _base
 LIB_FILES := common.sh ws.sh image.sh init.sh test.sh auth.sh config.sh
 
 .PHONY: install uninstall install-systemd uninstall-systemd test test-unit test-integration lint check

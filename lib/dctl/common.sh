@@ -11,6 +11,8 @@ WORKSPACE_FOLDER="$(cd -- "$WORKSPACE_FOLDER" && pwd -P)"
 : "${IMAGES_DIR:=${XDG_DATA_HOME:-$HOME/.local/share}/dctl/images}"
 : "${TEMPLATES_DIR:=${XDG_DATA_HOME:-$HOME/.local/share}/dctl/templates}"
 : "${DCTL_CONFIG_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/dctl}"
+: "${DCTL_CACHE_DIR:=${XDG_CACHE_HOME:-$HOME/.cache}/dctl}"
+: "${DCTL_DEVCONTAINER_CACHE_DIR:=${DCTL_CACHE_DIR}/devcontainer}"
 : "${DCTL_DEVCONTAINER_DIR:=${DCTL_CONFIG_DIR}/devcontainer}"
 
 readonly DCTL_VERSION
@@ -18,6 +20,8 @@ readonly WORKSPACE_FOLDER
 readonly IMAGES_DIR
 readonly TEMPLATES_DIR
 readonly DCTL_CONFIG_DIR
+readonly DCTL_CACHE_DIR
+readonly DCTL_DEVCONTAINER_CACHE_DIR
 readonly DCTL_DEVCONTAINER_DIR
 
 log() {
@@ -55,6 +59,11 @@ workspace_label_filter() {
 }
 
 deployed_devcontainer_path() {
+  local name="$1"
+  printf '%s/%s/devcontainer.json\n' "$DCTL_DEVCONTAINER_CACHE_DIR" "$name"
+}
+
+config_devcontainer_path() {
   local name="$1"
   printf '%s/%s/devcontainer.json\n' "$DCTL_DEVCONTAINER_DIR" "$name"
 }

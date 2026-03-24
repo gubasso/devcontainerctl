@@ -2,18 +2,45 @@
 
 Reusable project templates live here for versioned tracking in this repo.
 
-- `python/devcontainer.json`: baseline Python project config using `devimg/python-dev:latest`
-- `rust/devcontainer.json`: baseline Rust project config using `devimg/rust-dev:latest`
-- `zig/devcontainer.json`: baseline Zig project config using `devimg/zig-dev:latest`
+## Three-Tier Architecture
 
-These files are scaffolding sources. `dctl init` deploys them to
-`~/.config/dctl/devcontainer/<name>/devcontainer.json` and registers the
-deployed path for runtime use.
+Templates follow a three-tier XDG layout:
 
-The dotfiles bootstrap runs automatically from the bind-mounted dotfiles repo
-via the `devimg/agents` `devcontainer.metadata` label — projects do not need
-their own copy of the setup script.
+- **Installed** (`~/.local/share/dctl/templates/`): source templates installed
+  by `make install`. Lean, modular scaffolding only. Used by `dctl init` to
+  seed config.
+- **Config** (`~/.config/dctl/devcontainer/`): deployed config files. Seeded
+  from templates by `dctl init`, then user-editable. Contains separate
+  `_base/` and per-template files. This is the SoT.
+- **Cache** (`~/.cache/dctl/devcontainer/`): generated merged configs from
+  config files.
 
-Templates contain only project-specific deltas. Shared mounts, the dotfiles
-bootstrap hook, and baseline container settings are inherited from the
-`devimg/agents` image via its `devcontainer.metadata` label.
+## Templates
+
+### Internal
+
+- `_base/devcontainer.json`: shared infrastructure settings (remoteUser, mounts,
+  containerEnv, postCreateCommand.dotfiles). Merged into every deployed config
+  at deploy time. Never user-selectable.
+
+### User-Selectable
+
+- `general/devcontainer.json`: minimal general-purpose config using
+  `devimg/agents:latest`
+- `coordinator/devcontainer.json`: agent/coordinator workflow with
+  parent-directory mounts for sibling discovery
+- `python/devcontainer.json`: Python project config using
+  `devimg/python-dev:latest`
+- `rust/devcontainer.json`: Rust project config using `devimg/rust-dev:latest`
+- `zig/devcontainer.json`: Zig project config using `devimg/zig-dev:latest`
+
+## How It Works
+
+`dctl init --template <name>` seeds `_base` and the selected template into
+`~/.config/dctl/devcontainer/`, then merges those config files using `jq` and
+writes the result to `~/.cache/dctl/devcontainer/<name>/devcontainer.json`.
+The merged config is registered in `~/.config/dctl/projects.yaml` for runtime
+use.
+
+Templates contain only project-specific deltas (name, image, language-specific
+mounts, language-specific lifecycle hooks). Shared settings come from `_base`.

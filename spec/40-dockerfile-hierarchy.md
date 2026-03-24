@@ -68,28 +68,6 @@ The project registry field `DOCKERFILE` can refer to either:
 When it is a managed target name, resolution should use the hierarchy above.
 When it is a path, resolution should validate the path directly.
 
-## Image Label Cleanup
-
-The `devcontainer.metadata` label in `images/agents/Dockerfile` should remain in
-the Dockerfile because it is image-baked shared runtime metadata and belongs to
-the image layer.
-
-However, the design should explicitly consider extracting the JSON body into a
-separate file such as:
-
-```text
-images/agents/devcontainer-metadata.json
-```
-
-Potential benefits:
-
-- Easier review and diffs
-- Less fragile editing than a large single-line label string
-- Clearer ownership of shared metadata versus image build instructions
-
-This is a design recommendation, not a required behavior change for the first
-implementation phase.
-
 ## Template Pairing
 
 No change to the current separation:

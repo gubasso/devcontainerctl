@@ -7,39 +7,56 @@ and extends it for generic and coordinator-style workflows.
 
 ## Current State
 
-The current repository ships language templates under `templates/`:
+The repository ships templates under `templates/`:
 
-- `python`
-- `rust`
-- `zig`
+- `_base` — internal shared config (not user-selectable)
+- `general` — minimal general-purpose config using `devimg/agents:latest`
+- `coordinator` — agent/coordinator workflow with parent-directory access
+- `python` — Python project config using `devimg/python-dev:latest`
+- `rust` — Rust project config using `devimg/rust-dev:latest`
+- `zig` — Zig project config using `devimg/zig-dev:latest`
 
 These are installed into `~/.local/share/dctl/templates/` by `make install`.
-They contain only project-specific settings because shared infrastructure values
-already live in the `devcontainer.metadata` label baked into
-`images/agents/Dockerfile`.
-
-This split is correct and should be preserved.
+User-selectable templates contain only project-specific settings. Shared
+infrastructure values live in `templates/_base/devcontainer.json` and are
+merged with each template at deploy time by `dctl init`.
 
 ## Template Categories
 
-The template system should support three categories:
+The template system supports three categories:
 
-1. **Language templates**
-   - Existing templates: `python`, `rust`, `zig`
-   - Purpose: add language-specific cache mounts and lifecycle hooks
-2. **Base template**
-   - New template: `base`
-   - Purpose: minimal general-purpose config using `devimg/agents:latest`
-3. **Coordinator template**
-   - New template: `coordinator`
-   - Purpose: generic agent/coordinator workflow with parent-directory access for
-     sibling discovery
+1. **Internal base template**
+   - `_base` — shared devcontainer settings (remoteUser, mounts, containerEnv,
+     postCreateCommand.dotfiles). Never user-selectable. Underscore prefix
+     excludes it from `dctl init --list` and interactive selection.
+2. **Language templates**
+   - `python`, `rust`, `zig` — language-specific cache mounts and lifecycle
+     hooks
+3. **Workflow templates**
+   - `general` — minimal general-purpose config
+   - `coordinator` — agent/coordinator workflow with parent-directory mounts
 
 ## Built-In Templates
 
-### `base`
+### `_base` (internal)
 
-Future built-in file:
+Shared infrastructure settings merged into every deployed config:
+
+```json
+{
+  "remoteUser": "${localEnv:USER}",
+  "updateRemoteUserUID": false,
+  "init": true,
+  "shutdownAction": "none",
+  "containerEnv": { ... },
+  "mounts": [ /* 17 bind mounts for dotfiles, tools, configs */ ],
+  "postCreateCommand": {
+    "dotfiles": "${localEnv:DOTFILES}/.devcontainer/setup-dotfiles ${localEnv:DOTFILES}"
+  }
+}
+```
+
+### `general`
 
 ```json
 {
@@ -52,8 +69,6 @@ Future built-in file:
 ```
 
 ### `coordinator`
-
-Future built-in file:
 
 ```json
 {
@@ -95,14 +110,12 @@ Creation model:
 
 - Created manually by the user, or by a future `dctl config init` command
 - Not created by `dctl init`
-- `dctl init` deploys selected templates into the user config directory
 
-## Image Label vs Template Split
+## Three-Tier XDG Layout
 
-### Image label owns shared infrastructure settings
+### `_base` template owns shared infrastructure settings
 
-The `devcontainer.metadata` label in `images/agents/Dockerfile` should remain
-the home for:
+The `templates/_base/devcontainer.json` file is the home for:
 
 - `remoteUser`
 - `init`
@@ -120,24 +133,39 @@ Templates should define:
 - language-specific cache mounts
 - language-specific `postCreateCommand` entries
 
-Templates must not duplicate settings already owned by the image label.
+Templates must not duplicate settings already owned by `_base`.
+
+### XDG paths
+
+| XDG path | dctl usage | Mutable by |
+|----------|-----------|------------|
+| `~/.local/share/dctl/templates/` | Installed templates (`make install`) | `make install` only |
+| `~/.config/dctl/devcontainer/` | Deployed config (seeded from templates, user-editable) | `dctl init` + user |
+| `~/.cache/dctl/devcontainer/` | Generated merged configs | `dctl` (auto-generated) |
+
+- **Data** (`~/.local/share`): installed source templates — lean, modular, scaffolding. `make install` writes here. Used only by `dctl init` to seed config.
+- **Config** (`~/.config`): deployed config files — seeded from templates by `dctl init`, then user-editable. Contains separate `_base` and per-template files. This is the user's SoT.
+- **Cache** (`~/.cache`): generated merged configs — derived from config files by `dctl init`. Can be deleted and regenerated. `dctl ws up` consumes these.
 
 ## Composability
 
-The Dev Container CLI automatically merges image metadata with
-`devcontainer.json`. This design relies on that behavior.
+`dctl init` merges `_base` with the selected template at deploy time using
+`jq`. The merge produces a standalone `devcontainer.json` in the cache
+directory that the Dev Container CLI consumes directly.
 
-Merge expectations to document for implementers:
+Merge semantics:
 
-- Scalars use last-wins behavior.
-- Object keys are merged by key.
-- Lifecycle hooks accumulate according to Dev Container metadata merge behavior.
-- Arrays should be treated as union/append at the design level, while conflicts
-  should be validated against actual Dev Container CLI semantics during
-  implementation.
+- Scalars use last-wins behavior (template overrides `_base`).
+- Object keys (`containerEnv`, `postCreateCommand`) are merged by key.
+- Arrays (`mounts`) are concatenated (`_base` mounts + template mounts).
+- JSONC comments are stripped before merging.
 
 The important policy decision is that templates should stay minimal and avoid
-re-stating label-owned defaults.
+re-stating `_base`-owned defaults.
+
+## Template Resolution
+
+Templates resolve from the installed templates directory only (`~/.local/share/dctl/templates/`). User customization happens in the config layer (`~/.config/dctl/devcontainer/`), not in templates.
 
 ## Template Discovery
 
@@ -149,41 +177,42 @@ Rules:
 
 - Template names map to directory names.
 - A valid template directory contains `devcontainer.json`.
+- Directories starting with `_` (underscore) are internal and excluded from
+  discovery.
 
 ## `dctl init` Changes
 
 ### `--list`
 
-Add a `--list` flag that prints available templates and exits. This removes the
-current dependency on `fzf` for non-interactive discovery.
+The `--list` flag prints available templates and exits. Internal templates
+(underscore prefix) are excluded.
 
-### Deployment target
+### Cache target
 
-`dctl init` deploys the selected installed template to:
+`dctl init` seeds `_base` and the selected template into `~/.config/dctl/devcontainer/`, then merges those config files and writes the result to:
 
 ```text
-~/.config/dctl/devcontainer/<name>/devcontainer.json
+~/.cache/dctl/devcontainer/<name>/devcontainer.json
 ```
 
-It then registers that deployed path in `~/.config/dctl/projects.yaml`.
+It then registers that cached path in `~/.config/dctl/projects.yaml`.
 `dctl init` does not write `.devcontainer/devcontainer.json`.
 
-Without `--force`, an existing deployed config at the target path is preserved
-and reused. With `--force`, the deployed config is overwritten from the
-installed template source.
+Cache freshness is checked via mtime comparison against config files. If the
+cache is stale or missing, `dctl init` regenerates it automatically. `--force`
+always regenerates regardless of freshness. `dctl ws up` does not regenerate
+cache.
 
 ## Recommended Template Catalog
 
-- `base`
+- `_base` (internal)
+- `general`
 - `coordinator`
 - `python`
 - `rust`
 - `zig`
 
-The first two become new built-ins. The latter three remain compatible with the
-current repository structure and installation flow.
-
-## Future File Layout
+## File Layout
 
 Built-in templates remain in the repository under:
 
@@ -197,8 +226,14 @@ Installed templates remain in:
 ~/.local/share/dctl/templates/<name>/devcontainer.json
 ```
 
-Deployed configs live in:
+Deployed config lives in:
 
 ```text
 ~/.config/dctl/devcontainer/<name>/devcontainer.json
+```
+
+Generated (cached) configs live in:
+
+```text
+~/.cache/dctl/devcontainer/<name>/devcontainer.json
 ```
