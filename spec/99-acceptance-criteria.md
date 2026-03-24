@@ -72,30 +72,19 @@ Expected result:
 - The registry entry is used
 - The local workspace file is ignored for this command
 
-### 6. User template discovery
+### 6. Installed template discovery
 
 Scenario:
 
-- `~/.config/dctl/templates/custom/devcontainer.json` exists
+- `~/.local/share/dctl/templates/python/devcontainer.json` exists
 - User runs `dctl init --list`
 
 Expected result:
 
-- `custom` appears in the template list
-- User templates are included in discovery output
+- `python` appears in the template list
+- Discovery is based on installed templates only
 
-### 7. User template override
-
-Scenario:
-
-- Both `~/.config/dctl/templates/python/devcontainer.json` and
-  `~/.local/share/dctl/templates/python/devcontainer.json` exist
-
-Expected result:
-
-- The user version wins during `dctl init --template python`
-
-### 8. Coordinator template
+### 7. Coordinator template
 
 Scenario:
 
@@ -103,10 +92,12 @@ Scenario:
 
 Expected result:
 
-- The generated local `.devcontainer/devcontainer.json` contains the parent-area
-  read-only mount described in [`30-templates.md`](./30-templates.md)
+- The deployed config at
+  `~/.config/dctl/devcontainer/coordinator/devcontainer.json` contains the
+  parent-area read-only mount described in
+  [`30-templates.md`](./30-templates.md)
 
-### 9. Resolution logging
+### 8. Resolution logging
 
 Scenario:
 
@@ -117,7 +108,7 @@ Expected result:
 - `dctl` logs which source won
 - The log is specific enough to identify the category and path
 
-### 10. Sibling discovery opt-out
+### 9. Sibling discovery opt-out
 
 Scenario:
 
@@ -130,7 +121,7 @@ Expected result:
 - Sibling discovery is skipped
 - Resolution continues to user global default or fails
 
-### 11. User global default fallback
+### 10. User global default fallback
 
 Scenario:
 
@@ -142,7 +133,7 @@ Expected result:
 - The global default is selected
 - Resolution logging identifies the source as the user global default
 
-### 12. Dockerfile user override
+### 11. Dockerfile user override
 
 Scenario:
 
@@ -155,7 +146,7 @@ Expected result:
 - The user Dockerfile at `~/.config/dctl/images/agents/Dockerfile` is used
 - The installed version is not used
 
-### 13. Registry dockerfile field (managed target)
+### 12. Registry dockerfile field (managed target)
 
 Scenario:
 
@@ -170,7 +161,7 @@ Expected result:
 - If the user provides an explicit CLI target, the CLI target wins over the
   registry value
 
-### 14. Registry dockerfile field (direct path)
+### 13. Registry dockerfile field (direct path)
 
 Scenario:
 
@@ -183,7 +174,7 @@ Expected result:
 - The direct path is validated and used as the build context Dockerfile
 - The two-layer managed lookup is not consulted
 
-### 15. Schema validation
+### 14. Schema validation
 
 Scenario:
 
@@ -200,10 +191,8 @@ Expected result:
 
 - No change to `dctl ws exec`, `dctl ws shell`, or `dctl ws run` container lookup
   semantics
-- `dctl init` always writes local scaffolding
 - `make install` never overwrites files in `~/.config/dctl`
-- Built-in templates continue to work after the addition of user templates and
-  user Dockerfile overrides
+- Built-in templates continue to work alongside user Dockerfile overrides
 
 ## Recommended Test Mapping
 
@@ -213,5 +202,5 @@ Expected result:
   registry managed-target, registry direct-path, CLI-target-wins precedence
 - Add `tests/config_test.bats` for project registry YAML parsing, schema
   validation, canonical-name derivation, and `sibling_discovery` opt-out
-- Preserve current integration coverage for `make install` and local-template
+- Preserve current integration coverage for `make install` and deployed-config
   behavior

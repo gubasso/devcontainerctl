@@ -30,6 +30,13 @@ _validate_registry() {
     return 0
   fi
 
+  # File with only whitespace/comments parses as null — treat as empty
+  local root_tag
+  root_tag="$(yq eval 'type' "$registry" 2>/dev/null || true)"
+  if [[ "$root_tag" == "!!null" ]]; then
+    return 0
+  fi
+
   # Prefer check-jsonschema for full validation
   if command -v check-jsonschema >/dev/null 2>&1; then
     local schema="${DCTL_SCHEMAS_DIR}/projects.schema.yaml"
@@ -48,11 +55,9 @@ _validate_registry() {
     err "Invalid YAML in $registry"
   fi
 
-  # Root must be a mapping
-  local root_type
-  root_type="$(yq eval 'type' "$registry" 2>/dev/null || true)"
-  if [[ "$root_type" != "!!map" ]]; then
-    err "Invalid registry format in $registry: root must be a mapping, got $root_type"
+  # Root must be a mapping (null already handled above)
+  if [[ "$root_tag" != "!!map" ]]; then
+    err "Invalid registry format in $registry: root must be a mapping, got $root_tag"
   fi
 
   # Check that all project values are mappings
@@ -182,6 +187,7 @@ register_project_defaults() {
   local devcontainer_path="$2"
   local dockerfile="${3:-}"
   local image="${4:-}"
+  local force="${5:-false}"
 
   require_cmd yq
   _registry_ensure_file
@@ -193,20 +199,37 @@ register_project_defaults() {
     _validate_registry "$registry"
   fi
 
+  local project_exists=false
   if _registry_has_project "$canonical_name"; then
-    warn "Project '$canonical_name' already registered in $registry; skipping"
-    return 0
+    project_exists=true
+    if [[ "$force" != true ]]; then
+      warn "Project '$canonical_name' already registered in $registry; skipping"
+      return 0
+    fi
   fi
 
   # Use env vars to pass values safely to yq (avoids injection via special chars)
+  local existing_sibling="true"
+  if [[ "$force" == true && "$project_exists" == true ]]; then
+    existing_sibling="$(_registry_lookup_sibling_discovery "$canonical_name")"
+  fi
+
   local yq_expr
   yq_expr='.[env(YQ_KEY)].devcontainer = env(YQ_DEVCONTAINER)'
-  yq_expr+=' | .[env(YQ_KEY)].sibling_discovery = true'
+  if [[ "$existing_sibling" == "false" ]]; then
+    yq_expr+=' | .[env(YQ_KEY)].sibling_discovery = false'
+  else
+    yq_expr+=' | .[env(YQ_KEY)].sibling_discovery = true'
+  fi
   if [[ -n "$dockerfile" ]]; then
     yq_expr+=' | .[env(YQ_KEY)].dockerfile = env(YQ_DOCKERFILE)'
+  elif [[ "$force" == true && "$project_exists" == true ]]; then
+    yq_expr+=' | del(.[env(YQ_KEY)].dockerfile)'
   fi
   if [[ -n "$image" ]]; then
     yq_expr+=' | .[env(YQ_KEY)].image = env(YQ_IMAGE)'
+  elif [[ "$force" == true && "$project_exists" == true ]]; then
+    yq_expr+=' | del(.[env(YQ_KEY)].image)'
   fi
 
   local tmp_registry="${registry}.tmp.$$"
@@ -219,8 +242,8 @@ register_project_defaults() {
   fi
   unset YQ_KEY YQ_DEVCONTAINER YQ_DOCKERFILE YQ_IMAGE
 
-  _validate_registry "$tmp_registry"
   mv "$tmp_registry" "$registry"
+  _validate_registry "$registry"
 
   log "Registered project '$canonical_name' in $registry"
 }

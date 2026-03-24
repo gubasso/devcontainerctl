@@ -206,6 +206,13 @@ YAML
   [ "$status" -eq 0 ]
 }
 
+@test "registry validation accepts file with only whitespace" {
+  printf '\n\n' >"${XDG_CONFIG_HOME}/dctl/projects.yaml"
+
+  run _validate_registry "${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  [ "$status" -eq 0 ]
+}
+
 # --- Registry-backed resolution ---
 
 @test "registry devcontainer overrides local config" {
@@ -280,6 +287,42 @@ YAML
   [ "$(yq -r '."proj-a".dockerfile' "$registry")" = "agents" ]
   [ "$(yq -r '."proj-a".image' "$registry")" = "devimg/agents:latest" ]
   [ "$(yq -r '."proj-a".sibling_discovery' "$registry")" = "false" ]
+}
+
+@test "register_project_defaults with force updates existing project" {
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  cat >"$registry" <<'YAML'
+proj-a:
+  devcontainer: /tmp/original.json
+  dockerfile: agents
+  image: devimg/agents:latest
+  sibling_discovery: false
+YAML
+
+  run register_project_defaults "proj-a" "/tmp/new.json" "python-dev" "devimg/python-dev:latest" "true"
+  [ "$status" -eq 0 ]
+  [ "$(yq -r '."proj-a".devcontainer' "$registry")" = "/tmp/new.json" ]
+  [ "$(yq -r '."proj-a".dockerfile' "$registry")" = "python-dev" ]
+  [ "$(yq -r '."proj-a".image' "$registry")" = "devimg/python-dev:latest" ]
+  [ "$(yq -r '."proj-a".sibling_discovery' "$registry")" = "false" ]
+}
+
+@test "register_project_defaults with force removes stale dockerfile/image" {
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  cat >"$registry" <<'YAML'
+proj-a:
+  devcontainer: /tmp/original.json
+  dockerfile: agents
+  image: devimg/agents:latest
+  sibling_discovery: true
+YAML
+
+  run register_project_defaults "proj-a" "/tmp/new.json" "" "" "true"
+  [ "$status" -eq 0 ]
+  [ "$(yq -r '."proj-a".devcontainer' "$registry")" = "/tmp/new.json" ]
+  [ "$(yq -r '."proj-a" | has("dockerfile")' "$registry")" = "false" ]
+  [ "$(yq -r '."proj-a" | has("image")' "$registry")" = "false" ]
+  [ "$(yq -r '."proj-a".sibling_discovery' "$registry")" = "true" ]
 }
 
 @test "register_project_defaults appends to existing registry" {

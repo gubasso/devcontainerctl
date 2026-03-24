@@ -95,7 +95,7 @@ Creation model:
 
 - Created manually by the user, or by a future `dctl config init` command
 - Not created by `dctl init`
-- `dctl init` always scaffolds into the local project
+- `dctl init` deploys selected templates into the user config directory
 
 ## Image Label vs Template Split
 
@@ -141,14 +141,12 @@ re-stating label-owned defaults.
 
 ## Template Discovery
 
-Future `dctl init` should discover templates in this order:
+`dctl init` discovers templates from the installed templates directory only:
 
-1. User templates: `~/.config/dctl/templates/`
-2. Installed templates: `~/.local/share/dctl/templates/`
+1. Installed templates: `~/.local/share/dctl/templates/`
 
 Rules:
 
-- A user template with the same name overrides an installed template.
 - Template names map to directory names.
 - A valid template directory contains `devcontainer.json`.
 
@@ -159,23 +157,20 @@ Rules:
 Add a `--list` flag that prints available templates and exits. This removes the
 current dependency on `fzf` for non-interactive discovery.
 
-### Local scaffolding remains the write target
+### Deployment target
 
-`dctl init` continues to write the selected template to:
+`dctl init` deploys the selected installed template to:
 
 ```text
-.devcontainer/devcontainer.json
+~/.config/dctl/devcontainer/<name>/devcontainer.json
 ```
 
-This remains true even if runtime resolution later uses registry entries,
-sibling discovery, or user defaults.
+It then registers that deployed path in `~/.config/dctl/projects.yaml`.
+`dctl init` does not write `.devcontainer/devcontainer.json`.
 
-### Override behavior
-
-Template selection should resolve through the discovery order above. If both
-`~/.config/dctl/templates/python/devcontainer.json` and
-`~/.local/share/dctl/templates/python/devcontainer.json` exist, the user version
-wins.
+Without `--force`, an existing deployed config at the target path is preserved
+and reused. With `--force`, the deployed config is overwritten from the
+installed template source.
 
 ## Recommended Template Catalog
 
@@ -202,8 +197,8 @@ Installed templates remain in:
 ~/.local/share/dctl/templates/<name>/devcontainer.json
 ```
 
-User templates live in:
+Deployed configs live in:
 
 ```text
-~/.config/dctl/templates/<name>/devcontainer.json
+~/.config/dctl/devcontainer/<name>/devcontainer.json
 ```
