@@ -39,8 +39,8 @@ systemctl --user enable --now dctl-image-build.timer
 
 `~/.local/bin` must be in `PATH`. The installer warns if it is missing.
 
-`make install` never writes to `~/.config/dctl/` — that directory is reserved for
-user-controlled configuration.
+`make install` never writes to `~/.config/dctl/` or `~/.cache/dctl/` — those
+directories are managed by `dctl` at runtime.
 
 ## Setup
 
@@ -81,14 +81,19 @@ dctl init --force --template rust
 dctl init --no-register --template python  # skip registry registration
 ```
 
-`dctl init` deploys the selected template to
-`~/.config/dctl/devcontainer/<name>/devcontainer.json` and registers it in
+`dctl init` seeds the shared `_base` config and the selected template into
+`~/.config/dctl/devcontainer/`, merges them into a cached config at
+`~/.cache/dctl/devcontainer/<name>/devcontainer.json`, and registers it in
 `~/.config/dctl/projects.yaml`. The config resolution chain picks up the
-deployed config from the registry. Use `--no-register` to skip registration.
-Use `--force` to re-deploy and update the registry even if already configured.
+cached config from the registry.
 
-If the project is already registered, `dctl init` warns and skips by default,
-then runs the smoke test against the existing config.
+Config files in `~/.config/dctl/devcontainer/` are the user's source of truth.
+Edit them to customize mounts, env vars, or lifecycle hooks, then rerun
+`dctl init` to regenerate the cache. Use `--force` to re-seed config from
+installed templates and regenerate everything.
+
+If the project is already registered, `dctl init` checks whether the cached
+config is stale (config files changed) and regenerates if needed.
 
 Templates are discovered from installed templates only:
 - `~/.local/share/dctl/templates/` — installed by `make install`
@@ -189,10 +194,11 @@ Each clone gets its own container — only the config is shared.
 
 | Directory | Purpose |
 | --- | --- |
-| `~/.config/dctl/` | User config: project registry, deployed devcontainer configs, image overrides, defaults |
-| `~/.local/share/dctl/` | Installed data: templates, images, schemas |
+| `~/.local/share/dctl/` | Installed data: templates (scaffolding), images, schemas |
+| `~/.config/dctl/` | User config: project registry, deployed devcontainer configs (SoT), image overrides, defaults |
+| `~/.cache/dctl/` | Generated data: merged devcontainer configs consumed by `dctl ws up` |
 
-Both honor `XDG_CONFIG_HOME` and `XDG_DATA_HOME`.
+All three honor `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, and `XDG_CACHE_HOME`.
 
 ## Automation
 
@@ -273,7 +279,7 @@ dctl init --template python
 dctl ws up
 ```
 
-`dctl init` deploys a template to `~/.config/dctl/devcontainer/<name>/devcontainer.json` and registers it in `~/.config/dctl/projects.yaml`. No local files are created — the config resolution chain reads the deployed config from the registry. Built-in templates: `base`, `coordinator`, `python`, `rust`, `zig`.
+`dctl init` seeds a shared `_base` config and the selected template into `~/.config/dctl/devcontainer/`, merges them into `~/.cache/dctl/devcontainer/<name>/devcontainer.json`, and registers the cached path in `~/.config/dctl/projects.yaml`. No local files are created. Built-in templates: `general`, `coordinator`, `python`, `rust`, `zig`.
 
 ### Running a Command
 
@@ -427,7 +433,7 @@ dctl image list          # show available targets
 `dctl` adds on top of the devcontainer standard:
 
 - Pre-built images with AI agent tools (Claude Code, Codex, Gemini CLI) ready to use.
-- Dotfiles integration baked into base image metadata.
+- Shared devcontainer config (`_base`) with dotfiles integration, tool mounts, and env vars.
 - Template system for instant project scaffolding (`dctl init`).
 - Config resolution chain for flexible devcontainer.json discovery.
 - Work-clone support for parallel feature branches sharing config.
