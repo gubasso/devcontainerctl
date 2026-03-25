@@ -88,12 +88,48 @@ dctl init --no-register --template python  # skip registry registration
 cached config from the registry.
 
 Config files in `~/.config/dctl/devcontainer/` are the user's source of truth.
-Edit them to customize mounts, env vars, or lifecycle hooks, then rerun
-`dctl init` to regenerate the cache. Use `--force` to re-seed config from
-installed templates and regenerate everything.
+Use `--force` to re-seed config from installed templates and regenerate
+everything.
 
-If the project is already registered, `dctl init` checks whether the cached
-config is stale (config files changed) and regenerates if needed.
+#### How config changes flow into a running container
+
+When you customize your devcontainer config, changes go through three stages
+before they reach a running container:
+
+```
+~/.config/dctl/devcontainer/   ──dctl init──>   ~/.cache/dctl/devcontainer/   ──dctl ws reup──>   running container
+       (your edits)                                (merged result)                                 (recreated)
+```
+
+**Example — add a volume mount to your Python config:**
+
+```bash
+# 1. Edit your config (the source of truth)
+$EDITOR ~/.config/dctl/devcontainer/python/devcontainer.json
+#    e.g. add a new entry to the "mounts" array
+
+# 2. Regenerate the cached merged config
+dctl init
+#    dctl detects that the config file is newer than the cache,
+#    re-merges _base + python, and writes a fresh cache file
+
+# 3. Recreate the container with the updated config
+dctl ws reup
+#    destroys the old container and starts a new one using the
+#    updated cached config (use "dctl ws up" if the container
+#    is not running yet)
+```
+
+`dctl init` checks cache freshness by comparing modification times against the
+**config** files in `~/.config/dctl/devcontainer/`, not the installed templates
+in `~/.local/share/dctl/templates/`. This means:
+
+- **Editing config files** → `dctl init` detects the change and regenerates the
+  cache automatically.
+- **Updating installed templates** (e.g., via `make install`) → a plain
+  `dctl init` will not detect the change because the config files are unchanged.
+  Use `dctl init --force` to re-seed config from the updated installed templates
+  and rebuild the cache.
 
 Templates are discovered from installed templates only:
 - `~/.local/share/dctl/templates/` — installed by `make install`
