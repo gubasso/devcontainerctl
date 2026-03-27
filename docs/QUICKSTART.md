@@ -2,58 +2,48 @@
 
 ## Prerequisites
 
-- Docker + buildx running (`docker buildx version` to verify)
-- `devcontainer` CLI installed: `bun install -g @devcontainers/cli`
-- Images built: `dctl image build --all`
+- Docker with `buildx`
+- Dev Container CLI installed (`devcontainer`)
+- Dotfiles repo at `~/.dotfiles` or `DOTFILES=/path/to/dotfiles`
+- Managed images built: `dctl image build --all`
 
 ## Setup
 
-1. Run `dctl init --template <python|rust|zig>` in your project root.
-2. Add only project-specific mounts or cache volumes as needed.
-3. Start: `dctl ws up`
-4. Attach: `dctl ws shell`
-5. Re-run validation any time with `dctl test`
-
-## Template
-
-```jsonc
-{
-  "name": "<project-name>",
-  "image": "devimg/agents:latest",
-  "mounts": [
-    // Project-specific SSH known_hosts
-    // "source=${localEnv:HOME}/.ssh/known_hosts,target=/home/${localEnv:USER}/.ssh/known_hosts,type=bind,readonly"
-
-    // Python caches (for python-dev image)
-    // "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume"
-  ]
-}
+```bash
+make install
+cd ~/projects/my-api
+dctl init --template python
+dctl ws up
+dctl ws shell
 ```
 
-Shared auth/editor mounts, `remoteUser`, `init`, `shutdownAction`, container env, and the dotfiles `postCreateCommand` come from the `devimg/agents` `devcontainer.metadata` label.
+Shared settings come from the `_base` template, merged automatically by `dctl init`.
 
-## Available Images
+## Available Templates
 
-| Image | Use case |
+| Template | Use case |
 | --- | --- |
-| `devimg/agents:latest` | General-purpose (Bun, mise, Claude Code, Codex, OpenCode, Gemini CLI) |
-| `devimg/python-dev:latest` | Python projects |
-| `devimg/rust-dev:latest` | Rust projects |
-| `devimg/zig-dev:latest` | Zig projects |
+| `general` | Minimal general-purpose sandbox on `devimg/agents:latest` |
+| `coordinator` | Coordinator workflow with sibling-repo visibility |
+| `python` | Python projects on `devimg/python-dev:latest` |
+| `rust` | Rust projects on `devimg/rust-dev:latest` |
+| `zig` | Zig projects on `devimg/zig-dev:latest` |
 
 ## Common Commands
 
 ```bash
-dctl ws up             # start
-dctl ws reup           # recreate after devcontainer.json/image changes
-dctl ws shell          # attach shell
-dctl ws run -- claude-session  # run agent command
-dctl ws run -- pytest  # execute arbitrary command
-dctl ws status         # show container(s) for current workspace
-dctl ws down           # stop/remove current workspace container(s)
-dctl image build --all        # rebuild base images
+dctl init --list
+dctl ws up
+dctl ws reup
+dctl ws shell
+dctl ws shell claude
+dctl ws exec -- pytest
+dctl ws status
+dctl ws down
+dctl image build --all
+dctl test
 ```
 
 ## Full Documentation
 
-See [ARCHITECTURE.md](ARCHITECTURE.md).
+See [README.md](../README.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
