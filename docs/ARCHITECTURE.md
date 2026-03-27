@@ -22,7 +22,7 @@ A practical guide to using Dev Containers as isolated, reproducible development 
 14. [Troubleshooting](#troubleshooting)
 15. [Quick Reference](#quick-reference)
 16. [Full Configuration Examples](#full-configuration-examples)
-17. [Planned Features](#planned-features)
+17. [Implemented Features](#implemented-features)
 
 ---
 
@@ -97,19 +97,29 @@ Terminal 2: claude-code ──────────────► attached t
 Terminal 3: pytest ───────────────────► attached to container
 ```
 
-## Planned Features
+## Implemented Features
 
-The files in [`../spec/`](../spec/README.md) describe planned future behavior,
-not current implementation. Use this document as the as-is architecture
-reference, and use the spec set for proposed work-clone support, config
-resolution, template evolution, and Dockerfile hierarchy changes.
+The design work captured in [`../spec/`](../spec/README.md) is now reflected in
+the shipped implementation, not a future roadmap. In particular, the following
+are live in the current codebase:
+
+- config resolution with CLI, env, registry, local-file, sibling-discovery, and
+  user-default precedence
+- per-project registry support in `~/.config/dctl/projects.yaml`
+- `_base` plus selectable template composition with generated cache output under
+  `~/.cache/dctl/devcontainer/`
+- user-overrides-installed Dockerfile hierarchy for `dctl image build`
+- metadata extraction from the Dockerfile into the template system
+
+The spec set remains useful as a design record and glossary:
 
 - [`../spec/README.md`](../spec/README.md) — spec index and glossary
 - [`../spec/00-resolution-model.md`](../spec/00-resolution-model.md) — shared precedence and discovery model
 - [`../spec/10-project-registry.md`](../spec/10-project-registry.md) — per-project registry design
 - [`../spec/20-devcontainer-resolution.md`](../spec/20-devcontainer-resolution.md) — devcontainer resolution flow
-- [`../spec/30-templates.md`](../spec/30-templates.md) — template system expansion
+- [`../spec/30-templates.md`](../spec/30-templates.md) — template system
 - [`../spec/40-dockerfile-hierarchy.md`](../spec/40-dockerfile-hierarchy.md) — Dockerfile override hierarchy
+- [`../spec/45-devcontainer-metadata-extraction.md`](../spec/45-devcontainer-metadata-extraction.md) — metadata extraction history
 
 ---
 
@@ -160,7 +170,7 @@ devimg/agents:latest    (Debian bookworm + bun + node LTS + agent CLIs + mise + 
        └── devimg/zig-dev:latest      (anyzig + minisign + zig-zls-init)
 ```
 
-The `agents` base includes rolling Python and Go runtimes for shared tooling. Project-specific Python versions override the base default via mise, while Rust and Zig versions remain unbaked and resolve from `rust-toolchain.toml` and `build.zig.zon`.
+The `agents` base includes a rolling Python runtime for shared tooling. Project-specific Python versions override the base default via mise, while Rust and Zig versions remain unbaked and resolve from `rust-toolchain.toml` and `build.zig.zon`.
 
 **Note**: This guide covers Python, Rust, and Zig as practical examples. The same pattern extends to polyglot environments (combine layers) or hardened variants (remove sudo, drop capabilities, add `no-new-privileges`). Adapt the Dockerfiles as needed for your use case.
 
@@ -342,38 +352,9 @@ glab api user --jq .username
 | gh | `~/.config/gh/hosts.yml` | OAuth token (plain text fallback when no system keyring) |
 | glab | `~/.config/glab-cli/config.yml` | PAT in the `token:` field under each host entry |
 
-#### Headless Neovim Bootstrap
+#### Neovim
 
-The agents image pre-bakes Neovim dependencies at build time so first launch is instant:
-
-| Component | Build Command | Fail-Fast Guard |
-| --------- | ------------- | --------------- |
-| Lazy plugins | `Lazy! restore` (from lockfile) | Non-zero exit |
-| Treesitter parsers | `TSUpdateSync` | Log grep for `failed\|error:` |
-| Mason tools | `MasonToolsInstallSync` | 5-min timeout + log grep |
-
-A **duplicate preflight** runs before Mason install — the build fails if any `ensure_installed` list in `mason-tool-installer.lua`, `mason-lspconfig.lua`, or `treesitter.lua` contains duplicate entries (duplicates cause hangs or silent errors).
-
-**Manual verification:**
-
-```bash
-# Quick duplicate check (run from dotfiles root)
-for f in nvim/.config/nvim/lua/plugins/{mason-tool-installer,mason-lspconfig,treesitter}.lua; do
-  dupes=$(sed -n '/ensure_installed\s*=\s*{/,/}/p' "$f" | grep -oP '"\K[^"]+' | sort | uniq -d)
-  [ -n "$dupes" ] && echo "DUPLICATES in $(basename "$f"): $dupes"
-done
-
-# Full headless test (clean state, ~2 min)
-XDG_CONFIG_HOME=/path/to/dotfiles/nvim/.config \
-XDG_DATA_HOME="$(mktemp -d)" \
-XDG_STATE_HOME="$(mktemp -d)" \
-XDG_CACHE_HOME="$(mktemp -d)" \
-timeout 300 nvim --headless \
-  "+Lazy! sync" \
-  "+MasonToolsInstallSync" \
-  "+lua os.exit(0)"
-# Exit 0 = success, 124 = timeout/hang, other = failure
-```
+The agents image installs `neovim@latest` via mise. Container Neovim runs a minimal config — no plugins, LSP servers, or treesitter parsers are pre-baked. Full editor configuration is supplied at runtime through the dotfiles mount (`~/.config/nvim` bind-mounted from `$DOTFILES/nvim/.config/nvim`).
 
 ### Layer 1: Python Development (python-dev/)
 
@@ -395,7 +376,7 @@ Thin layer extending `devimg/agents:latest`:
 
 - [anyzig](https://github.com/marler8997/anyzig) multi-version Zig launcher
 - [minisign](https://jedisct1.github.io/minisign/) for zls signature verification
-- [zig-zls-init](../bin/.local/bin/zig-zls-init) for per-project zls setup
+- `zig-zls-init` for per-project zls setup (installed from dotfiles at image build time)
 - Zig version pinned per project via `build.zig.zon` (`minimum_zig_version` or `mach_zig_version`)
 - zls not globally installed — downloaded per-project by `zig-zls-init`, cached at `~/.local/share/zls/<version>/`
 
@@ -442,7 +423,7 @@ The `agents` and `zig-dev` images require the dotfiles repo as a BuildKit named 
 
 ### Philosophy
 
-The `agents` base includes rolling Python and Go runtimes for shared tooling such as neovim providers, pre-commit, and general CLI usage. Project-specific versions override these defaults where applicable:
+The `agents` base includes a rolling Python runtime for shared tooling such as neovim providers, pre-commit, and general CLI usage. Project-specific versions override these defaults where applicable:
 
 - **Python**: Declared in `pyproject.toml` via `[tool.mise]`, overriding the base Python via mise during project bootstrap
 - **Rust**: Declared in `rust-toolchain.toml`, auto-installed by rustup on first `cargo` invocation
@@ -757,8 +738,8 @@ Need to edit files and sync to host?
 ## Per-Project Configuration
 
 Shared auth/editor mounts, baseline container settings, and the dotfiles
-bootstrap hook are inherited from the `devimg/agents` image label. The examples
-below show only project-local deltas.
+bootstrap hook come from the `_base` template (merged by `dctl init`). The
+examples below show only project-local deltas.
 
 ### Standard Python Configuration
 
@@ -887,11 +868,11 @@ alongside it.
 }
 ```
 
-### Base Configuration Reuse via Image Labels
+### Base Configuration Reuse via the `_base` Template
 
-The `devimg/agents` base image embeds default devcontainer metadata in a Docker label. Child images (`python-dev`, `rust-dev`, `zig-dev`) inherit it automatically. Per-project `devcontainer.json` files only need project-specific fields — inherited defaults are merged at container creation time.
+Shared devcontainer defaults live in the `_base` template at `templates/_base/devcontainer.json` (installed to `~/.local/share/dctl/templates/_base/`). When you run `dctl init`, `_base` is merged with the selected project template to produce the final cached config.
 
-**Defaults baked into `devimg/agents`:**
+**Defaults provided by `_base`:**
 
 | Property | Value | Notes |
 | -------- | ----- | ----- |
@@ -899,25 +880,21 @@ The `devimg/agents` base image embeds default devcontainer metadata in a Docker 
 | `updateRemoteUserUID` | `false` | UID/GID baked at build time |
 | `init` | `true` | Proper init process (PID 1 reaping) |
 | `shutdownAction` | `"none"` | Container keeps running after detach |
-| `containerEnv` | `TERM`, `COLORTERM` | Propagates host terminal defaults |
+| `containerEnv` | `TERM`, `COLORTERM`, Kitty vars | Propagates host terminal defaults |
 | `mounts` | gitconfig, DOTFILES, Claude, gcloud, Codex, OpenCode, Gemini, nvim, gh, glab | Shared auth/editor mounts |
 | `postCreateCommand` | `${localEnv:DOTFILES}/.devcontainer/setup-dotfiles ${localEnv:DOTFILES}` | Shared dotfiles bootstrap |
 
-**NOT in the label** (set per project when needed):
+**Merge rules** (applied by `dctl init`):
 
-- `workspaceMount` — not supported in image labels per spec; always omit in image/Dockerfile mode to use the automatic mount
-- `workspaceFolder` — not supported in image labels per spec; always omit in image/Dockerfile mode; set explicitly only in Docker Compose mode
+- `mounts` arrays are concatenated (`_base` first, then template)
+- `postCreateCommand` and `containerEnv` objects are merged by key (template wins)
+- scalar fields use last-wins (template overrides `_base`)
 
-**Merge rule**:
-
-- scalar/object properties like `remoteUser`, `containerEnv`, and `shutdownAction` resolve with `devcontainer.json` considered last
-- `mounts` are collected across sources, with later conflicting targets winning
-- lifecycle hooks are collected from image metadata and `devcontainer.json`; object-form keys only control parallelism within one hook entry and are not merged by key
-
-After modifying the label, rebuild all images:
+After editing `_base` or a template config, regenerate and recreate:
 
 ```bash
-dctl image build agents python-dev rust-dev zig-dev
+dctl init
+dctl ws reup
 ```
 
 ---
@@ -1086,8 +1063,8 @@ dctl ws status
 cd ~/projects/project-a
 
 # Multiple agent sessions
-dctl ws run -- claude-session
-dctl ws run -- claude-session
+dctl ws shell claude
+dctl ws shell codex
 
 # Interactive shell
 dctl ws shell
@@ -1174,127 +1151,31 @@ UID/GID are baked into the image at build time via `--build-arg USER_UID=$(id -u
 
 ## Workflows
 
-### Workflow Wrapper (`dctl ws`)
+See [README.md](../README.md) and [QUICKSTART.md](QUICKSTART.md) for the
+baseline install/init/up/shell flow. The key `dctl`-specific workflow behavior
+to keep in mind is:
 
-`dctl ws` is installed by the `devcontainerctl` package and wraps the most common per-project lifecycle commands:
+- `dctl init` seeds `_base` plus a selected template into
+  `~/.config/dctl/devcontainer/`, then writes the merged config to
+  `~/.cache/dctl/devcontainer/<name>/devcontainer.json`
+- `dctl ws up` and `dctl ws reup` resolve config through the six-level
+  precedence chain before invoking the Dev Container CLI
+- `dctl ws shell`, `exec`, and `run` attach to containers by workspace label and
+  forward auth plus terminal environment
+- `dctl ws reup` is the right move after changing managed images or merged
+  config; `dctl init` regenerates cache, and `reup` recreates the container
+
+Common lifecycle commands:
 
 ```bash
-dctl ws up             # Start current project container
-dctl ws reup           # Recreate after devcontainer.json/image changes
-dctl ws shell          # Open interactive bash shell
-dctl ws run -- claude-session  # Run command via bash -lc
-dctl ws exec -- id     # Run direct command in container
-dctl ws status         # Show matching container(s)
-dctl ws down           # Remove matching container(s)
-```
-
-### Workflow 1: New Project Setup
-
-```bash
-mkdir -p ~/projects/new-project
-cd ~/projects/new-project
-git init
-
-# Create pyproject.toml with mise config
-cat > pyproject.toml << 'EOF'
-[project]
-name = "new-project"
-version = "0.1.0"
-requires-python = ">=3.11"
-
-[tool.mise]
-python = "3.11"
-
-[tool.poetry]
-name = "new-project"
-version = "0.1.0"
-EOF
-
-mkdir -p .devcontainer
-cat > .devcontainer/devcontainer.json << EOF
-{
-  "name": "new-project",
-  "image": "devimg/python-dev:latest",
-  "postCreateCommand": {
-    "python": "bash -ic dev-py",
-    "pre-commit": "pre-commit install"
-  },
-  "mounts": [
-    "source=poetry-cache,target=/home/\${localEnv:USER}/.cache/pypoetry,type=volume"
-  ]
-}
-EOF
-
-# Host: install Python interpreter for LSP
-mise install
-
-# Start container (creates .venv/ via the Python template bootstrap)
 dctl ws up
-dctl ws run -- claude-session  # Interactive login on first run
-
-# Now open editor - LSP will use container-created .venv/
-nvim .
-```
-
-### Workflow 2: Daily Development
-
-```bash
-cd ~/projects/project-a
-
-# Start container first (ensures .venv/ exists for LSP)
-dctl ws up
-
-# Terminal 1: editor on host (LSP uses container-created .venv/)
-nvim .
-
-# Terminal 2: agent in container
-dctl ws run -- claude-session
-
-# Terminal 3: tests in container
-dctl ws run -- pytest
-
-# When done
-dctl ws down
-```
-
-### Workflow 3: Add Mount Mid-Session
-
-```bash
-# Stop container
-dctl ws down
-
-# Edit .devcontainer/devcontainer.json mounts, then restart
 dctl ws reup
-dctl ws run -- claude-session
-```
-
-### Workflow 4: Multi-Directory Workspace Setup
-
-Open the devcontainer from the main project directory (`my-api`). The automatic
-mount places it at `/workspaces/my-api`; additional repos are added via `mounts`.
-
-```bash
-cd ~/projects/my-api
-mkdir -p .devcontainer
-
-cat > .devcontainer/devcontainer.json << EOF
-{
-  "name": "my-api-workspace",
-  "image": "devimg/python-dev:latest",
-  "mounts": [
-    "source=\${localEnv:HOME}/projects/my-api-docs,target=/workspaces/docs,type=bind,readonly",
-    "source=\${localEnv:HOME}/libs/internal-sdk,target=/workspaces/sdk,type=bind,readonly",
-    "source=poetry-cache,target=/home/\${localEnv:USER}/.cache/pypoetry,type=volume"
-  ],
-  "postCreateCommand": {
-    "python": "bash -ic dev-py",
-    "pre-commit": "pre-commit install"
-  }
-}
-EOF
-
-dctl ws up
-dctl ws run -- claude-session  # Interactive login on first run
+dctl ws shell
+dctl ws shell claude
+dctl ws exec -- pytest
+dctl ws run -- "pytest -q"
+dctl ws status
+dctl ws down
 ```
 
 ---
@@ -1352,7 +1233,10 @@ USER $USERNAME
 
 ### Docker Compose for Multi-Container
 
-**Note**: Docker Compose mode does not automatically read `devcontainer.metadata` image labels. Properties inherited from labels in single-container mode must be set explicitly in the compose `devcontainer.json`.
+**Note**: Docker Compose mode does not get any extra `dctl` wrapper behavior by
+itself. If you bypass the normal `_base` plus template flow, set the required
+shared mounts, env, lifecycle hooks, and user settings explicitly in the
+compose-based config.
 
 ```jsonc
 {
@@ -1500,8 +1384,8 @@ chmod 600 ~/.ssh/deploy_key
 # Check network connectivity
 devcontainer exec --workspace-folder . curl -I https://api.anthropic.com
 
-# Re-run interactive login if needed
-devcontainer exec --workspace-folder . bash -lc "claude-session"
+# Re-run the agent command if needed
+devcontainer exec --workspace-folder . bash -lic "claude"
 ```
 
 ### gh or glab Not Authenticated in Container
@@ -1617,10 +1501,10 @@ dctl image build --all
 | `mounts` | Additional bind mounts and volumes |
 | `containerEnv` | Environment variables |
 | `postCreateCommand` | Run once after container creation |
-| `remoteUser` | User to run as (inherited from image label) |
-| `updateRemoteUserUID` | Map container UID to host UID (inherited from image label) |
-| `init` | Use proper init process (inherited from image label) |
-| `shutdownAction` | What to do when closed (inherited from image label) |
+| `remoteUser` | User to run as (from `_base` template) |
+| `updateRemoteUserUID` | Map container UID to host UID (from `_base` template) |
+| `init` | Use proper init process (from `_base` template) |
+| `shutdownAction` | What to do when closed (from `_base` template) |
 
 ### Volume Reference
 
@@ -1665,7 +1549,7 @@ components = ["rustfmt", "clippy", "rust-analyzer"]
 
 Complete `devcontainer.json` examples demonstrating multi-directory workspaces.
 Each project uses the default automatic workspace mount for the main repository.
-These rely on the shared defaults baked into `devimg/agents`. For base image
+These rely on the shared defaults from the `_base` template. For base image
 Dockerfiles, see [`images/`](../images/).
 
 ### Example 1: API Project with Docs and SDK

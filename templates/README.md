@@ -2,45 +2,45 @@
 
 Reusable project templates live here for versioned tracking in this repo.
 
-## Three-Tier Architecture
+## Three-Tier Flow
 
-Templates follow a three-tier XDG layout:
+```text
+templates/  ──make install──>  ~/.local/share/dctl/templates/
+                                  │
+                                  └──dctl init──>  ~/.config/dctl/devcontainer/
+                                                       │
+                                                       └──merge──>  ~/.cache/dctl/devcontainer/
+```
 
-- **Installed** (`~/.local/share/dctl/templates/`): source templates installed
-  by `make install`. Lean, modular scaffolding only. Used by `dctl init` to
-  seed config.
-- **Config** (`~/.config/dctl/devcontainer/`): deployed config files. Seeded
-  from templates by `dctl init`, then user-editable. Contains separate
-  `_base/` and per-template files. This is the SoT.
-- **Cache** (`~/.cache/dctl/devcontainer/`): generated merged configs from
-  config files.
+- **Installed** (`~/.local/share/dctl/templates/`): built-in templates shipped by `make install`
+- **Config** (`~/.config/dctl/devcontainer/`): seeded config files, then user-editable
+- **Cache** (`~/.cache/dctl/devcontainer/`): generated merged `devcontainer.json` output consumed by `dctl ws up`
 
-## Templates
+## Template Catalog
 
 ### Internal
 
-- `_base/devcontainer.json`: shared infrastructure settings (remoteUser, mounts,
-  containerEnv, postCreateCommand.dotfiles). Merged into every deployed config
-  at deploy time. Never user-selectable.
+- `_base/devcontainer.json` — shared infrastructure settings (remote user, shared mounts, container env, dotfiles bootstrap). Internal only and never user-selectable.
 
-### User-Selectable
+### Selectable
 
-- `general/devcontainer.json`: minimal general-purpose config using
-  `devimg/agents:latest`
-- `coordinator/devcontainer.json`: agent/coordinator workflow with
-  parent-directory mounts for sibling discovery
-- `python/devcontainer.json`: Python project config using
-  `devimg/python-dev:latest`
-- `rust/devcontainer.json`: Rust project config using `devimg/rust-dev:latest`
-- `zig/devcontainer.json`: Zig project config using `devimg/zig-dev:latest`
+- `general/devcontainer.json` — general-purpose sandbox on `devimg/agents:latest`
+- `coordinator/devcontainer.json` — coordinator workflow with a read-only parent-area mount
+- `python/devcontainer.json` — Python project config on `devimg/python-dev:latest`
+- `rust/devcontainer.json` — Rust project config on `devimg/rust-dev:latest`
+- `zig/devcontainer.json` — Zig project config on `devimg/zig-dev:latest`
 
-## How It Works
+## Merge Semantics
 
-`dctl init --template <name>` seeds `_base` and the selected template into
-`~/.config/dctl/devcontainer/`, then merges those config files using `jq` and
-writes the result to `~/.cache/dctl/devcontainer/<name>/devcontainer.json`.
-The merged config is registered in `~/.config/dctl/projects.yaml` for runtime
-use.
+`dctl init` merges `_base` with the selected template using `jq`.
 
-Templates contain only project-specific deltas (name, image, language-specific
-mounts, language-specific lifecycle hooks). Shared settings come from `_base`.
+- `mounts` are concatenated (`_base` mounts first, template mounts second)
+- `postCreateCommand` is merged by key
+- `containerEnv` is merged by key
+- scalar fields use last-wins behavior
+
+## Discovery Rules
+
+- Template discovery reads installed templates only from `~/.local/share/dctl/templates/`
+- Directories starting with `_` are internal and excluded from `dctl init --list`
+- User customization happens in the config layer, not by discovering templates from `~/.config`

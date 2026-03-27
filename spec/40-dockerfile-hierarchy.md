@@ -1,34 +1,20 @@
 # Dockerfile Hierarchy
 
+**Status:** Implemented
+
 ## Purpose
 
-This document defines how managed Dockerfiles are resolved and customized for
+This document describes the implemented Dockerfile resolution behavior for
 `dctl image build`.
 
-## Current State
+## Hierarchy
 
-Today:
+Managed Dockerfiles resolve through two layers:
 
-- Managed Dockerfiles live under `~/.local/share/dctl/images/<name>/Dockerfile`
-- `dctl image build` discovers and builds from those installed locations
-- Devcontainer templates refer to image tags such as `devimg/python-dev:latest`
-- Templates and managed image Dockerfiles are intentionally separate concerns
+1. `~/.config/dctl/images/<name>/Dockerfile`
+2. `~/.local/share/dctl/images/<name>/Dockerfile`
 
-This separation is correct and should remain.
-
-## Proposed Hierarchy
-
-Managed image Dockerfiles should resolve through two layers:
-
-1. User custom Dockerfiles
-   - `~/.config/dctl/images/<name>/Dockerfile`
-2. Installed managed Dockerfiles
-   - `~/.local/share/dctl/images/<name>/Dockerfile`
-
-Future implementation should honor XDG variables:
-
-- `${XDG_CONFIG_HOME:-$HOME/.config}/dctl/images/`
-- `${XDG_DATA_HOME:-$HOME/.local/share}/dctl/images/`
+User overrides always win over installed Dockerfiles.
 
 ## Resolution Algorithm
 
@@ -39,60 +25,31 @@ resolve_dockerfile(target):
     error: no Dockerfile found for target
 ```
 
-Selection rules:
+The relevant XDG roots are:
 
-- User overrides always win over installed managed Dockerfiles.
-- `make install` populates only the data directory.
-- `make install` never touches `~/.config/`.
+- `${XDG_CONFIG_HOME:-$HOME/.config}/dctl/images/`
+- `${XDG_DATA_HOME:-$HOME/.local/share}/dctl/images/`
 
 ## User Customization Pattern
 
-The intended workflow is:
-
-1. Copy a managed Dockerfile from the installed data dir into
-   `~/.config/dctl/images/<name>/Dockerfile`
-2. Modify the copied file
+1. Copy an installed managed Dockerfile into `~/.config/dctl/images/<name>/`
+2. Modify it
 3. Run `dctl image build <name>`
-4. `dctl image build` uses the user version automatically
 
-This makes user overrides resilient to project upgrades because the install flow
-does not overwrite files in `~/.config/`.
+`make install` never overwrites files under `~/.config/`.
 
 ## Relationship to Project Registry
 
-The project registry field `DOCKERFILE` can refer to either:
+The registry field `dockerfile` can be:
 
-- A managed target name such as `agents` or `python-dev`
-- A direct path to a custom Dockerfile
+- a managed target name such as `agents` or `python-dev`
+- a direct filesystem path to a Dockerfile
 
-When it is a managed target name, resolution should use the hierarchy above.
-When it is a path, resolution should validate the path directly.
+Managed target names still use the two-layer hierarchy. Direct paths are
+validated directly.
 
-## Template Pairing
+## Architecture Notes
 
-No change to the current separation:
-
-- Templates live in `templates/<name>/devcontainer.json`
-- Managed images live in `images/<name>/Dockerfile`
-- The link between them is the `"image"` field in `devcontainer.json`
-
-This means:
-
-- Templates remain config-only
-- Images remain build-only
-- `dctl init` does not need to scaffold Dockerfiles to preserve the current
-  architecture
-
-## Non-Goals
-
-- This spec does not replace image-tag-based templates with build-based
-  templates.
-- This spec does not require `dctl init` to start generating `.devcontainer/Dockerfile`.
-- This spec does not change the current image names or tags.
-
-## Implementation Notes
-
-The current `lib/dctl/image.sh` discovers image targets by scanning the data
-directory only. Future implementation must merge user image directories and
-installed image directories into one effective target list, with user overrides
-taking precedence for matching names.
+- templates remain config-only artifacts
+- images remain build-only artifacts
+- `dctl init` does not scaffold Dockerfiles
