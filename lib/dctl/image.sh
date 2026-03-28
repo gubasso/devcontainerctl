@@ -246,9 +246,8 @@ cmd_image_build() {
     fi
   done
 
-  local username dotfiles_dir
+  local username
   username="${USER:-$(id -un)}"
-  dotfiles_dir="${DOTFILES:-${HOME}/.dotfiles}"
   local -a build_args
   build_args=(--build-arg "USERNAME=${username}" --build-arg "USER_UID=$(id -u)" --build-arg "USER_GID=$(id -g)")
 
@@ -298,18 +297,6 @@ cmd_image_build() {
     local tag
     tag="$(get_image_tag "$target")"
 
-    local -a extra_contexts
-    extra_contexts=()
-    if [[ "$target" == "agents" || "$target" == "zig-dev" ]]; then
-      if [[ -d "$dotfiles_dir" ]]; then
-        extra_contexts=(--build-context "dotfiles=${dotfiles_dir}")
-      elif [[ "$dry_run" == true ]]; then
-        warn "Dotfiles not found at ${dotfiles_dir} - agents/zig-dev build would fail"
-      else
-        err "Dotfiles not found at ${dotfiles_dir} - set DOTFILES= or ensure ~/.dotfiles exists"
-      fi
-    fi
-
     local -a refresh_flag
     refresh_flag=()
     if [[ "$target" == "agents" && "$refresh_agents" == true ]]; then
@@ -318,9 +305,6 @@ cmd_image_build() {
 
     if [[ "$dry_run" == true ]]; then
       log "[dry-run] Would build: $tag"
-      if [[ ${#extra_contexts[@]} -gt 0 ]]; then
-        log "[dry-run]   dotfiles context: $dotfiles_dir"
-      fi
       if [[ "$full_rebuild" == true ]]; then
         log "[dry-run]   flags: --no-cache (--pull applies to agents only)"
       fi
@@ -352,7 +336,6 @@ cmd_image_build() {
       "${pull_flag[@]}" \
       "${no_cache_flag[@]}" \
       "${refresh_flag[@]}" \
-      "${extra_contexts[@]}" \
       "${build_args[@]}" \
       "${secret_flag[@]}" \
       -t "$tag" \

@@ -4,7 +4,6 @@
 
 - Docker with `buildx`
 - Dev Container CLI installed (`devcontainer`)
-- Dotfiles repo at `~/.dotfiles` or `DOTFILES=/path/to/dotfiles`
 - Managed images built: `dctl image build --all`
 
 ## Setup
@@ -17,7 +16,7 @@ dctl ws up
 dctl ws shell
 ```
 
-Shared settings come from the `_base` template, merged automatically by `dctl init`.
+Shared settings come from the `_00-base` template and any optional `_NN-*` user layers, merged automatically by `dctl init`.
 
 ## Available Templates
 

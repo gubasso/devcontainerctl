@@ -10,7 +10,7 @@ This document describes the implemented template system used by `dctl init`.
 
 Built-in templates in the repository:
 
-- `_base` — internal shared config
+- `_00-base` — internal shared config
 - `general` — minimal general-purpose sandbox on `devimg/agents:latest`
 - `coordinator` — coordinator workflow with parent-area visibility
 - `python` — Python project template on `devimg/python-dev:latest`
@@ -27,12 +27,14 @@ These install to `~/.local/share/dctl/templates/`.
 | `~/.config/dctl/devcontainer/` | Seeded config, then user-edited | `dctl init` + user |
 | `~/.cache/dctl/devcontainer/` | Generated merged config | `dctl` |
 
-`_base` owns the shared infrastructure settings. Selectable templates add the
+`_00-base` owns the shared infrastructure settings. Selectable templates add the
 project-specific image, cache mounts, and lifecycle hooks.
 
 ## Merge Semantics
 
-`dctl init` merges `_base` and the selected template with `jq`.
+`dctl init` discovers user config layers from `~/.config/dctl/devcontainer/_*/`,
+sorts them alphabetically, merges them two-by-two with `jq`, then merges the
+selected template last.
 
 - scalar fields use last-wins behavior
 - `mounts` are concatenated
@@ -44,14 +46,15 @@ project-specific image, cache mounts, and lifecycle hooks.
 
 - discovery reads installed templates only
 - directories beginning with `_` are internal
-- `_base` is excluded from `dctl init --list`
+- `_00-base` is excluded from `dctl init --list`
+- merge-time layer discovery reads user config only
 
 ## `dctl init` Behavior
 
 `dctl init`:
 
-1. seeds `_base` and the selected template into `~/.config/dctl/devcontainer/`
-2. merges them into `~/.cache/dctl/devcontainer/<name>/devcontainer.json`
+1. seeds `_00-base` and the selected template into `~/.config/dctl/devcontainer/`
+2. discovers all `_*/devcontainer.json` files from user config and merges them with the selected template into `~/.cache/dctl/devcontainer/<name>/devcontainer.json`
 3. registers the generated cache path in `~/.config/dctl/projects.yaml`
 
 Cache freshness is based on the config-layer files. `--force` re-seeds config

@@ -32,9 +32,8 @@ RUN set -euo pipefail \
        | tar xz -C "/home/$USERNAME/.local/bin/" \
     && test -x "/home/$USERNAME/.local/bin/zig"
 
-# zig-zls-init: per-project zls download + .nvim.lua scaffold
-# hadolint ignore=DL3022
-COPY --from=dotfiles --chown=$USERNAME:$USERNAME /bin/.local/bin/zig-zls-init /home/$USERNAME/.local/bin/zig-zls-init
+# zig-zls-init: per-project zls download + signature verification
+COPY --chown=$USERNAME:$USERNAME zig-zls-init /home/$USERNAME/.local/bin/zig-zls-init
 RUN chmod +x /home/$USERNAME/.local/bin/zig-zls-init
 
 # Predictable cache path for volume mounts

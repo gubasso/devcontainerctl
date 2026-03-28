@@ -105,7 +105,7 @@ Expected result:
 - The cached config at
   `~/.cache/dctl/devcontainer/coordinator/devcontainer.json` contains the
   parent-area read-only mount from the `coordinator` template and the shared
-  mounts from `_base`
+  mounts from `_00-base`
 
 ### 8. Resolution logging
 
@@ -203,7 +203,7 @@ Scenario:
 
 Expected result:
 
-- The cached config contains all shared settings from `_base`
+- The cached config contains all shared settings from `_00-base`
 - The cached config contains Python-specific settings from the selected template
 
 ### 16. General template merge
@@ -214,7 +214,7 @@ Scenario:
 
 Expected result:
 
-- The cached config contains all shared settings from `_base`
+- The cached config contains all shared settings from `_00-base`
 - The cached config contains the general template's `name`, `image`, and
   pre-commit bootstrap
 
@@ -223,7 +223,7 @@ Expected result:
 Scenario:
 
 - User runs `dctl init --template python`
-- User edits `~/.config/dctl/devcontainer/_base/devcontainer.json`
+- User edits `~/.config/dctl/devcontainer/_00-base/devcontainer.json`
 - User runs `dctl init` again
 
 Expected result:
@@ -242,12 +242,12 @@ Expected result:
 - Config files are re-seeded from installed templates
 - The cached config is regenerated regardless of mtime freshness
 
-### 19. User edits `_base` config
+### 19. User edits `_00-base` config
 
 Scenario:
 
 - User runs `dctl init --template python`
-- User edits `~/.config/dctl/devcontainer/_base/devcontainer.json`
+- User edits `~/.config/dctl/devcontainer/_00-base/devcontainer.json`
 - User runs `dctl init --force --template python`
 
 Expected result:
@@ -267,7 +267,7 @@ Expected result:
 
 - The user's edited template config is preserved
 - The cached config reflects the user's custom template settings merged with
-  `_base`
+  `_00-base`
 
 ### 21. Cache deletion is safe
 
@@ -292,16 +292,16 @@ Expected result:
 - Shared devcontainer config lives in templates, not in the Dockerfile
 - The Dockerfile focuses on image construction only
 
-### 23. `_base` excluded from template discovery
+### 23. `_00-base` excluded from template discovery
 
 Scenario:
 
-- `~/.local/share/dctl/templates/_base/devcontainer.json` exists
+- `~/.local/share/dctl/templates/_00-base/devcontainer.json` exists
 - User runs `dctl init --list`
 
 Expected result:
 
-- `_base` does not appear in the template list
+- `_00-base` does not appear in the template list
 - Only user-selectable templates are listed
 
 ### 24. `make install` scope

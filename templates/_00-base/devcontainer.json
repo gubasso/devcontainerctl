@@ -1,0 +1,43 @@
+{
+  "remoteUser": "${localEnv:USER}",
+  "updateRemoteUserUID": false,
+  "init": true,
+  "shutdownAction": "none",
+  "containerEnv": {
+    "TERM": "${localEnv:TERM}",
+    "COLORTERM": "truecolor"
+  },
+  "mounts": [
+    {
+      "source": "${localEnv:HOME}/.gitconfig",
+      "target": "${localEnv:HOME}/.gitconfig",
+      "type": "bind",
+      "readonly": true
+    },
+    {
+      "source": "${localEnv:HOME}/.config/gh",
+      "target": "${localEnv:HOME}/.config/gh",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}/.config/glab-cli",
+      "target": "${localEnv:HOME}/.config/glab-cli",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}/.claude",
+      "target": "${localEnv:HOME}/.claude",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}/.claude.json",
+      "target": "${localEnv:HOME}/.claude.json",
+      "type": "bind"
+    },
+    {
+      "source": "/tmp",
+      "target": "/tmp",
+      "type": "bind"
+    }
+  ]
+}

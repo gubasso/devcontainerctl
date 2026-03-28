@@ -7,9 +7,9 @@ Reusable project templates live here for versioned tracking in this repo.
 ```text
 templates/  ──make install──>  ~/.local/share/dctl/templates/
                                   │
-                                  └──dctl init──>  ~/.config/dctl/devcontainer/
-                                                       │
-                                                       └──merge──>  ~/.cache/dctl/devcontainer/
+                                  └──seed if missing──>  ~/.config/dctl/devcontainer/
+                                                             │
+                                                             └──merge _00-base + _NN-* + template──>  ~/.cache/dctl/devcontainer/
 ```
 
 - **Installed** (`~/.local/share/dctl/templates/`): built-in templates shipped by `make install`
@@ -20,7 +20,7 @@ templates/  ──make install──>  ~/.local/share/dctl/templates/
 
 ### Internal
 
-- `_base/devcontainer.json` — shared infrastructure settings (remote user, shared mounts, container env, dotfiles bootstrap). Internal only and never user-selectable.
+- `_00-base/devcontainer.json` — shared universal settings (remote user, auth mounts, terminal env). Internal only and never user-selectable.
 
 ### Selectable
 
@@ -32,9 +32,9 @@ templates/  ──make install──>  ~/.local/share/dctl/templates/
 
 ## Merge Semantics
 
-`dctl init` merges `_base` with the selected template using `jq`.
+`dctl init` merges all user config layers named `_*/devcontainer.json` in alphabetical order, then merges the selected template on top using `jq`.
 
-- `mounts` are concatenated (`_base` mounts first, template mounts second)
+- `mounts` are concatenated in merge order
 - `postCreateCommand` is merged by key
 - `containerEnv` is merged by key
 - scalar fields use last-wins behavior
@@ -43,4 +43,4 @@ templates/  ──make install──>  ~/.local/share/dctl/templates/
 
 - Template discovery reads installed templates only from `~/.local/share/dctl/templates/`
 - Directories starting with `_` are internal and excluded from `dctl init --list`
-- User customization happens in the config layer, not by discovering templates from `~/.config`
+- User customization happens in `~/.config/dctl/devcontainer/`, and those user config files are the only merge inputs

@@ -105,7 +105,7 @@ _strip_jsonc_comments() {
   sed '/^[[:space:]]*\/\//d' "$1"
 }
 
-merge_base_and_template() {
+merge_two_configs() {
   local base_path="$1"
   local template_path="$2"
 
@@ -118,14 +118,40 @@ merge_base_and_template() {
   ' <(_strip_jsonc_comments "$base_path") <(_strip_jsonc_comments "$template_path")
 }
 
+discover_config_layers() {
+  local layers=()
+  shopt -s nullglob
+  local dir
+  for dir in "$DCTL_DEVCONTAINER_DIR"/_*/; do
+    if [[ -f "${dir}devcontainer.json" ]]; then
+      layers+=("${dir}devcontainer.json")
+    fi
+  done
+  shopt -u nullglob
+  [[ ${#layers[@]} -gt 0 ]] && printf '%s\n' "${layers[@]}"
+}
+
+discover_installed_layers() {
+  local layers=()
+  shopt -s nullglob
+  local dir
+  for dir in "$TEMPLATES_DIR"/_*/; do
+    if [[ -f "${dir}devcontainer.json" ]]; then
+      layers+=("$(basename "$dir")")
+    fi
+  done
+  shopt -u nullglob
+  [[ ${#layers[@]} -gt 0 ]] && printf '%s\n' "${layers[@]}"
+}
+
 cache_is_fresh() {
   local cached_path="$1"
-  local base_path="$2"
-  local template_path="$3"
-
+  shift
   [[ -f "$cached_path" ]] || return 1
-  [[ "$cached_path" -nt "$base_path" ]] || return 1
-  [[ "$cached_path" -nt "$template_path" ]] || return 1
+  local source_path
+  for source_path in "$@"; do
+    [[ "$cached_path" -nt "$source_path" ]] || return 1
+  done
 }
 
 _seed_config_file() {
@@ -146,17 +172,25 @@ deploy_template_config() {
 
   require_cmd jq
 
-  local config_base config_tmpl
-  config_base="$(config_devcontainer_path _base)"
-  config_tmpl="$(config_devcontainer_path "$template")"
-
-  # Seed config from installed templates (only if config doesn't exist or --force)
-  if [[ ! -f "$config_base" ]] || [[ "$force" == true ]]; then
-    local installed_base
-    installed_base="$(installed_template_path _base)"
-    [[ -f "$installed_base" ]] || err "Base template not found. Install with: make install"
-    _seed_config_file "$installed_base" "$config_base" "$force"
+  local -a installed_layers=()
+  mapfile -t installed_layers < <(discover_installed_layers)
+  if [[ ${#installed_layers[@]} -eq 0 ]]; then
+    err "No composable layers found in installed templates. Install with: make install"
   fi
+
+  local layer_name
+  for layer_name in "${installed_layers[@]}"; do
+    local installed_layer config_layer
+    installed_layer="$(installed_template_path "$layer_name")"
+    [[ -f "$installed_layer" ]] || err "Composable layer not found: $layer_name"
+    config_layer="$(config_devcontainer_path "$layer_name")"
+    if [[ ! -f "$config_layer" ]] || [[ "$force" == true ]]; then
+      _seed_config_file "$installed_layer" "$config_layer" "$force"
+    fi
+  done
+
+  local config_tmpl
+  config_tmpl="$(config_devcontainer_path "$template")"
   if [[ ! -f "$config_tmpl" ]] || [[ "$force" == true ]]; then
     local installed_tmpl
     installed_tmpl="$(installed_template_path "$template")"
@@ -170,7 +204,13 @@ deploy_template_config() {
   local cached_path
   cached_path="$(deployed_devcontainer_path "$template")"
 
-  if [[ "$force" != true ]] && cache_is_fresh "$cached_path" "$config_base" "$config_tmpl"; then
+  local -a config_layers=()
+  mapfile -t config_layers < <(discover_config_layers)
+  if [[ ${#config_layers[@]} -eq 0 ]]; then
+    err "No composable config layers found in ${DCTL_DEVCONTAINER_DIR}. Add an _NN-* layer or run dctl init after make install."
+  fi
+
+  if [[ "$force" != true ]] && cache_is_fresh "$cached_path" "${config_layers[@]}" "$config_tmpl"; then
     log "Using cached config: $cached_path" >&2
     printf '%s\n' "$cached_path"
     return 0
@@ -179,10 +219,28 @@ deploy_template_config() {
   mkdir -p "$(dirname "$cached_path")"
   local tmp_path
   tmp_path="$(mktemp "${cached_path}.tmp.XXXXXX")"
-  if ! merge_base_and_template "$config_base" "$config_tmpl" > "$tmp_path"; then
-    rm -f "$tmp_path"
-    err "Failed to merge base and template for '$template'"
+
+  local tmp_acc
+  tmp_acc="$(mktemp "${cached_path}.layers.XXXXXX")"
+  cp "${config_layers[0]}" "$tmp_acc"
+
+  local layer_path
+  for layer_path in "${config_layers[@]:1}"; do
+    local tmp_next
+    tmp_next="$(mktemp "${cached_path}.layers.XXXXXX")"
+    if ! merge_two_configs "$tmp_acc" "$layer_path" > "$tmp_next"; then
+      rm -f "$tmp_path" "$tmp_acc" "$tmp_next"
+      err "Failed to merge composable layer '$layer_path' for '$template'"
+    fi
+    rm -f "$tmp_acc"
+    tmp_acc="$tmp_next"
+  done
+
+  if ! merge_two_configs "$tmp_acc" "$config_tmpl" > "$tmp_path"; then
+    rm -f "$tmp_path" "$tmp_acc"
+    err "Failed to merge config layers and template for '$template'"
   fi
+  rm -f "$tmp_acc"
   mv "$tmp_path" "$cached_path"
   log "Generated config for '$template' at $cached_path" >&2
   printf '%s\n' "$cached_path"

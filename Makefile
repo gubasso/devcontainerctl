@@ -6,7 +6,7 @@ SYSTEMD_DIR ?= $(HOME)/.local/share/systemd/user
 INSTALL := install
 
 IMAGE_NAMES := agents python-dev rust-dev zig-dev
-TEMPLATE_DIRS := python rust zig general coordinator _base
+TEMPLATE_DIRS := python rust zig general coordinator _00-base
 LIB_FILES := common.sh ws.sh image.sh init.sh test.sh auth.sh config.sh
 
 .PHONY: install uninstall install-systemd uninstall-systemd test test-unit test-integration lint check
@@ -20,7 +20,9 @@ install:
 	done
 	for image in $(IMAGE_NAMES); do \
 		$(INSTALL) -d "$(DATA_DIR)/images/$$image"; \
-		$(INSTALL) -m 644 "images/$$image/Dockerfile" "$(DATA_DIR)/images/$$image/Dockerfile"; \
+		for file in images/$$image/*; do \
+			$(INSTALL) -m 644 "$$file" "$(DATA_DIR)/images/$$image/$$(basename $$file)"; \
+		done; \
 	done
 	$(INSTALL) -d "$(DATA_DIR)/templates"
 	for template in $(TEMPLATE_DIRS); do \
@@ -43,7 +45,9 @@ uninstall:
 	done
 	rmdir "$(LIB_DIR)" 2>/dev/null || true
 	for image in $(IMAGE_NAMES); do \
-		rm -f "$(DATA_DIR)/images/$$image/Dockerfile"; \
+		for file in images/$$image/*; do \
+			rm -f "$(DATA_DIR)/images/$$image/$$(basename $$file)"; \
+		done; \
 		rmdir "$(DATA_DIR)/images/$$image" 2>/dev/null || true; \
 	done
 	rmdir "$(DATA_DIR)/images" 2>/dev/null || true

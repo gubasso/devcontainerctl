@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+allow_unsigned=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --allow-unsigned)
+      allow_unsigned=true
+      shift
+      ;;
+    *)
+      printf 'ERROR: unknown argument: %s\n' "$1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+zig_version="$(zig version)"
+
+arch="$(uname -m)"
+case "$arch" in
+  x86_64|amd64) arch="x86_64" ;;
+  aarch64|arm64) arch="aarch64" ;;
+  *)
+    printf 'ERROR: unsupported architecture: %s\n' "$arch" >&2
+    exit 1
+    ;;
+esac
+
+os="$(uname -s)"
+case "$os" in
+  Linux) os="linux" ;;
+  Darwin) os="macos" ;;
+  *)
+    printf 'ERROR: unsupported operating system: %s\n' "$os" >&2
+    exit 1
+    ;;
+esac
+
+platform="${arch}-${os}"
+api_url="https://releases.zigtools.org/v1/zls/select-version?zig_version=${zig_version}&compatibility=full"
+release_json="$(curl -fsSL "$api_url")"
+tarball_url="$(jq -r --arg platform "$platform" '.[$platform].tarball // empty' <<<"$release_json")"
+
+if [[ -z "$tarball_url" ]]; then
+  printf 'ERROR: no zls tarball found for zig %s on %s\n' "$zig_version" "$platform" >&2
+  exit 1
+fi
+
+tmpdir="$(mktemp -d)"
+archive_path="${tmpdir}/zls.tar.xz"
+sig_path="${archive_path}.minisig"
+extract_dir="${tmpdir}/extract"
+mkdir -p "$extract_dir" "$HOME/.local/bin"
+trap 'rm -rf "$tmpdir"' EXIT
+
+curl -fsSL "$tarball_url" -o "$archive_path"
+
+if [[ "$allow_unsigned" != true ]]; then
+  curl -fsSL "${tarball_url}.minisig" -o "$sig_path"
+  minisign -Vm "$archive_path" -P 'RWR+9B91GBZ0zOjh6Lr17+zKf5BoSuFvrx2xSeDE57uIYvnKBGmMjOex' -x "$sig_path"
+fi
+
+tar -xJf "$archive_path" -C "$extract_dir"
+
+if [[ ! -x "${extract_dir}/zls" ]]; then
+  printf 'ERROR: extracted archive did not contain an executable zls binary\n' >&2
+  exit 1
+fi
+
+install -m 755 "${extract_dir}/zls" "$HOME/.local/bin/zls"
+zls --version
