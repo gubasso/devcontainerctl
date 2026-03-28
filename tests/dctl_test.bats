@@ -369,22 +369,63 @@ YAML
   assert_mock_called "CMD_TEST_CALLED"
 }
 
-@test "cmd_init --force re-deploys and re-registers" {
+@test "cmd_init --force rebuilds cache and re-registers without overwriting config" {
   create_template_fixture python "devimg/python-dev:latest"
-  # Pre-create deployed config with different content
-  local deployed="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
-  mkdir -p "$(dirname "$deployed")"
-  printf '{"image": "old-custom"}\n' >"$deployed"
   # shellcheck disable=SC2329
   cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
 
+  # First init to seed config
+  run cmd_init --template python
+  [ "$status" -eq 0 ]
+
+  # Edit user config
+  local config="${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
+  printf '{"image": "custom-python:latest"}\n' > "$config"
+
+  # Force rebuild — should NOT overwrite config
   run cmd_init --force --template python
   [ "$status" -eq 0 ]
-  # Deployed config overwritten with template content
-  grep -q "python-dev" "$deployed"
-  # Registry created
+
+  # User config preserved
+  [ "$(jq -r '.image' "$config")" = "custom-python:latest" ]
+
+  # Cache regenerated from user config
+  local deployed="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
+  [ "$(jq -r '.image' "$deployed")" = "custom-python:latest" ]
+
+  # Registry points to cache
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
-  [ -f "$registry" ]
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "$deployed" ]
+}
+
+@test "cmd_init --reset re-seeds config, rebuilds cache, and re-registers" {
+  create_template_fixture python "devimg/python-dev:latest"
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  # First init to seed config
+  run cmd_init --template python
+  [ "$status" -eq 0 ]
+
+  # Edit user config
+  local config="${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
+  printf '{"image": "custom-python:latest"}\n' > "$config"
+
+  # Reset — SHOULD overwrite config back to template
+  run cmd_init --reset --template python
+  [ "$status" -eq 0 ]
+
+  # Config overwritten back to installed template
+  [ "$(jq -r '.image' "$config")" = "devimg/python-dev:latest" ]
+
+  # Cache regenerated from template
+  local deployed="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
+  [ "$(jq -r '.image' "$deployed")" = "devimg/python-dev:latest" ]
+
+  # Registry points to cache
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
   local canonical
   canonical="$(resolve_canonical_project_name)"
   [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "$deployed" ]
@@ -729,6 +770,14 @@ MOCK
   [[ "$output" == *"python"* ]]
 }
 
+@test "cmd_init --help documents --force and --reset" {
+  run cmd_init --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--force"* ]]
+  [[ "$output" == *"--reset"* ]]
+  [[ "$output" == *"preserves user config"* ]]
+}
+
 # --- Dockerfile resolution ---
 
 @test "resolve_dockerfile returns installed path" {
@@ -986,7 +1035,7 @@ JSON
 @test "deploy_template_config uses user-edited _00-base config" {
   create_template_fixture python "devimg/python-dev:latest"
 
-  run deploy_template_config python true
+  run deploy_template_config python false true
   [ "$status" -eq 0 ]
 
   printf '{"remoteUser": "custom-user", "init": false}\n' \
@@ -1002,7 +1051,7 @@ JSON
 @test "deploy_template_config uses user-edited template config" {
   create_template_fixture python "devimg/python-dev:latest"
 
-  run deploy_template_config python true
+  run deploy_template_config python false true
   [ "$status" -eq 0 ]
 
   printf '{"image": "custom-python:latest"}\n' \
@@ -1018,7 +1067,7 @@ JSON
 @test "deploy_template_config preserves existing config without force" {
   create_template_fixture python "devimg/python-dev:latest"
 
-  run deploy_template_config python true
+  run deploy_template_config python false true
   [ "$status" -eq 0 ]
 
   local config="${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
@@ -1032,10 +1081,10 @@ JSON
   [ "$(jq -r '.image' "$config")" = "custom:latest" ]
 }
 
-@test "deploy_template_config seeds both config files" {
+@test "deploy_template_config seeds both config files on reset" {
   create_template_fixture python "devimg/python-dev:latest"
 
-  run deploy_template_config python true
+  run deploy_template_config python false true
   [ "$status" -eq 0 ]
 
   [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json" ]
@@ -1106,6 +1155,49 @@ YAML
   [ "$(jq -r '.remoteUser' "$deployed")" = "edited-user" ]
 }
 
+@test "cmd_init migrates legacy config-path registry to cache path" {
+  create_template_fixture python "devimg/python-dev:latest"
+  # shellcheck disable=SC2329
+  cmd_test() { :; }
+
+  # Seed config files (simulates pre-refactor state)
+  run deploy_template_config python false true
+  [ "$status" -eq 0 ]
+
+  # Set up registry pointing to config path (legacy)
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  local config_path="${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
+  cat >"$registry" <<YAML
+${canonical}:
+  devcontainer: ${config_path}
+  dockerfile: custom-target
+  image: custom-img:latest
+  sibling_discovery: false
+YAML
+
+  # Remove any cached file to prove migration creates it
+  rm -rf "${XDG_CACHE_HOME}/dctl/devcontainer/python"
+
+  run cmd_init
+  [ "$status" -eq 0 ]
+
+  # Cache now exists with merged content
+  local deployed="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
+  [ -f "$deployed" ]
+  [ "$(jq -r '.remoteUser' "$deployed")" = "testuser" ]
+  [ "$(jq -r '.image' "$deployed")" = "devimg/python-dev:latest" ]
+
+  # Registry updated to cache path
+  [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "$deployed" ]
+
+  # Other registry fields preserved (not destroyed by migration)
+  [ "$(yq -r ".\"${canonical}\".dockerfile" "$registry")" = "custom-target" ]
+  [ "$(yq -r ".\"${canonical}\".image" "$registry")" = "custom-img:latest" ]
+  [ "$(yq -r ".\"${canonical}\".sibling_discovery" "$registry")" = "false" ]
+}
+
 # bats test_tags=unit
 @test "cmd_init auto-forces registry when path is stale and regenerates cache from config" {
   create_template_fixture python "devimg/python-dev:latest"
@@ -1160,4 +1252,7 @@ YAML
   [ "$(yq -r ".\"${canonical}\".image" "$registry")" = "devimg/python-dev:latest" ]
   # sibling_discovery preserved
   [ "$(yq -r ".\"${canonical}\".sibling_discovery" "$registry")" = "false" ]
+  # Config files NOT overwritten (safe --force)
+  local config="${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
+  [ -f "$config" ]
 }

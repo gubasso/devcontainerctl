@@ -23,7 +23,8 @@ project registry, then run the setup smoke test.
 Options:
   --template <name>   Use a specific template
   --list              List available templates and exit
-  --force             Re-deploy template and update registry even if already configured
+  --force             Rebuild cached merged config and re-register (preserves user config)
+  --reset             Re-seed config from installed templates, rebuild cache, and re-register
   --no-register       Skip project registry registration
   --help, -h          Show this help text
 
@@ -32,6 +33,7 @@ Examples:
   dctl init --list
   dctl init
   dctl init --force --template rust
+  dctl init --reset --template rust
 EOF
 }
 
@@ -169,6 +171,7 @@ _seed_config_file() {
 deploy_template_config() {
   local template="$1"
   local force="${2:-false}"
+  local reset="${3:-false}"
 
   require_cmd jq
 
@@ -184,21 +187,21 @@ deploy_template_config() {
     installed_layer="$(installed_template_path "$layer_name")"
     [[ -f "$installed_layer" ]] || err "Composable layer not found: $layer_name"
     config_layer="$(config_devcontainer_path "$layer_name")"
-    if [[ ! -f "$config_layer" ]] || [[ "$force" == true ]]; then
-      _seed_config_file "$installed_layer" "$config_layer" "$force"
+    if [[ ! -f "$config_layer" ]] || [[ "$reset" == true ]]; then
+      _seed_config_file "$installed_layer" "$config_layer" "$reset"
     fi
   done
 
   local config_tmpl
   config_tmpl="$(config_devcontainer_path "$template")"
-  if [[ ! -f "$config_tmpl" ]] || [[ "$force" == true ]]; then
+  if [[ ! -f "$config_tmpl" ]] || [[ "$reset" == true ]]; then
     local installed_tmpl
     installed_tmpl="$(installed_template_path "$template")"
     if [[ ! -f "$installed_tmpl" ]]; then
       print_available_templates
       err "Unknown template: $template"
     fi
-    _seed_config_file "$installed_tmpl" "$config_tmpl" "$force"
+    _seed_config_file "$installed_tmpl" "$config_tmpl" "$reset"
   fi
 
   local cached_path
@@ -210,7 +213,7 @@ deploy_template_config() {
     err "No composable config layers found in ${DCTL_DEVCONTAINER_DIR}. Add an _NN-* layer or run dctl init after make install."
   fi
 
-  if [[ "$force" != true ]] && cache_is_fresh "$cached_path" "${config_layers[@]}" "$config_tmpl"; then
+  if [[ "$force" != true && "$reset" != true ]] && cache_is_fresh "$cached_path" "${config_layers[@]}" "$config_tmpl"; then
     log "Using cached config: $cached_path" >&2
     printf '%s\n' "$cached_path"
     printf 'cached\n'
@@ -262,6 +265,7 @@ template_registry_defaults() {
 cmd_init() {
   local template=""
   local force=false
+  local reset=false
   local list=false
   local register=true
 
@@ -278,6 +282,10 @@ cmd_init() {
         ;;
       --force)
         force=true
+        shift
+        ;;
+      --reset)
+        reset=true
         shift
         ;;
       --no-register)
@@ -308,26 +316,48 @@ cmd_init() {
     existing_registry_path="$(_registry_lookup_devcontainer "$canonical_name")"
   fi
 
-  local registry_force="$force"
-  if [[ -n "$existing_registry_path" && "$force" != true ]]; then
+  local registry_force=false
+  if [[ "$force" == true || "$reset" == true ]]; then
+    registry_force=true
+  fi
+
+  if [[ -n "$existing_registry_path" && "$force" != true && "$reset" != true ]]; then
     if [[ -f "$existing_registry_path" ]]; then
-      # If path is inside our cache dir, refresh cache from config if stale
       if [[ "$existing_registry_path" == "${DCTL_DEVCONTAINER_CACHE_DIR}/"* ]]; then
+        # Cache path — refresh if stale
         local registered_template
         registered_template="$(basename "$(dirname "$existing_registry_path")")"
         local refreshed_output refreshed_path
-        refreshed_output="$(deploy_template_config "$registered_template" false)" || return $?
+        refreshed_output="$(deploy_template_config "$registered_template" false false)" || return $?
         refreshed_path="$(head -1 <<< "$refreshed_output")"
         # shellcheck disable=SC2034
         DCTL_CONFIG_STATUS="$(tail -1 <<< "$refreshed_output")"
         DCTL_CLI_CONFIG="$refreshed_path" cmd_test
+        return $?
+
+      elif [[ "$existing_registry_path" == "${DCTL_DEVCONTAINER_DIR}/"* ]]; then
+        # Legacy config path — migrate to cache
+        local registered_template
+        registered_template="$(basename "$(dirname "$existing_registry_path")")"
+        warn "Migrating legacy config path to cache for template '$registered_template'"
+        local migrate_output migrate_path
+        migrate_output="$(deploy_template_config "$registered_template" false false)" || return $?
+        migrate_path="$(head -1 <<< "$migrate_output")"
+        # shellcheck disable=SC2034
+        DCTL_CONFIG_STATUS="$(tail -1 <<< "$migrate_output")"
+        # Update only the devcontainer field, preserving dockerfile/image/sibling_discovery
+        _registry_update_devcontainer "$canonical_name" "$migrate_path"
+        DCTL_CLI_CONFIG="$migrate_path" cmd_test
+        return $?
+
       else
+        # External path — use as-is
         # shellcheck disable=SC2034
         DCTL_CONFIG_STATUS="existing"
         warn "Project '$canonical_name' already registered with config at $existing_registry_path; skipping"
         DCTL_CLI_CONFIG="$existing_registry_path" cmd_test
+        return $?
       fi
-      return $?
     fi
     # Registry entry exists but path is stale — force registry update only
     warn "Registered config path no longer exists: $existing_registry_path; re-deploying"
@@ -341,7 +371,7 @@ cmd_init() {
   fi
 
   local deploy_output deployed_config
-  deploy_output="$(deploy_template_config "$template" "$force")" || return $?
+  deploy_output="$(deploy_template_config "$template" "$force" "$reset")" || return $?
   deployed_config="$(head -1 <<< "$deploy_output")"
   # shellcheck disable=SC2034
   DCTL_CONFIG_STATUS="$(tail -1 <<< "$deploy_output")"
