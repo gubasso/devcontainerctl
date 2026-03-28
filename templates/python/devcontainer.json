@@ -10,7 +10,6 @@
     }
   ],
   "postCreateCommand": {
-    "python": "bash -ic dev-py",
     "pre-commit": "pre-commit install"
   }
 }

@@ -33,8 +33,8 @@ create_template_fixture() {
 }
 
 create_base_template_fixture() {
-  mkdir -p "${XDG_DATA_HOME}/dctl/templates/_base"
-  cat >"${XDG_DATA_HOME}/dctl/templates/_base/devcontainer.json" <<'BASEJSON'
+  mkdir -p "${XDG_DATA_HOME}/dctl/templates/_00-base"
+  cat >"${XDG_DATA_HOME}/dctl/templates/_00-base/devcontainer.json" <<'BASEJSON'
 {
   "remoteUser": "testuser",
   "init": true,
@@ -309,7 +309,9 @@ teardown() {
 
   [ -f "${lib_dir}/common.sh" ]
   [ -f "${data_home}/dctl/images/agents/Dockerfile" ]
+  [ -f "${data_home}/dctl/images/zig-dev/zig-zls-init" ]
   [ -f "${data_home}/dctl/templates/python/devcontainer.json" ]
+  [ -f "${data_home}/dctl/templates/_00-base/devcontainer.json" ]
 
   run env XDG_DATA_HOME="$data_home" HOME="${TEST_TMPDIR}/home" \
     "${bin_dir}/dctl" image list
@@ -482,38 +484,6 @@ YAML
   [ "$status" -eq 0 ]
 }
 
-# Dotfiles validation
-
-@test "ws up fails early when dotfiles directory is missing" {
-  local missing_home
-  missing_home="${TEST_TMPDIR}/home-no-dotfiles"
-  mkdir -p "$missing_home"
-
-  enable_mocks
-  create_mock devcontainer 0 ""
-
-  unset DOTFILES
-  HOME="$missing_home" run cmd_ws_up
-  [ "$status" -eq 1 ]
-  [[ "$output" == *"Dotfiles not found"* ]]
-  assert_mock_not_called "devcontainer "
-}
-
-@test "ws reup fails early when dotfiles directory is missing" {
-  local missing_home
-  missing_home="${TEST_TMPDIR}/home-no-dotfiles"
-  mkdir -p "$missing_home"
-
-  enable_mocks
-  create_mock devcontainer 0 ""
-
-  unset DOTFILES
-  HOME="$missing_home" run cmd_ws_reup
-  [ "$status" -eq 1 ]
-  [[ "$output" == *"Dotfiles not found"* ]]
-  assert_mock_not_called "devcontainer "
-}
-
 # --- Git worktree mount detection ---
 
 @test "collect_git_worktree_mounts returns empty for non-git workspace" {
@@ -562,20 +532,6 @@ YAML
   run cmd_ws_up
   [ "$status" -eq 0 ]
   assert_mock_called "--mount type=bind,source=${main_repo}/.git,target=${main_repo}/.git"
-}
-
-@test "ws up calls devcontainer when DOTFILES is valid" {
-  mkdir -p "$(workspace_devcontainer_dir)"
-  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
-  enable_mocks
-  create_mock devcontainer 0 ""
-
-  DOTFILES="${TEST_TMPDIR}/dotfiles"
-  mkdir -p "$DOTFILES"
-
-  run cmd_ws_up
-  [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config"
 }
 
 # --- Auth token forwarding via devcontainer exec ---
@@ -762,7 +718,7 @@ MOCK
   [[ "$output" == *"python"* ]]
   [[ "$output" == *"rust"* ]]
   [[ "$output" != *"custom"* ]]
-  [[ "$output" != *"_base"* ]]
+  [[ "$output" != *"_00-base"* ]]
 }
 
 @test "cmd_init --list prints templates to stdout" {
@@ -895,38 +851,102 @@ YAML
   [ "$(yq -r ".\"${canonical}\".image" "$registry")" = "devimg/agents:latest" ]
 }
 
-@test "cmd_init --template python merges _base and template content" {
-  create_template_fixture python "devimg/python-dev:latest"
-  # shellcheck disable=SC2329
-  cmd_test() { :; }
+@test "discover_config_layers returns sorted _* dirs from user config" {
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base"
+  printf '{"name":"base"}\n' > "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json"
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/_10-extra"
+  printf '{"name":"ten"}\n' > "${XDG_CONFIG_HOME}/dctl/devcontainer/_10-extra/devcontainer.json"
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/_05-middle"
+  printf '{"name":"five"}\n' > "${XDG_CONFIG_HOME}/dctl/devcontainer/_05-middle/devcontainer.json"
 
-  run cmd_init --template python
+  run discover_config_layers
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json" ]
+  [ "${lines[1]}" = "${XDG_CONFIG_HOME}/dctl/devcontainer/_05-middle/devcontainer.json" ]
+  [ "${lines[2]}" = "${XDG_CONFIG_HOME}/dctl/devcontainer/_10-extra/devcontainer.json" ]
+}
+
+@test "cache_is_fresh checks all layer files" {
+  local cached="${TEST_TMPDIR}/cached.json"
+  local layer_a="${TEST_TMPDIR}/layer-a.json"
+  local layer_b="${TEST_TMPDIR}/layer-b.json"
+  local template="${TEST_TMPDIR}/template.json"
+
+  printf '{}\n' > "$layer_a"
+  printf '{}\n' > "$layer_b"
+  printf '{}\n' > "$template"
+  sleep 1
+  printf '{}\n' > "$cached"
+
+  run cache_is_fresh "$cached" "$layer_a" "$layer_b" "$template"
+  [ "$status" -eq 0 ]
+
+  sleep 1
+  touch "$layer_b"
+  run cache_is_fresh "$cached" "$layer_a" "$layer_b" "$template"
+  [ "$status" -ne 0 ]
+}
+
+@test "deploy_template_config works with single layer plus template" {
+  create_template_fixture python "devimg/python-dev:latest"
+
+  run deploy_template_config python
   [ "$status" -eq 0 ]
 
   local deployed="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
   [ -f "$deployed" ]
-  # Base fields present
   [ "$(jq -r '.remoteUser' "$deployed")" = "testuser" ]
   [ "$(jq -r '.init' "$deployed")" = "true" ]
   [ "$(jq -r '.shutdownAction' "$deployed")" = "none" ]
-  # Template fields present
   [ "$(jq -r '.image' "$deployed")" = "devimg/python-dev:latest" ]
 }
 
-@test "cmd_init --template general merges _base and template content" {
-  create_template_fixture general "devimg/agents:latest"
-  # shellcheck disable=SC2329
-  cmd_test() { :; }
+@test "deploy_template_config merges multiple layers with correct ordering" {
+  create_template_fixture python "devimg/python-dev:latest"
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/_05-middle"
+  cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/_05-middle/devcontainer.json" <<'JSON'
+{
+  "name": "middle",
+  "containerEnv": {
+    "LEVEL": "middle"
+  },
+  "mounts": [
+    {
+      "source": "middle",
+      "target": "/middle",
+      "type": "volume"
+    }
+  ]
+}
+JSON
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/_10-top"
+  cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/_10-top/devcontainer.json" <<'JSON'
+{
+  "name": "top",
+  "containerEnv": {
+    "LEVEL": "top"
+  },
+  "mounts": [
+    {
+      "source": "top",
+      "target": "/top",
+      "type": "volume"
+    }
+  ]
+}
+JSON
 
-  run cmd_init --template general
+  run deploy_template_config python
   [ "$status" -eq 0 ]
 
-  local deployed="${XDG_CACHE_HOME}/dctl/devcontainer/general/devcontainer.json"
+  local deployed="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
   [ -f "$deployed" ]
-  # Base fields present
-  [ "$(jq -r '.remoteUser' "$deployed")" = "testuser" ]
-  # Template fields present
-  [ "$(jq -r '.image' "$deployed")" = "devimg/agents:latest" ]
+  [ "$(jq -r '.name' "$deployed")" = "top" ]
+  [ "$(jq -r '.containerEnv.LEVEL' "$deployed")" = "top" ]
+  [ "$(jq -r '.image' "$deployed")" = "devimg/python-dev:latest" ]
+  [ "$(jq '.mounts | length' "$deployed")" = "2" ]
+  [ "$(jq -r '.mounts[0].target' "$deployed")" = "/middle" ]
+  [ "$(jq -r '.mounts[1].target' "$deployed")" = "/top" ]
 }
 
 @test "deploy_template_config regenerates cache when config is newer" {
@@ -942,7 +962,7 @@ YAML
   first_mtime="$(stat -c %Y "$deployed")"
 
   sleep 1
-  touch "${XDG_CONFIG_HOME}/dctl/devcontainer/_base/devcontainer.json"
+  touch "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json"
 
   run deploy_template_config python
   [ "$status" -eq 0 ]
@@ -963,14 +983,14 @@ YAML
   [[ "$output" == *"Using cached config"* ]]
 }
 
-@test "deploy_template_config uses user-edited _base config" {
+@test "deploy_template_config uses user-edited _00-base config" {
   create_template_fixture python "devimg/python-dev:latest"
 
   run deploy_template_config python true
   [ "$status" -eq 0 ]
 
   printf '{"remoteUser": "custom-user", "init": false}\n' \
-    > "${XDG_CONFIG_HOME}/dctl/devcontainer/_base/devcontainer.json"
+    > "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json"
 
   run deploy_template_config python
   [ "$status" -eq 0 ]
@@ -1018,7 +1038,7 @@ YAML
   run deploy_template_config python true
   [ "$status" -eq 0 ]
 
-  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/_base/devcontainer.json" ]
+  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json" ]
   [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json" ]
   [ -f "${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json" ]
 }
@@ -1073,12 +1093,12 @@ YAML
   [ -f "$deployed" ]
   [ "$(jq -r '.remoteUser' "$deployed")" = "testuser" ]
 
-  # User edits config _base
+  # User edits config _00-base
   printf '{"remoteUser": "edited-user", "init": true, "shutdownAction": "none"}\n' \
-    > "${XDG_CONFIG_HOME}/dctl/devcontainer/_base/devcontainer.json"
+    > "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json"
 
   sleep 1
-  touch "${XDG_CONFIG_HOME}/dctl/devcontainer/_base/devcontainer.json"
+  touch "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json"
 
   # Re-run init without --force — should refresh cache from edited config
   run cmd_init

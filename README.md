@@ -4,7 +4,7 @@ Pre-built Docker images and a unified `dctl` CLI for devcontainer workspaces —
 
 - One-command project setup with `dctl init` and reusable templates.
 - Pre-built images with AI agent tooling and language-specific layers ready to go.
-- A composable config system built around `_base`, per-template deltas, and user-editable XDG config.
+- A composable config system built around `_00-base`, optional `_NN-*` user layers, and user-editable XDG config.
 - Multi-agent workflows with shared containers, token forwarding, and work-clone support.
 
 ## What You Get
@@ -20,23 +20,23 @@ Pre-built Docker images and a unified `dctl` CLI for devcontainer workspaces —
 
 ### Ready-to-use templates
 
-`_base` is the shared internal foundation. The selectable templates below add the user-facing project shape on top of it.
+`_00-base` is the shared internal foundation. The selectable templates below add the user-facing project shape on top of it.
 
 | Template | Image | What it adds |
 | --- | --- | --- |
 | `general` | `devimg/agents:latest` | Minimal general-purpose sandbox with pre-commit bootstrap |
 | `coordinator` | `devimg/agents:latest` | Coordinator workflow with a read-only parent-area mount for sibling repo visibility |
-| `python` | `devimg/python-dev:latest` | Poetry cache volume and Python bootstrap via `bash -ic dev-py` |
+| `python` | `devimg/python-dev:latest` | Poetry cache volume and pre-commit bootstrap |
 | `rust` | `devimg/rust-dev:latest` | Rust cache volumes and `cargo build` bootstrap |
 | `zig` | `devimg/zig-dev:latest` | Zig/ZLS cache volumes and `zig-zls-init` bootstrap |
 
 ### Composable config
 
 ```text
-_base + template  ──dctl init──>  ~/.config/dctl/  ──merge──>  ~/.cache/dctl/  ──dctl ws up──>  container
+_00-base + _NN-* layers + template  ──dctl init──>  ~/.config/dctl/  ──merge──>  ~/.cache/dctl/  ──dctl ws up──>  container
 ```
 
-Installed templates are seeded into user-editable config under `~/.config/dctl/devcontainer/`. `dctl init` merges `_base` and the selected template into a cached `devcontainer.json` under `~/.cache/dctl/devcontainer/`, and `dctl ws up` consumes that merged file.
+Installed templates are seed sources only. Your source of truth lives under `~/.config/dctl/devcontainer/`, where `dctl init` seeds `_00-base`, any shipped internal layers, and the selected template if missing. The cached `devcontainer.json` under `~/.cache/dctl/devcontainer/` is built from the user config layers, not directly from installed templates.
 
 ## Quick Start
 
@@ -44,7 +44,6 @@ Prerequisites:
 
 - Docker with `buildx`
 - Dev Container CLI (`devcontainer`)
-- Dotfiles repo at `~/.dotfiles` or `DOTFILES=/path/to/dotfiles`
 
 ```bash
 make install
@@ -72,12 +71,12 @@ That flow installs `dctl`, builds the managed images, deploys the Python templat
 
 ## Config System
 
-`_base` owns the shared infrastructure:
+`_00-base` owns the shared universal infrastructure:
 
 - `remoteUser` and UID behavior
-- dotfiles mount and dotfiles bootstrap hook
-- shared auth/config mounts for tools such as `gh`, `glab`, Claude Code, Codex, OpenCode, Gemini, and editor config
-- base container env for terminal integration
+- readonly `.gitconfig`
+- shared auth/config mounts for `gh`, `glab-cli`, and Claude
+- base container env for `TERM` and `COLORTERM`
 
 Templates add the project-specific layer:
 
@@ -85,7 +84,11 @@ Templates add the project-specific layer:
 - language-specific cache volumes
 - language-specific `postCreateCommand` entries
 
-Your source of truth lives under `~/.config/dctl/devcontainer/`. `dctl init` seeds `_base` plus the selected template there, and the merged output in `~/.cache/dctl/devcontainer/<name>/devcontainer.json` is what `dctl ws up` actually uses.
+`dctl init` discovers every `~/.config/dctl/devcontainer/_*/devcontainer.json`, merges those internal layers alphabetically, then merges the selected template on top. Installed templates under `~/.local/share/dctl/templates/` are only used to seed missing user config files.
+
+### Custom layers
+
+Personal configuration is now opt-in. To add dotfiles, editor mounts, or extra terminal integration, copy [examples/_01-dotfiles/devcontainer.json](/workspaces/devcontainerctl/examples/_01-dotfiles/devcontainer.json) into `~/.config/dctl/devcontainer/_01-dotfiles/devcontainer.json` and edit it for your host paths.
 
 ### Config resolution
 
@@ -110,7 +113,7 @@ dctl init
 dctl ws reup
 ```
 
-Edit the config-layer file, rerun `dctl init` to regenerate the cached merged config if needed, then use `dctl ws reup` to recreate the container from that updated cache.
+Edit the user config layer file, rerun `dctl init` to regenerate the cached merged config if needed, then use `dctl ws reup` to recreate the container from that updated cache.
 
 ## CLI Reference
 

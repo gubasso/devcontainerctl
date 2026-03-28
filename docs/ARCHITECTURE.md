@@ -60,14 +60,14 @@ For LSP accuracy, install runtime version managers on the host:
 2. **Install rustup on host** - Same toolchain manager as container
 3. **Run `mise install` on host** - Installs Python interpreter for LSP
 
-The Python template creates `.venv/` via `postCreateCommand: { "python": "bash -ic dev-py", "pre-commit": "pre-commit install" }`. Since the project directory is bind-mounted, the host LSP discovers this `.venv/` and uses it for completions and type-checking.
+The Python workflow may create `.venv/` inside the bind-mounted project directory. Since the project directory is shared with the host, the host LSP can discover and use that environment for completions and type-checking.
 
 ```bash
 # On host (one-time setup per project)
 cd ~/projects/my-api
 mise install                        # Installs Python version for LSP
 
-# Start container - creates .venv/ via the Python template bootstrap
+# Start container - project bootstrap can create .venv/ inside the bind mount
 devcontainer up --workspace-folder .
 
 # Now host LSP can use the container-created .venv/
@@ -82,8 +82,8 @@ nvim .
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ HOST                                  CONTAINER                             │
 │                                                                             │
-│ mise install                          bash -ic dev-py                      │
-│   └── Python interpreter for LSP        └── Creates .venv/ in project root │
+│ mise install                          project bootstrap inside container   │
+│   └── Python interpreter for LSP        └── May create .venv/ in project root │
 │                                                                             │
 │ nvim ~/projects/my-app/               ${containerWorkspaceFolder}/ (bind mount) │
 │   └── LSP reads .venv/ ◄───────────────── .venv/ created here               │
@@ -106,7 +106,7 @@ are live in the current codebase:
 - config resolution with CLI, env, registry, local-file, sibling-discovery, and
   user-default precedence
 - per-project registry support in `~/.config/dctl/projects.yaml`
-- `_base` plus selectable template composition with generated cache output under
+- `_00-base` plus selectable template composition with generated cache output under
   `~/.cache/dctl/devcontainer/`
 - user-overrides-installed Dockerfile hierarchy for `dctl image build`
 - metadata extraction from the Dockerfile into the template system
@@ -354,7 +354,7 @@ glab api user --jq .username
 
 #### Neovim
 
-The agents image installs `neovim@latest` via mise. Container Neovim runs a minimal config — no plugins, LSP servers, or treesitter parsers are pre-baked. Full editor configuration is supplied at runtime through the dotfiles mount (`~/.config/nvim` bind-mounted from `$DOTFILES/nvim/.config/nvim`).
+The agents image installs `neovim@latest` via mise. Container Neovim runs a minimal config — no plugins, LSP servers, or treesitter parsers are pre-baked. Full editor configuration can be added through an optional user layer such as `_01-dotfiles`.
 
 ### Layer 1: Python Development (python-dev/)
 
@@ -376,7 +376,7 @@ Thin layer extending `devimg/agents:latest`:
 
 - [anyzig](https://github.com/marler8997/anyzig) multi-version Zig launcher
 - [minisign](https://jedisct1.github.io/minisign/) for zls signature verification
-- `zig-zls-init` for per-project zls setup (installed from dotfiles at image build time)
+- `zig-zls-init` for per-project zls setup (shipped directly in the image context)
 - Zig version pinned per project via `build.zig.zon` (`minimum_zig_version` or `mach_zig_version`)
 - zls not globally installed — downloaded per-project by `zig-zls-init`, cached at `~/.local/share/zls/<version>/`
 
@@ -408,14 +408,11 @@ Or build manually:
 
 ```bash
 cd ~/.local/share/dctl/images
-DOTFILES_DIR="${DOTFILES:-$HOME/.dotfiles}"
-docker buildx build --load --build-context dotfiles="$DOTFILES_DIR" --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ./agents/
+docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ./agents/
 docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/python-dev:latest ./python-dev/
 docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/rust-dev:latest ./rust-dev/
-docker buildx build --load --build-context dotfiles="$DOTFILES_DIR" --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/zig-dev:latest ./zig-dev/
+docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/zig-dev:latest ./zig-dev/
 ```
-
-The `agents` and `zig-dev` images require the dotfiles repo as a BuildKit named context. Set `DOTFILES=` or ensure `~/.dotfiles` exists before building.
 
 ---
 
@@ -737,9 +734,9 @@ Need to edit files and sync to host?
 
 ## Per-Project Configuration
 
-Shared auth/editor mounts, baseline container settings, and the dotfiles
-bootstrap hook come from the `_base` template (merged by `dctl init`). The
-examples below show only project-local deltas.
+Shared auth mounts and baseline container settings come from the `_00-base`
+template (merged by `dctl init`). The examples below show only project-local
+deltas.
 
 ### Standard Python Configuration
 
@@ -762,7 +759,6 @@ examples below show only project-local deltas.
     }
   ],
   "postCreateCommand": {
-    "python": "bash -ic dev-py",
     "pre-commit": "pre-commit install"
   }
 }
@@ -839,7 +835,6 @@ examples below show only project-local deltas.
   ],
 
   "postCreateCommand": {
-    "python": "bash -ic dev-py",
     "pre-commit": "pre-commit install"
   }
 }
@@ -862,17 +857,16 @@ alongside it.
   ],
 
   "postCreateCommand": {
-    "python": "bash -ic dev-py",
     "pre-commit": "pre-commit install"
   }
 }
 ```
 
-### Base Configuration Reuse via the `_base` Template
+### Base Configuration Reuse via the `_00-base` Template
 
-Shared devcontainer defaults live in the `_base` template at `templates/_base/devcontainer.json` (installed to `~/.local/share/dctl/templates/_base/`). When you run `dctl init`, `_base` is merged with the selected project template to produce the final cached config.
+Shared devcontainer defaults live in the `_00-base` template at `templates/_00-base/devcontainer.json` (installed to `~/.local/share/dctl/templates/_00-base/`). When you run `dctl init`, all user config layers named `_*/devcontainer.json` are merged alphabetically and the selected project template is applied last.
 
-**Defaults provided by `_base`:**
+**Defaults provided by `_00-base`:**
 
 | Property | Value | Notes |
 | -------- | ----- | ----- |
@@ -880,17 +874,16 @@ Shared devcontainer defaults live in the `_base` template at `templates/_base/de
 | `updateRemoteUserUID` | `false` | UID/GID baked at build time |
 | `init` | `true` | Proper init process (PID 1 reaping) |
 | `shutdownAction` | `"none"` | Container keeps running after detach |
-| `containerEnv` | `TERM`, `COLORTERM`, Kitty vars | Propagates host terminal defaults |
-| `mounts` | gitconfig, DOTFILES, Claude, gcloud, Codex, OpenCode, Gemini, nvim, gh, glab | Shared auth/editor mounts |
-| `postCreateCommand` | `${localEnv:DOTFILES}/.devcontainer/setup-dotfiles ${localEnv:DOTFILES}` | Shared dotfiles bootstrap |
+| `containerEnv` | `TERM`, `COLORTERM` | Propagates host terminal defaults |
+| `mounts` | gitconfig, gh, glab-cli, Claude, /tmp | Universal shared mounts |
 
 **Merge rules** (applied by `dctl init`):
 
-- `mounts` arrays are concatenated (`_base` first, then template)
+- `mounts` arrays are concatenated in layer order
 - `postCreateCommand` and `containerEnv` objects are merged by key (template wins)
-- scalar fields use last-wins (template overrides `_base`)
+- scalar fields use last-wins (later layers and templates override earlier ones)
 
-After editing `_base` or a template config, regenerate and recreate:
+After editing `_00-base`, a custom `_NN-*` layer, or a template config, regenerate and recreate:
 
 ```bash
 dctl init
@@ -1155,7 +1148,7 @@ See [README.md](../README.md) and [QUICKSTART.md](QUICKSTART.md) for the
 baseline install/init/up/shell flow. The key `dctl`-specific workflow behavior
 to keep in mind is:
 
-- `dctl init` seeds `_base` plus a selected template into
+- `dctl init` seeds `_00-base` plus a selected template into
   `~/.config/dctl/devcontainer/`, then writes the merged config to
   `~/.cache/dctl/devcontainer/<name>/devcontainer.json`
 - `dctl ws up` and `dctl ws reup` resolve config through the six-level
@@ -1234,7 +1227,7 @@ USER $USERNAME
 ### Docker Compose for Multi-Container
 
 **Note**: Docker Compose mode does not get any extra `dctl` wrapper behavior by
-itself. If you bypass the normal `_base` plus template flow, set the required
+itself. If you bypass the normal `_00-base` plus template flow, set the required
 shared mounts, env, lifecycle hooks, and user settings explicitly in the
 compose-based config.
 
@@ -1446,11 +1439,10 @@ docker volume rm mise-cache poetry-cache pip-cache rustup-toolchains cargo-regis
 docker volume prune
 
 # Rebuild from scratch
-DOTFILES_DIR="${DOTFILES:-$HOME/.dotfiles}"
-docker buildx build --load --pull --no-cache --build-context dotfiles="$DOTFILES_DIR" --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ~/.local/share/dctl/images/agents/
+docker buildx build --load --pull --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ~/.local/share/dctl/images/agents/
 docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/python-dev:latest ~/.local/share/dctl/images/python-dev/
 docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/rust-dev:latest ~/.local/share/dctl/images/rust-dev/
-docker buildx build --load --no-cache --build-context dotfiles="$DOTFILES_DIR" --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/zig-dev:latest ~/.local/share/dctl/images/zig-dev/
+docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/zig-dev:latest ~/.local/share/dctl/images/zig-dev/
 ```
 
 ---
@@ -1501,10 +1493,10 @@ dctl image build --all
 | `mounts` | Additional bind mounts and volumes |
 | `containerEnv` | Environment variables |
 | `postCreateCommand` | Run once after container creation |
-| `remoteUser` | User to run as (from `_base` template) |
-| `updateRemoteUserUID` | Map container UID to host UID (from `_base` template) |
-| `init` | Use proper init process (from `_base` template) |
-| `shutdownAction` | What to do when closed (from `_base` template) |
+| `remoteUser` | User to run as (from `_00-base` template) |
+| `updateRemoteUserUID` | Map container UID to host UID (from `_00-base` template) |
+| `init` | Use proper init process (from `_00-base` template) |
+| `shutdownAction` | What to do when closed (from `_00-base` template) |
 
 ### Volume Reference
 
@@ -1549,7 +1541,7 @@ components = ["rustfmt", "clippy", "rust-analyzer"]
 
 Complete `devcontainer.json` examples demonstrating multi-directory workspaces.
 Each project uses the default automatic workspace mount for the main repository.
-These rely on the shared defaults from the `_base` template. For base image
+These rely on the shared defaults from the `_00-base` template. For base image
 Dockerfiles, see [`images/`](../images/).
 
 ### Example 1: API Project with Docs and SDK
@@ -1573,7 +1565,6 @@ Open from the `my-api` project directory.
   ],
 
   "postCreateCommand": {
-    "python": "bash -ic dev-py",
     "pre-commit": "pre-commit install"
   }
 }
@@ -1600,7 +1591,6 @@ symlink-heavy SDK into a flat directory at container creation time.
   // Snapshot legacy-sdk into /workspaces (resolves symlinks), then setup project
   "postCreateCommand": {
     "rsync-sdk": "rsync -aL --delete /mnt/src-legacy-sdk/ /workspaces/legacy-sdk/",
-    "python": "bash -ic dev-py",
     "pre-commit": "pre-commit install"
   }
 }

@@ -23,7 +23,7 @@ This document records how the approved design work landed in the repository.
 ### Templates and Dockerfiles
 
 - `templates/general/` and `templates/coordinator/` are shipped and installed
-- `_base` plus template merge is implemented
+- `_00-base` plus multi-layer template merge is implemented
 - `lib/dctl/image.sh` resolves user-overridden versus installed Dockerfiles
 
 ### Project Registry

@@ -11,12 +11,6 @@ source "${DCTL_LIB_DIR}/common.sh"
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/auth.sh"
 
-require_dotfiles_dir() {
-  DOTFILES="${DOTFILES:-${HOME}/.dotfiles}"
-  [[ -d "$DOTFILES" ]] || err "Dotfiles not found at ${DOTFILES} — set DOTFILES= or ensure ~/.dotfiles exists"
-  export DOTFILES
-}
-
 usage_ws() {
   cat <<'EOF'
 Usage: dctl ws <command> [options]
@@ -132,7 +126,6 @@ devcontainer_exec() {
 
 cmd_ws_up() {
   require_cmd devcontainer
-  require_dotfiles_dir
   local args=("$@")
   if [[ ${#args[@]} -gt 0 && ${args[0]} == "--" ]]; then
     args=("${args[@]:1}")
@@ -151,7 +144,6 @@ cmd_ws_up() {
 
 cmd_ws_reup() {
   require_cmd devcontainer
-  require_dotfiles_dir
   local args=("$@")
   if [[ ${#args[@]} -gt 0 && ${args[0]} == "--" ]]; then
     args=("${args[@]:1}")

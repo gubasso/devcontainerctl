@@ -1,0 +1,49 @@
+{
+  // Example optional layer. Copy this directory to:
+  // ~/.config/dctl/devcontainer/_01-dotfiles/
+  "containerEnv": {
+    "KITTY_LISTEN_ON": "${localEnv:KITTY_LISTEN_ON}",
+    "KITTY_WINDOW_ID": "${localEnv:KITTY_WINDOW_ID}"
+  },
+  "mounts": [
+    {
+      "source": "${localEnv:DOTFILES}",
+      "target": "${localEnv:DOTFILES}",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}/.config/gcloud",
+      "target": "${localEnv:HOME}/.config/gcloud",
+      "type": "bind",
+      "readonly": true
+    },
+    {
+      "source": "${localEnv:DOTFILES}/nvim/.config/nvim",
+      "target": "${localEnv:HOME}/.config/nvim",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:DOTFILES}/codex/.codex",
+      "target": "${localEnv:HOME}/.codex",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}/.local/share/opencode",
+      "target": "${localEnv:HOME}/.local/share/opencode",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:DOTFILES}/opencode/.config/opencode",
+      "target": "${localEnv:HOME}/.config/opencode",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:DOTFILES}/gemini/.gemini",
+      "target": "${localEnv:HOME}/.gemini",
+      "type": "bind"
+    }
+  ],
+  "postCreateCommand": {
+    "dotfiles": "${localEnv:DOTFILES}/.devcontainer/setup-dotfiles ${localEnv:DOTFILES}"
+  }
+}
