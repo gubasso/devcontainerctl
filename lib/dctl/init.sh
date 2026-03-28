@@ -211,6 +211,8 @@ deploy_template_config() {
   fi
 
   if [[ "$force" != true ]] && cache_is_fresh "$cached_path" "${config_layers[@]}" "$config_tmpl"; then
+    # shellcheck disable=SC2034 # read by _print_summary in test.sh
+    DCTL_CONFIG_STATUS="cached"
     log "Using cached config: $cached_path" >&2
     printf '%s\n' "$cached_path"
     return 0
@@ -242,6 +244,8 @@ deploy_template_config() {
   fi
   rm -f "$tmp_acc"
   mv "$tmp_path" "$cached_path"
+  # shellcheck disable=SC2034 # read by _print_summary in test.sh
+  DCTL_CONFIG_STATUS="generated"
   log "Generated config for '$template' at $cached_path" >&2
   printf '%s\n' "$cached_path"
 }
