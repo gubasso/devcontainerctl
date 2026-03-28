@@ -48,11 +48,11 @@ _print_summary() {
 
   printf '\n\033[1m── Summary ──────────────────────────────\033[0m\n'
   if [[ -n "${DCTL_CONFIG_STATUS:-}" ]]; then
-    if [[ "$DCTL_CONFIG_STATUS" == "cached" ]]; then
-      printf '  \033[1;36mℹ\033[0m Config: using cached devcontainer.json\n'
-    else
-      printf '  \033[1;36mℹ\033[0m Config: generated new devcontainer.json\n'
-    fi
+    case "$DCTL_CONFIG_STATUS" in
+      cached)    printf '  \033[1;36mℹ\033[0m Config: using cached devcontainer.json\n' ;;
+      generated) printf '  \033[1;36mℹ\033[0m Config: generated new devcontainer.json\n' ;;
+      existing)  printf '  \033[1;36mℹ\033[0m Config: using existing registered config\n' ;;
+    esac
   fi
   for i in "${!_check_names[@]}"; do
     if [[ "${_check_results[$i]}" == "PASS" ]]; then

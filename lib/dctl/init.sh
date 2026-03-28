@@ -211,10 +211,9 @@ deploy_template_config() {
   fi
 
   if [[ "$force" != true ]] && cache_is_fresh "$cached_path" "${config_layers[@]}" "$config_tmpl"; then
-    # shellcheck disable=SC2034 # read by _print_summary in test.sh
-    DCTL_CONFIG_STATUS="cached"
     log "Using cached config: $cached_path" >&2
     printf '%s\n' "$cached_path"
+    printf 'cached\n'
     return 0
   fi
 
@@ -244,10 +243,9 @@ deploy_template_config() {
   fi
   rm -f "$tmp_acc"
   mv "$tmp_path" "$cached_path"
-  # shellcheck disable=SC2034 # read by _print_summary in test.sh
-  DCTL_CONFIG_STATUS="generated"
   log "Generated config for '$template' at $cached_path" >&2
   printf '%s\n' "$cached_path"
+  printf 'generated\n'
 }
 
 template_registry_defaults() {
@@ -317,10 +315,15 @@ cmd_init() {
       if [[ "$existing_registry_path" == "${DCTL_DEVCONTAINER_CACHE_DIR}/"* ]]; then
         local registered_template
         registered_template="$(basename "$(dirname "$existing_registry_path")")"
-        local refreshed_path
-        refreshed_path="$(deploy_template_config "$registered_template" false)" || return $?
+        local refreshed_output refreshed_path
+        refreshed_output="$(deploy_template_config "$registered_template" false)" || return $?
+        refreshed_path="$(head -1 <<< "$refreshed_output")"
+        # shellcheck disable=SC2034
+        DCTL_CONFIG_STATUS="$(tail -1 <<< "$refreshed_output")"
         DCTL_CLI_CONFIG="$refreshed_path" cmd_test
       else
+        # shellcheck disable=SC2034
+        DCTL_CONFIG_STATUS="existing"
         warn "Project '$canonical_name' already registered with config at $existing_registry_path; skipping"
         DCTL_CLI_CONFIG="$existing_registry_path" cmd_test
       fi
@@ -337,8 +340,11 @@ cmd_init() {
     template="$(select_template)" || return $?
   fi
 
-  local deployed_config
-  deployed_config="$(deploy_template_config "$template" "$force")" || return $?
+  local deploy_output deployed_config
+  deploy_output="$(deploy_template_config "$template" "$force")" || return $?
+  deployed_config="$(head -1 <<< "$deploy_output")"
+  # shellcheck disable=SC2034
+  DCTL_CONFIG_STATUS="$(tail -1 <<< "$deploy_output")"
 
   if [[ "$register" == true ]]; then
     local reg_dockerfile="" reg_image=""
