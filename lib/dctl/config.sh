@@ -167,6 +167,24 @@ _registry_lookup_dockerfile() {
   _registry_read_field "$canonical_name" "dockerfile"
 }
 
+_registry_update_devcontainer() {
+  local canonical_name="$1"
+  local new_path="$2"
+
+  require_cmd yq
+  local registry
+  registry="$(_registry_file)"
+  [[ -s "$registry" ]] || return 1
+
+  # Store with $HOME for portability
+  new_path="${new_path/#$HOME/\$HOME}"
+
+  local tmp_registry="${registry}.tmp.$$"
+  YQ_KEY="$canonical_name" YQ_VAL="$new_path" \
+    yq eval '.[env(YQ_KEY)].devcontainer = env(YQ_VAL)' "$registry" > "$tmp_registry"
+  mv "$tmp_registry" "$registry"
+}
+
 _registry_ensure_file() {
   local registry
   registry="$(_registry_file)"

@@ -133,12 +133,14 @@ dctl version
 dctl init --template python
 dctl init --list
 dctl init --force --template rust
+dctl init --reset --template rust
 dctl init --no-register --template zig
 ```
 
 - `--template <name>` selects a template explicitly
 - `--list` prints the selectable templates
-- `--force` re-seeds config from installed templates and regenerates cache
+- `--force` rebuilds the cached merged config and re-registers (preserves your user config)
+- `--reset` re-seeds config from installed templates, rebuilds cache, and re-registers (overwrites user config)
 - `--no-register` skips writing the project registry entry
 
 ### `dctl ws`
