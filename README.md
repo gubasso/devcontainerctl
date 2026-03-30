@@ -47,14 +47,14 @@ Prerequisites:
 
 ```bash
 make install
-dctl image build --all
 cd ~/projects/my-api
 dctl init --template python
+dctl image build
 dctl ws up
 dctl ws shell
 ```
 
-That flow installs `dctl`, builds the managed images, deploys the Python template into XDG config/cache, starts the container for the current workspace, and drops you into a shell inside it.
+That flow installs `dctl`, moves into the target workspace, seeds the Python template and managed image into XDG config, builds the seeded managed image, starts the container for the current workspace, and drops you into a shell inside it.
 
 ## Workflow Comparison
 
@@ -180,10 +180,11 @@ dctl image build --dry-run
 dctl image list
 ```
 
-`dctl image build` resolves Dockerfiles through a two-layer hierarchy:
+`dctl image build` resolves Dockerfiles from user config only:
 
-1. `~/.config/dctl/images/<target>/Dockerfile`
-2. `~/.local/share/dctl/images/<target>/Dockerfile`
+- `~/.config/dctl/images/<target>/Dockerfile`
+
+Run `dctl init` to seed image configs from installed defaults.
 
 ### `dctl config`
 

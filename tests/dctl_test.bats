@@ -49,6 +49,12 @@ create_image_fixture() {
   touch "${XDG_DATA_HOME}/dctl/images/${name}/Dockerfile"
 }
 
+create_user_image_fixture() {
+  local name="$1"
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/images/${name}"
+  touch "${XDG_CONFIG_HOME}/dctl/images/${name}/Dockerfile"
+}
+
 setup() {
   setup_test_fixtures
   export XDG_DATA_HOME="${TEST_TMPDIR}/xdg-data"
@@ -266,9 +272,9 @@ teardown() {
   assert_mock_called "--remote-env COLORTERM=truecolor"
 }
 
-@test "cmd_image_list prints discovered targets from XDG data dir" {
-  mkdir -p "${XDG_DATA_HOME}/dctl/images/agents" "${XDG_DATA_HOME}/dctl/images/python-dev"
-  touch "${XDG_DATA_HOME}/dctl/images/agents/Dockerfile" "${XDG_DATA_HOME}/dctl/images/python-dev/Dockerfile"
+@test "cmd_image_list prints discovered targets from user config dir" {
+  create_user_image_fixture agents
+  create_user_image_fixture python-dev
 
   run cmd_image_list
   [ "$status" -eq 0 ]
@@ -276,9 +282,8 @@ teardown() {
   [[ "$output" == *"python-dev"* ]]
 }
 
-@test "cmd_image_build dry-run uses XDG data dir" {
-  mkdir -p "${XDG_DATA_HOME}/dctl/images/agents"
-  touch "${XDG_DATA_HOME}/dctl/images/agents/Dockerfile"
+@test "cmd_image_build dry-run uses user config dir" {
+  create_user_image_fixture agents
 
   run cmd_image_build --dry-run agents
   [ "$status" -eq 0 ]
@@ -286,8 +291,7 @@ teardown() {
 }
 
 @test "cmd_image_build rejects unknown image targets" {
-  mkdir -p "${XDG_DATA_HOME}/dctl/images/agents"
-  touch "${XDG_DATA_HOME}/dctl/images/agents/Dockerfile"
+  create_user_image_fixture agents
 
   run cmd_image_build --dry-run unknown
   [ "$status" -ne 0 ]
@@ -295,7 +299,7 @@ teardown() {
 }
 
 # bats test_tags=integration
-@test "make install puts Dockerfiles in DATA_DIR/images and installed dctl uses them" {
+@test "make install puts Dockerfiles in DATA_DIR/images" {
   local bin_dir data_home lib_dir
   bin_dir="${TEST_TMPDIR}/bin"
   data_home="${TEST_TMPDIR}/data-home"
@@ -313,12 +317,6 @@ teardown() {
   [ -x "${data_home}/dctl/images/zig-dev/zig-zls-init" ]
   [ -f "${data_home}/dctl/devcontainers/python/devcontainer.json" ]
   [ -f "${data_home}/dctl/devcontainers/_00-base/devcontainer.json" ]
-
-  run env XDG_DATA_HOME="$data_home" HOME="${TEST_TMPDIR}/home" \
-    "${bin_dir}/dctl" image list
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"agents"* ]]
-  [[ "$output" == *"python-dev"* ]]
 }
 
 @test "discover_templates lists installed templates" {
@@ -475,7 +473,7 @@ YAML
 }
 
 @test "cmd_test builds managed images before starting the devcontainer" {
-  create_image_fixture python-dev
+  create_user_image_fixture python-dev
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{\n  "image": "devimg/python-dev:latest"\n}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
@@ -783,18 +781,15 @@ MOCK
 
 # --- Dockerfile resolution ---
 
-@test "resolve_dockerfile returns installed path" {
+@test "resolve_dockerfile fails when only installed image exists" {
   create_image_fixture agents
 
   run resolve_dockerfile agents
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"agents/Dockerfile" ]]
+  [ "$status" -ne 0 ]
 }
 
-@test "resolve_dockerfile user override wins over installed" {
-  create_image_fixture agents
-  mkdir -p "${XDG_CONFIG_HOME}/dctl/images/agents"
-  touch "${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile"
+@test "resolve_dockerfile returns user config path" {
+  create_user_image_fixture agents
 
   run resolve_dockerfile agents
   [ "$status" -eq 0 ]
@@ -856,7 +851,7 @@ MOCK
 }
 
 @test "cmd_image_build uses registry managed target when no CLI target" {
-  create_image_fixture python-dev
+  create_user_image_fixture python-dev
   local canonical
   canonical="$(resolve_canonical_project_name)"
   cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
@@ -886,8 +881,8 @@ YAML
 }
 
 @test "cmd_image_build CLI target wins over registry dockerfile" {
-  create_image_fixture agents
-  create_image_fixture python-dev
+  create_user_image_fixture agents
+  create_user_image_fixture python-dev
   local canonical
   canonical="$(resolve_canonical_project_name)"
   cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
@@ -902,14 +897,21 @@ YAML
 }
 
 @test "discover_image_targets includes user image targets" {
+  create_user_image_fixture custom-img
   create_image_fixture agents
-  mkdir -p "${XDG_CONFIG_HOME}/dctl/images/custom-img"
-  touch "${XDG_CONFIG_HOME}/dctl/images/custom-img/Dockerfile"
 
   run discover_image_targets
   [ "$status" -eq 0 ]
-  [[ "$output" == *"agents"* ]]
   [[ "$output" == *"custom-img"* ]]
+  [[ "$output" != *"agents"* ]]
+}
+
+@test "discover_image_targets ignores installed-only targets" {
+  create_image_fixture agents
+
+  run discover_image_targets
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"agents"* ]]
 }
 
 @test "cmd_init --template python deploys and registers with correct defaults" {

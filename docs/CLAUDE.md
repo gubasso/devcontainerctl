@@ -33,7 +33,7 @@ Tests are written with `bats`.
 - `_00-base` is internal and excluded from template discovery and `dctl init --list`
 - `dctl` resolves `devcontainer.json` through a six-level precedence chain: CLI flag, env var, registry, local file, sibling discovery, user default
 - `dctl ws` commands match containers by workspace label, so work-clones keep separate container identity
-- `dctl image build` prefers user Dockerfile overrides in `~/.config/dctl/images/` over installed Dockerfiles in `~/.local/share/dctl/images/`
+- Installed files (`~/.local/share/dctl/`) are seed sources only — `dctl` never builds, merges, or runs containers from installed files directly; all runtime operations use user config (`~/.config/dctl/`) exclusively
 - Installed templates seed user config, but composed devcontainer output is built only from `~/.config/dctl/devcontainer/`
 - Dotfiles are optional and belong in a user layer such as `_01-dotfiles`, not in shipped defaults or image build inputs
 

@@ -16,6 +16,12 @@ devcontainers/  ──make install──>  ~/.local/share/dctl/devcontainers/
 - **Config** (`~/.config/dctl/devcontainer/`): seeded config files, then user-editable
 - **Cache** (`~/.cache/dctl/devcontainer/`): generated merged `devcontainer.json` output consumed by `dctl ws up`
 
+## Installed Files Are Seed Sources Only
+
+Installed files under `~/.local/share/dctl/` are never used directly at runtime.
+`dctl init` seeds them into user config (`~/.config/dctl/`), which is the sole
+runtime source for both devcontainer configs and managed Dockerfiles.
+
 ## Template Catalog
 
 ### Internal

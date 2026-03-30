@@ -98,6 +98,8 @@ build_workspace_image_if_managed() {
       (cmd_image_build "$target")
       return $?
     fi
+    warn "Managed image '$image' not seeded. Run: dctl init --template <name>"
+    return 1
   fi
 
   log "Skipping image build for external image: $image"
