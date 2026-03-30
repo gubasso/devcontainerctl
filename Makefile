@@ -6,7 +6,7 @@ SYSTEMD_DIR ?= $(HOME)/.local/share/systemd/user
 INSTALL := install
 
 IMAGE_NAMES := agents python-dev rust-dev zig-dev
-TEMPLATE_DIRS := python rust zig general coordinator _00-base
+DEVCONTAINER_DIRS := python rust zig general coordinator _00-base
 LIB_FILES := common.sh ws.sh image.sh init.sh test.sh auth.sh config.sh
 
 .PHONY: install uninstall install-systemd uninstall-systemd test test-unit test-integration lint check
@@ -21,15 +21,16 @@ install:
 	for image in $(IMAGE_NAMES); do \
 		$(INSTALL) -d "$(DATA_DIR)/images/$$image"; \
 		for file in images/$$image/*; do \
-			$(INSTALL) -m 644 "$$file" "$(DATA_DIR)/images/$$image/$$(basename $$file)"; \
+			if [ -x "$$file" ]; then mode=755; else mode=644; fi; \
+			$(INSTALL) -m "$$mode" "$$file" "$(DATA_DIR)/images/$$image/$$(basename $$file)"; \
 		done; \
 	done
-	$(INSTALL) -d "$(DATA_DIR)/templates"
-	for template in $(TEMPLATE_DIRS); do \
-		$(INSTALL) -d "$(DATA_DIR)/templates/$$template"; \
-		$(INSTALL) -m 644 "templates/$$template/devcontainer.json" "$(DATA_DIR)/templates/$$template/devcontainer.json"; \
+	$(INSTALL) -d "$(DATA_DIR)/devcontainers"
+	for template in $(DEVCONTAINER_DIRS); do \
+		$(INSTALL) -d "$(DATA_DIR)/devcontainers/$$template"; \
+		$(INSTALL) -m 644 "devcontainers/$$template/devcontainer.json" "$(DATA_DIR)/devcontainers/$$template/devcontainer.json"; \
 	done
-	$(INSTALL) -m 644 templates/README.md "$(DATA_DIR)/templates/README.md"
+	$(INSTALL) -m 644 devcontainers/README.md "$(DATA_DIR)/devcontainers/README.md"
 	$(INSTALL) -d "$(DATA_DIR)/schemas"
 	$(INSTALL) -m 644 schemas/projects.schema.yaml "$(DATA_DIR)/schemas/projects.schema.yaml"
 	@printf '\n'
@@ -51,12 +52,12 @@ uninstall:
 		rmdir "$(DATA_DIR)/images/$$image" 2>/dev/null || true; \
 	done
 	rmdir "$(DATA_DIR)/images" 2>/dev/null || true
-	for template in $(TEMPLATE_DIRS); do \
-		rm -f "$(DATA_DIR)/templates/$$template/devcontainer.json"; \
-		rmdir "$(DATA_DIR)/templates/$$template" 2>/dev/null || true; \
+	for template in $(DEVCONTAINER_DIRS); do \
+		rm -f "$(DATA_DIR)/devcontainers/$$template/devcontainer.json"; \
+		rmdir "$(DATA_DIR)/devcontainers/$$template" 2>/dev/null || true; \
 	done
-	rm -f "$(DATA_DIR)/templates/README.md"
-	rmdir "$(DATA_DIR)/templates" 2>/dev/null || true
+	rm -f "$(DATA_DIR)/devcontainers/README.md"
+	rmdir "$(DATA_DIR)/devcontainers" 2>/dev/null || true
 	rm -f "$(DATA_DIR)/schemas/projects.schema.yaml"
 	rmdir "$(DATA_DIR)/schemas" 2>/dev/null || true
 	rmdir "$(DATA_DIR)" 2>/dev/null || true

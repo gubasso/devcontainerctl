@@ -86,7 +86,7 @@ Expected result:
 
 Scenario:
 
-- `~/.local/share/dctl/templates/python/devcontainer.json` exists
+- `~/.local/share/dctl/devcontainers/python/devcontainer.json` exists
 - User runs `dctl init --list`
 
 Expected result:
@@ -296,7 +296,7 @@ Expected result:
 
 Scenario:
 
-- `~/.local/share/dctl/templates/_00-base/devcontainer.json` exists
+- `~/.local/share/dctl/devcontainers/_00-base/devcontainer.json` exists
 - User runs `dctl init --list`
 
 Expected result:

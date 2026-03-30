@@ -22,6 +22,8 @@ project registry, then run the setup smoke test.
 
 Options:
   --template <name>   Use a specific template
+  --image-only        Seed the managed image only
+  --devcontainer-only Deploy the devcontainer only
   --list              List available templates and exit
   --force             Rebuild cached merged config and re-register (preserves user config)
   --reset             Re-seed config from installed templates, rebuild cache, and re-register
@@ -30,6 +32,8 @@ Options:
 
 Examples:
   dctl init --template python
+  dctl init --image-only --template python
+  dctl init --devcontainer-only --template python
   dctl init --list
   dctl init
   dctl init --force --template rust
@@ -41,7 +45,7 @@ discover_templates() {
   local templates=()
   shopt -s nullglob
   local dir name
-  for dir in "$TEMPLATES_DIR"/*/; do
+  for dir in "$DEVCONTAINERS_DIR"/*/; do
     if [[ -f "${dir}devcontainer.json" ]]; then
       name="$(basename "$dir")"
       # Skip internal templates (underscore prefix)
@@ -67,12 +71,12 @@ print_available_templates() {
 }
 
 installed_template_path() {
-  printf '%s/%s/devcontainer.json\n' "$TEMPLATES_DIR" "$1"
+  printf '%s/%s/devcontainer.json\n' "$DEVCONTAINERS_DIR" "$1"
 }
 
 ensure_templates_dir_exists() {
-  if [[ ! -d "$TEMPLATES_DIR" ]]; then
-    err "No templates directory found. Install with: make install"
+  if [[ ! -d "$DEVCONTAINERS_DIR" ]]; then
+    err "No devcontainers directory found. Install with: make install"
   fi
 }
 
@@ -81,7 +85,7 @@ select_template() {
   mapfile -t available < <(discover_templates)
 
   if [[ ${#available[@]} -eq 0 ]]; then
-    err "No templates found in $TEMPLATES_DIR"
+    err "No templates found in $DEVCONTAINERS_DIR"
   fi
 
   if ! command -v fzf >/dev/null 2>&1 || [[ ! -t 0 ]]; then
@@ -137,7 +141,7 @@ discover_installed_layers() {
   local layers=()
   shopt -s nullglob
   local dir
-  for dir in "$TEMPLATES_DIR"/_*/; do
+  for dir in "$DEVCONTAINERS_DIR"/_*/; do
     if [[ -f "${dir}devcontainer.json" ]]; then
       layers+=("$(basename "$dir")")
     fi
@@ -165,7 +169,7 @@ _seed_config_file() {
     return 0
   fi
   mkdir -p "$(dirname "$dest")"
-  cp "$source" "$dest"
+  cp -p "$source" "$dest"
 }
 
 deploy_template_config() {
@@ -251,6 +255,28 @@ deploy_template_config() {
   printf 'generated\n'
 }
 
+deploy_image_config() {
+  local image_name="$1"
+  local reset="${2:-false}"
+
+  local installed_dir="${IMAGES_DIR}/${image_name}"
+  [[ -d "$installed_dir" ]] || return 0
+
+  local config_dir="${DCTL_IMAGES_DIR}/${image_name}"
+
+  shopt -s nullglob
+  local file
+  for file in "$installed_dir"/*; do
+    [[ -f "$file" ]] || continue
+    local dest
+    dest="${config_dir}/$(basename "$file")"
+    if [[ ! -f "$dest" ]] || [[ "$reset" == true ]]; then
+      _seed_config_file "$file" "$dest" "$reset"
+    fi
+  done
+  shopt -u nullglob
+}
+
 template_registry_defaults() {
   local template="$1"
   case "$template" in
@@ -268,6 +294,8 @@ cmd_init() {
   local reset=false
   local list=false
   local register=true
+  local image_only=false
+  local devcontainer_only=false
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -278,6 +306,14 @@ cmd_init() {
         ;;
       --list)
         list=true
+        shift
+        ;;
+      --image-only)
+        image_only=true
+        shift
+        ;;
+      --devcontainer-only)
+        devcontainer_only=true
         shift
         ;;
       --force)
@@ -307,6 +343,18 @@ cmd_init() {
     return 0
   fi
 
+  if [[ "$image_only" == true && "$devcontainer_only" == true ]]; then
+    err "Cannot use --image-only with --devcontainer-only"
+  fi
+
+  local do_image=true
+  local do_devcontainer=true
+  if [[ "$image_only" == true ]]; then
+    do_devcontainer=false
+  elif [[ "$devcontainer_only" == true ]]; then
+    do_image=false
+  fi
+
   # Check if project already has config (registry or local)
   local canonical_name
   canonical_name="$(resolve_canonical_project_name)"
@@ -317,51 +365,55 @@ cmd_init() {
   fi
 
   local registry_force=false
+  local deploy_force="$force"
   if [[ "$force" == true || "$reset" == true ]]; then
     registry_force=true
   fi
 
-  if [[ -n "$existing_registry_path" && "$force" != true && "$reset" != true ]]; then
-    if [[ -f "$existing_registry_path" ]]; then
-      if [[ "$existing_registry_path" == "${DCTL_DEVCONTAINER_CACHE_DIR}/"* ]]; then
-        # Cache path — refresh if stale
-        local registered_template
-        registered_template="$(basename "$(dirname "$existing_registry_path")")"
-        local refreshed_output refreshed_path
-        refreshed_output="$(deploy_template_config "$registered_template" false false)" || return $?
-        refreshed_path="$(head -1 <<< "$refreshed_output")"
-        # shellcheck disable=SC2034
-        DCTL_CONFIG_STATUS="$(tail -1 <<< "$refreshed_output")"
-        DCTL_CLI_CONFIG="$refreshed_path" cmd_test
-        return $?
+  if [[ "$do_devcontainer" == true ]]; then
+    if [[ -n "$existing_registry_path" && "$force" != true && "$reset" != true ]]; then
+      if [[ -f "$existing_registry_path" ]]; then
+        if [[ "$existing_registry_path" == "${DCTL_DEVCONTAINER_CACHE_DIR}/"* ]]; then
+          # Cache path — refresh if stale
+          local registered_template
+          registered_template="$(basename "$(dirname "$existing_registry_path")")"
+          local refreshed_output refreshed_path
+          refreshed_output="$(deploy_template_config "$registered_template" false false)" || return $?
+          refreshed_path="$(head -1 <<< "$refreshed_output")"
+          # shellcheck disable=SC2034
+          DCTL_CONFIG_STATUS="$(tail -1 <<< "$refreshed_output")"
+          DCTL_CLI_CONFIG="$refreshed_path" cmd_test
+          return $?
 
-      elif [[ "$existing_registry_path" == "${DCTL_DEVCONTAINER_DIR}/"* ]]; then
-        # Legacy config path — migrate to cache
-        local registered_template
-        registered_template="$(basename "$(dirname "$existing_registry_path")")"
-        warn "Migrating legacy config path to cache for template '$registered_template'"
-        local migrate_output migrate_path
-        migrate_output="$(deploy_template_config "$registered_template" false false)" || return $?
-        migrate_path="$(head -1 <<< "$migrate_output")"
-        # shellcheck disable=SC2034
-        DCTL_CONFIG_STATUS="$(tail -1 <<< "$migrate_output")"
-        # Update only the devcontainer field, preserving dockerfile/image/sibling_discovery
-        _registry_update_devcontainer "$canonical_name" "$migrate_path"
-        DCTL_CLI_CONFIG="$migrate_path" cmd_test
-        return $?
+        elif [[ "$existing_registry_path" == "${DCTL_DEVCONTAINER_DIR}/"* ]]; then
+          # Legacy config path — migrate to cache
+          local registered_template
+          registered_template="$(basename "$(dirname "$existing_registry_path")")"
+          warn "Migrating legacy config path to cache for template '$registered_template'"
+          local migrate_output migrate_path
+          migrate_output="$(deploy_template_config "$registered_template" false false)" || return $?
+          migrate_path="$(head -1 <<< "$migrate_output")"
+          # shellcheck disable=SC2034
+          DCTL_CONFIG_STATUS="$(tail -1 <<< "$migrate_output")"
+          # Update only the devcontainer field, preserving dockerfile/image/sibling_discovery
+          _registry_update_devcontainer "$canonical_name" "$migrate_path"
+          DCTL_CLI_CONFIG="$migrate_path" cmd_test
+          return $?
 
-      else
-        # External path — use as-is
-        # shellcheck disable=SC2034
-        DCTL_CONFIG_STATUS="existing"
-        warn "Project '$canonical_name' already registered with config at $existing_registry_path; skipping"
-        DCTL_CLI_CONFIG="$existing_registry_path" cmd_test
-        return $?
+        else
+          # External path — use as-is
+          # shellcheck disable=SC2034
+          DCTL_CONFIG_STATUS="existing"
+          warn "Project '$canonical_name' already registered with config at $existing_registry_path; skipping"
+          DCTL_CLI_CONFIG="$existing_registry_path" cmd_test
+          return $?
+        fi
       fi
+      # Registry entry exists but path is stale — force registry update only
+      warn "Registered config path no longer exists: $existing_registry_path; re-deploying"
+      registry_force=true
+      deploy_force=true
     fi
-    # Registry entry exists but path is stale — force registry update only
-    warn "Registered config path no longer exists: $existing_registry_path; re-deploying"
-    registry_force=true
   fi
 
   ensure_templates_dir_exists
@@ -370,21 +422,51 @@ cmd_init() {
     template="$(select_template)" || return $?
   fi
 
-  local deploy_output deployed_config
-  deploy_output="$(deploy_template_config "$template" "$force" "$reset")" || return $?
-  deployed_config="$(head -1 <<< "$deploy_output")"
-  # shellcheck disable=SC2034
-  DCTL_CONFIG_STATUS="$(tail -1 <<< "$deploy_output")"
+  # Validate template exists even for image-only (needed for registry defaults lookup)
+  if [[ "$image_only" == true ]]; then
+    local installed_tmpl
+    installed_tmpl="$(installed_template_path "$template")"
+    if [[ ! -f "$installed_tmpl" ]]; then
+      print_available_templates
+      err "Unknown template: $template"
+    fi
+  fi
+
+  local reg_dockerfile="" reg_image=""
+  read -r reg_dockerfile reg_image < <(template_registry_defaults "$template") || true
+
+  if [[ "$do_image" == true ]]; then
+    if [[ -n "$reg_dockerfile" ]]; then
+      deploy_image_config "$reg_dockerfile" "$reset"
+      log "Image '$reg_dockerfile' seeded to ${DCTL_IMAGES_DIR}/${reg_dockerfile}/"
+    fi
+  fi
+
+  local deployed_config=""
+  if [[ "$do_devcontainer" == true ]]; then
+    local deploy_output
+    deploy_output="$(deploy_template_config "$template" "$deploy_force" "$reset")" || return $?
+    deployed_config="$(head -1 <<< "$deploy_output")"
+    # shellcheck disable=SC2034
+    DCTL_CONFIG_STATUS="$(tail -1 <<< "$deploy_output")"
+  fi
 
   if [[ "$register" == true ]]; then
-    local reg_dockerfile="" reg_image=""
-    read -r reg_dockerfile reg_image < <(template_registry_defaults "$template") || true
-    register_project_defaults "$canonical_name" "$deployed_config" "$reg_dockerfile" "$reg_image" "$registry_force"
+    if [[ "$do_devcontainer" == true ]]; then
+      register_project_defaults "$canonical_name" "$deployed_config" "$reg_dockerfile" "$reg_image" "$registry_force"
+    elif [[ "$image_only" == true ]]; then
+      if [[ -z "$existing_registry_path" ]]; then
+        warn "No existing devcontainer found in project registry; registering image metadata only"
+      fi
+      register_project_defaults "$canonical_name" "$existing_registry_path" "$reg_dockerfile" "$reg_image" "$registry_force"
+    fi
   fi
 
   log "Project '$canonical_name' configured with template: $template"
 
-  DCTL_CLI_CONFIG="$deployed_config" cmd_test
+  if [[ "$do_devcontainer" == true ]]; then
+    DCTL_CLI_CONFIG="$deployed_config" cmd_test
+  fi
 }
 
 main_init() {

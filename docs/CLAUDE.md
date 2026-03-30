@@ -7,7 +7,7 @@ Pre-built Docker images and the unified `dctl` CLI for AI-agent devcontainer san
 - `bin/dctl` — thin CLI entrypoint (bootstrap, source modules, dispatch)
 - `lib/dctl/` — shell library modules (`common`, `ws`, `image`, `init`, `test`, `auth`, `config`)
 - `images/` — managed Dockerfiles, one subdir per image
-- `templates/` — `_00-base` plus selectable `devcontainer.json` templates
+- `devcontainers/` — `_00-base` plus selectable `devcontainer.json` templates
 - `systemd/` — weekly image rebuild timer + service
 - `tests/` — bats-based unit and integration coverage
 

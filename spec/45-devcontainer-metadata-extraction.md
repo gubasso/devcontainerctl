@@ -17,7 +17,7 @@ settings that belonged in templates instead.
 
 The implemented system now uses:
 
-- `templates/_base/devcontainer.json` for shared infrastructure settings
+- `devcontainers/_00-base/devcontainer.json` for shared infrastructure settings
 - selectable templates for project-specific deltas
 - `~/.config/dctl/devcontainer/` for user-editable config
 - `~/.cache/dctl/devcontainer/` for merged generated output

@@ -44,15 +44,13 @@ Examples:
 EOF
 }
 
-: "${DCTL_USER_IMAGES_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/dctl/images}"
-
 discover_image_targets() {
   local -A seen=()
   local targets=()
   shopt -s nullglob
   local dir name
   # User image overrides first
-  for dir in "$DCTL_USER_IMAGES_DIR"/*/; do
+  for dir in "$DCTL_IMAGES_DIR"/*/; do
     if [[ -f "${dir}Dockerfile" ]]; then
       name="$(basename "$dir")"
       seen["$name"]=1
@@ -75,13 +73,15 @@ discover_image_targets() {
 
 resolve_dockerfile() {
   local target="$1"
-  local user_path="${DCTL_USER_IMAGES_DIR}/${target}/Dockerfile"
+  local user_path
+  user_path="$(config_image_path "$target")"
   if [[ -f "$user_path" ]]; then
     log "Using Dockerfile override from $user_path" >&2
     printf '%s\n' "$user_path"
     return 0
   fi
-  local installed_path="${IMAGES_DIR}/${target}/Dockerfile"
+  local installed_path
+  installed_path="$(installed_image_path "$target")"
   if [[ -f "$installed_path" ]]; then
     printf '%s\n' "$installed_path"
     return 0
@@ -121,7 +121,7 @@ select_image_targets() {
 }
 
 ensure_image_dir_exists() {
-  if [[ ! -d "$IMAGES_DIR" && ! -d "$DCTL_USER_IMAGES_DIR" ]]; then
+  if [[ ! -d "$IMAGES_DIR" && ! -d "$DCTL_IMAGES_DIR" ]]; then
     log "No images directory found"
     log "Install with: make install"
     return 1

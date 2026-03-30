@@ -50,6 +50,6 @@ validated directly.
 
 ## Architecture Notes
 
-- templates remain config-only artifacts
+- devcontainer templates remain config-only artifacts
 - images remain build-only artifacts
-- `dctl init` does not scaffold Dockerfiles
+- `dctl init` seeds the template-associated Dockerfile to `~/.config/dctl/images/` on first init (or with `--force`/`--reset`/`--image-only`)
