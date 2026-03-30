@@ -19,8 +19,15 @@ devcontainers/  ──make install──>  ~/.local/share/dctl/devcontainers/
 ## Installed Files Are Seed Sources Only
 
 Installed files under `~/.local/share/dctl/` are never used directly at runtime.
-`dctl init` seeds them into user config (`~/.config/dctl/`), which is the sole
-runtime source for both devcontainer configs and managed Dockerfiles.
+`dctl init --template <name>` seeds **both** the template's devcontainer config layers
+and its associated managed Dockerfile into user config:
+
+- `~/.config/dctl/devcontainer/` — devcontainer.json layers (base + template)
+- `~/.config/dctl/images/` — managed Dockerfile and helper scripts
+
+User config (`~/.config/dctl/`) is the sole runtime source for all operations:
+`dctl image build`, `dctl ws up`, `dctl test`. Users can edit these files freely
+to customize their setup.
 
 ## Template Catalog
 
