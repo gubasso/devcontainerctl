@@ -17,13 +17,13 @@ Built-in templates in the repository:
 - `rust` — Rust project template on `devimg/rust-dev:latest`
 - `zig` — Zig project template on `devimg/zig-dev:latest`
 
-These install to `~/.local/share/dctl/templates/`.
+These install to `~/.local/share/dctl/devcontainers/`.
 
 ## Three-Tier XDG Layout
 
 | XDG path | dctl usage | Mutable by |
 | --- | --- | --- |
-| `~/.local/share/dctl/templates/` | Installed templates | `make install` |
+| `~/.local/share/dctl/devcontainers/` | Installed templates | `make install` |
 | `~/.config/dctl/devcontainer/` | Seeded config, then user-edited | `dctl init` + user |
 | `~/.cache/dctl/devcontainer/` | Generated merged config | `dctl` |
 

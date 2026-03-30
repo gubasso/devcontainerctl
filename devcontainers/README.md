@@ -5,14 +5,14 @@ Reusable project templates live here for versioned tracking in this repo.
 ## Three-Tier Flow
 
 ```text
-templates/  ──make install──>  ~/.local/share/dctl/templates/
+devcontainers/  ──make install──>  ~/.local/share/dctl/devcontainers/
                                   │
                                   └──seed if missing──>  ~/.config/dctl/devcontainer/
                                                              │
                                                              └──merge _00-base + _NN-* + template──>  ~/.cache/dctl/devcontainer/
 ```
 
-- **Installed** (`~/.local/share/dctl/templates/`): built-in templates shipped by `make install`
+- **Installed** (`~/.local/share/dctl/devcontainers/`): built-in templates shipped by `make install`
 - **Config** (`~/.config/dctl/devcontainer/`): seeded config files, then user-editable
 - **Cache** (`~/.cache/dctl/devcontainer/`): generated merged `devcontainer.json` output consumed by `dctl ws up`
 
@@ -41,6 +41,6 @@ templates/  ──make install──>  ~/.local/share/dctl/templates/
 
 ## Discovery Rules
 
-- Template discovery reads installed templates only from `~/.local/share/dctl/templates/`
+- Template discovery reads installed templates only from `~/.local/share/dctl/devcontainers/`
 - Directories starting with `_` are internal and excluded from `dctl init --list`
 - User customization happens in `~/.config/dctl/devcontainer/`, and those user config files are the only merge inputs

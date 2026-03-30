@@ -238,7 +238,7 @@ register_project_defaults() {
   fi
 
   local yq_expr
-  yq_expr='.[env(YQ_KEY)].devcontainer = env(YQ_DEVCONTAINER)'
+  yq_expr='.[env(YQ_KEY)].devcontainer = strenv(YQ_DEVCONTAINER)'
   if [[ "$existing_sibling" == "false" ]]; then
     yq_expr+=' | .[env(YQ_KEY)].sibling_discovery = false'
   else

@@ -84,7 +84,7 @@ Templates add the project-specific layer:
 - language-specific cache volumes
 - language-specific `postCreateCommand` entries
 
-`dctl init` discovers every `~/.config/dctl/devcontainer/_*/devcontainer.json`, merges those internal layers alphabetically, then merges the selected template on top. Installed templates under `~/.local/share/dctl/templates/` are only used to seed missing user config files.
+`dctl init` discovers every `~/.config/dctl/devcontainer/_*/devcontainer.json`, merges those internal layers alphabetically, then merges the selected template on top. Installed templates under `~/.local/share/dctl/devcontainers/` are only used to seed missing user config files.
 
 ### Custom layers
 
@@ -131,6 +131,8 @@ dctl version
 
 ```bash
 dctl init --template python
+dctl init --image-only --template python
+dctl init --devcontainer-only --template python
 dctl init --list
 dctl init --force --template rust
 dctl init --reset --template rust
@@ -138,10 +140,14 @@ dctl init --no-register --template zig
 ```
 
 - `--template <name>` selects a template explicitly
+- `--image-only` seeds only the managed image (skip devcontainer deploy and smoke test)
+- `--devcontainer-only` deploys only the devcontainer config (skip image seeding)
 - `--list` prints the selectable templates
 - `--force` rebuilds the cached merged config and re-registers (preserves your user config)
 - `--reset` re-seeds config from installed templates, rebuilds cache, and re-registers (overwrites user config)
 - `--no-register` skips writing the project registry entry
+
+On first-time init (or with `--force`/`--reset`), `dctl init` seeds both the devcontainer config and the associated image files to `~/.config/dctl/images/`. Already-registered projects skip seeding unless forced.
 
 ### `dctl ws`
 
@@ -246,7 +252,7 @@ This installs:
 - `dctl` to `~/.local/bin/dctl`
 - shell modules to `~/.local/lib/dctl/`
 - managed Dockerfiles to `~/.local/share/dctl/images/`
-- templates to `~/.local/share/dctl/templates/`
+- templates to `~/.local/share/dctl/devcontainers/`
 - schema files to `~/.local/share/dctl/schemas/`
 
 `make install` does not write to `~/.config/dctl/` or `~/.cache/dctl/`.

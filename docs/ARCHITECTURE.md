@@ -864,7 +864,7 @@ alongside it.
 
 ### Base Configuration Reuse via the `_00-base` Template
 
-Shared devcontainer defaults live in the `_00-base` template at `templates/_00-base/devcontainer.json` (installed to `~/.local/share/dctl/templates/_00-base/`). When you run `dctl init`, all user config layers named `_*/devcontainer.json` are merged alphabetically and the selected project template is applied last.
+Shared devcontainer defaults live in the `_00-base` template at `devcontainers/_00-base/devcontainer.json` (installed to `~/.local/share/dctl/devcontainers/_00-base/`). When you run `dctl init`, all user config layers named `_*/devcontainer.json` are merged alphabetically and the selected project template is applied last.
 
 **Defaults provided by `_00-base`:**
 

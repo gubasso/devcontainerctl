@@ -9,20 +9,22 @@ readonly _DCTL_COMMON_LOADED=1
 : "${WORKSPACE_FOLDER:=$PWD}"
 WORKSPACE_FOLDER="$(cd -- "$WORKSPACE_FOLDER" && pwd -P)"
 : "${IMAGES_DIR:=${XDG_DATA_HOME:-$HOME/.local/share}/dctl/images}"
-: "${TEMPLATES_DIR:=${XDG_DATA_HOME:-$HOME/.local/share}/dctl/templates}"
+: "${DEVCONTAINERS_DIR:=${XDG_DATA_HOME:-$HOME/.local/share}/dctl/devcontainers}"
 : "${DCTL_CONFIG_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/dctl}"
 : "${DCTL_CACHE_DIR:=${XDG_CACHE_HOME:-$HOME/.cache}/dctl}"
 : "${DCTL_DEVCONTAINER_CACHE_DIR:=${DCTL_CACHE_DIR}/devcontainer}"
 : "${DCTL_DEVCONTAINER_DIR:=${DCTL_CONFIG_DIR}/devcontainer}"
+: "${DCTL_IMAGES_DIR:=${DCTL_CONFIG_DIR}/images}"
 
 readonly DCTL_VERSION
 readonly WORKSPACE_FOLDER
 readonly IMAGES_DIR
-readonly TEMPLATES_DIR
+readonly DEVCONTAINERS_DIR
 readonly DCTL_CONFIG_DIR
 readonly DCTL_CACHE_DIR
 readonly DCTL_DEVCONTAINER_CACHE_DIR
 readonly DCTL_DEVCONTAINER_DIR
+readonly DCTL_IMAGES_DIR
 
 log() {
   printf '\033[1;34m==>\033[0m %s\n' "$1"
@@ -66,6 +68,16 @@ deployed_devcontainer_path() {
 config_devcontainer_path() {
   local name="$1"
   printf '%s/%s/devcontainer.json\n' "$DCTL_DEVCONTAINER_DIR" "$name"
+}
+
+config_image_path() {
+  local name="$1"
+  printf '%s/%s/Dockerfile\n' "$DCTL_IMAGES_DIR" "$name"
+}
+
+installed_image_path() {
+  local name="$1"
+  printf '%s/%s/Dockerfile\n' "$IMAGES_DIR" "$name"
 }
 
 resolve_canonical_project_name() {

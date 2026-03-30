@@ -28,13 +28,13 @@ source_dctl_functions() {
 create_template_fixture() {
   local name="$1"
   local image="$2"
-  mkdir -p "${XDG_DATA_HOME}/dctl/templates/${name}"
-  printf '{\n  "image": "%s"\n}\n' "$image" >"${XDG_DATA_HOME}/dctl/templates/${name}/devcontainer.json"
+  mkdir -p "${XDG_DATA_HOME}/dctl/devcontainers/${name}"
+  printf '{\n  "image": "%s"\n}\n' "$image" >"${XDG_DATA_HOME}/dctl/devcontainers/${name}/devcontainer.json"
 }
 
 create_base_template_fixture() {
-  mkdir -p "${XDG_DATA_HOME}/dctl/templates/_00-base"
-  cat >"${XDG_DATA_HOME}/dctl/templates/_00-base/devcontainer.json" <<'BASEJSON'
+  mkdir -p "${XDG_DATA_HOME}/dctl/devcontainers/_00-base"
+  cat >"${XDG_DATA_HOME}/dctl/devcontainers/_00-base/devcontainer.json" <<'BASEJSON'
 {
   "remoteUser": "testuser",
   "init": true,
@@ -310,8 +310,9 @@ teardown() {
   [ -f "${lib_dir}/common.sh" ]
   [ -f "${data_home}/dctl/images/agents/Dockerfile" ]
   [ -f "${data_home}/dctl/images/zig-dev/zig-zls-init" ]
-  [ -f "${data_home}/dctl/templates/python/devcontainer.json" ]
-  [ -f "${data_home}/dctl/templates/_00-base/devcontainer.json" ]
+  [ -x "${data_home}/dctl/images/zig-dev/zig-zls-init" ]
+  [ -f "${data_home}/dctl/devcontainers/python/devcontainer.json" ]
+  [ -f "${data_home}/dctl/devcontainers/_00-base/devcontainer.json" ]
 
   run env XDG_DATA_HOME="$data_home" HOME="${TEST_TMPDIR}/home" \
     "${bin_dir}/dctl" image list
@@ -751,8 +752,8 @@ MOCK
   create_template_fixture python "devimg/python-dev:latest"
   create_template_fixture rust "devimg/rust-dev:latest"
   # User config dir templates should NOT appear
-  mkdir -p "${XDG_CONFIG_HOME}/dctl/templates/custom"
-  printf '{"image": "custom"}\n' >"${XDG_CONFIG_HOME}/dctl/templates/custom/devcontainer.json"
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainers/custom"
+  printf '{"image": "custom"}\n' >"${XDG_CONFIG_HOME}/dctl/devcontainers/custom/devcontainer.json"
 
   run discover_templates
   [ "$status" -eq 0 ]
@@ -770,9 +771,11 @@ MOCK
   [[ "$output" == *"python"* ]]
 }
 
-@test "cmd_init --help documents --force and --reset" {
+@test "cmd_init --help documents scope and reset flags" {
   run cmd_init --help
   [ "$status" -eq 0 ]
+  [[ "$output" == *"--image-only"* ]]
+  [[ "$output" == *"--devcontainer-only"* ]]
   [[ "$output" == *"--force"* ]]
   [[ "$output" == *"--reset"* ]]
   [[ "$output" == *"preserves user config"* ]]
@@ -801,6 +804,55 @@ MOCK
 @test "resolve_dockerfile fails for unknown target" {
   run resolve_dockerfile nonexistent
   [ "$status" -ne 0 ]
+}
+
+@test "deploy_image_config seeds Dockerfile to user config" {
+  create_image_fixture agents
+  printf 'FROM alpine\n' >"${XDG_DATA_HOME}/dctl/images/agents/Dockerfile"
+
+  run deploy_image_config agents
+  [ "$status" -eq 0 ]
+  [ -f "${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile" ]
+  [ "$(cat "${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile")" = "FROM alpine" ]
+}
+
+@test "deploy_image_config seeds helper scripts preserving permissions" {
+  create_image_fixture zig-dev
+  printf '#!/usr/bin/env bash\nexit 0\n' >"${XDG_DATA_HOME}/dctl/images/zig-dev/zig-zls-init"
+  chmod 755 "${XDG_DATA_HOME}/dctl/images/zig-dev/zig-zls-init"
+
+  run deploy_image_config zig-dev
+  [ "$status" -eq 0 ]
+  [ -f "${XDG_CONFIG_HOME}/dctl/images/zig-dev/zig-zls-init" ]
+  [ -x "${XDG_CONFIG_HOME}/dctl/images/zig-dev/zig-zls-init" ]
+}
+
+@test "deploy_image_config skips existing user files by default" {
+  create_image_fixture agents
+  printf 'FROM installed\n' >"${XDG_DATA_HOME}/dctl/images/agents/Dockerfile"
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/images/agents"
+  printf 'FROM custom\n' >"${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile"
+
+  run deploy_image_config agents
+  [ "$status" -eq 0 ]
+  [ "$(cat "${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile")" = "FROM custom" ]
+}
+
+@test "deploy_image_config overwrites with reset" {
+  create_image_fixture agents
+  printf 'FROM installed\n' >"${XDG_DATA_HOME}/dctl/images/agents/Dockerfile"
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/images/agents"
+  printf 'FROM custom\n' >"${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile"
+
+  run deploy_image_config agents true
+  [ "$status" -eq 0 ]
+  [ "$(cat "${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile")" = "FROM installed" ]
+}
+
+@test "deploy_image_config skips gracefully for unknown image" {
+  run deploy_image_config missing
+  [ "$status" -eq 0 ]
+  [ ! -e "${XDG_CONFIG_HOME}/dctl/images/missing" ]
 }
 
 @test "cmd_image_build uses registry managed target when no CLI target" {
@@ -898,6 +950,99 @@ YAML
   [ -f "$registry" ]
   [ "$(yq -r ".\"${canonical}\".dockerfile" "$registry")" = "agents" ]
   [ "$(yq -r ".\"${canonical}\".image" "$registry")" = "devimg/agents:latest" ]
+}
+
+@test "init --image-only seeds image without devcontainer deploy" {
+  create_template_fixture python "devimg/python-dev:latest"
+  create_image_fixture python-dev
+  printf 'FROM alpine\n' >"${XDG_DATA_HOME}/dctl/images/python-dev/Dockerfile"
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  run cmd_init --image-only --template python
+  [ "$status" -eq 0 ]
+  [ -f "${XDG_CONFIG_HOME}/dctl/images/python-dev/Dockerfile" ]
+  [ ! -e "${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json" ]
+  assert_mock_not_called "CMD_TEST_CALLED"
+
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  [ -f "$registry" ]
+  [ "$(yq -r ".\"${canonical}\".dockerfile" "$registry")" = "python-dev" ]
+  [ "$(yq -r ".\"${canonical}\".image" "$registry")" = "devimg/python-dev:latest" ]
+  [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "" ]
+}
+
+@test "init --devcontainer-only skips image seeding" {
+  create_template_fixture python "devimg/python-dev:latest"
+  create_image_fixture python-dev
+  printf 'FROM alpine\n' >"${XDG_DATA_HOME}/dctl/images/python-dev/Dockerfile"
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  run cmd_init --devcontainer-only --template python
+  [ "$status" -eq 0 ]
+  [ -f "${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json" ]
+  [ ! -e "${XDG_CONFIG_HOME}/dctl/images/python-dev/Dockerfile" ]
+  assert_mock_called "CMD_TEST_CALLED"
+}
+
+@test "init default seeds both image and devcontainer" {
+  create_template_fixture python "devimg/python-dev:latest"
+  create_image_fixture python-dev
+  printf 'FROM alpine\n' >"${XDG_DATA_HOME}/dctl/images/python-dev/Dockerfile"
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  run cmd_init --template python
+  [ "$status" -eq 0 ]
+  [ -f "${XDG_CONFIG_HOME}/dctl/images/python-dev/Dockerfile" ]
+  [ -f "${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json" ]
+  assert_mock_called "CMD_TEST_CALLED"
+}
+
+@test "init rejects --image-only with --devcontainer-only" {
+  run cmd_init --image-only --devcontainer-only --template python
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Cannot use --image-only with --devcontainer-only"* ]]
+}
+
+@test "init --image-only rejects unknown template" {
+  create_template_fixture python "devimg/python-dev:latest"
+  run cmd_init --image-only --template bogus
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Unknown template: bogus"* ]]
+}
+
+@test "init --image-only --force preserves existing devcontainer registration" {
+  create_template_fixture python "devimg/python-dev:latest"
+  create_image_fixture python-dev
+  printf 'FROM alpine\n' >"${XDG_DATA_HOME}/dctl/images/python-dev/Dockerfile"
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  # First full init to register devcontainer
+  run cmd_init --template python
+  [ "$status" -eq 0 ]
+
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  local original_dc
+  original_dc="$(yq -r ".\"${canonical}\".devcontainer" "$registry")"
+  [ "$original_dc" != "" ]
+
+  # Now --image-only --force should update image but preserve devcontainer
+  run cmd_init --image-only --force --template python
+  [ "$status" -eq 0 ]
+  [ -f "${XDG_CONFIG_HOME}/dctl/images/python-dev/Dockerfile" ]
+
+  # devcontainer field preserved
+  [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "$original_dc" ]
+  # image fields updated
+  [ "$(yq -r ".\"${canonical}\".dockerfile" "$registry")" = "python-dev" ]
+  [ "$(yq -r ".\"${canonical}\".image" "$registry")" = "devimg/python-dev:latest" ]
 }
 
 @test "discover_config_layers returns sorted _* dirs from user config" {
