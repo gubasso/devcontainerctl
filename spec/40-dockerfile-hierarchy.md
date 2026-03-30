@@ -9,31 +9,33 @@ This document describes the implemented Dockerfile resolution behavior for
 
 ## Hierarchy
 
-Managed Dockerfiles resolve through two layers:
+Managed Dockerfiles resolve through a single layer:
 
 1. `~/.config/dctl/images/<name>/Dockerfile`
-2. `~/.local/share/dctl/images/<name>/Dockerfile`
 
-User overrides always win over installed Dockerfiles.
+Installed files under `~/.local/share/dctl/images/` are seed sources only and
+are never used directly at runtime.
 
 ## Resolution Algorithm
 
 ```text
 resolve_dockerfile(target):
     if ~/.config/dctl/images/<target>/Dockerfile exists: return it
-    if ~/.local/share/dctl/images/<target>/Dockerfile exists: return it
     error: no Dockerfile found for target
 ```
 
-The relevant XDG roots are:
+The relevant runtime XDG root is:
 
 - `${XDG_CONFIG_HOME:-$HOME/.config}/dctl/images/`
-- `${XDG_DATA_HOME:-$HOME/.local/share}/dctl/images/`
+
+Installed Dockerfiles live under `${XDG_DATA_HOME:-$HOME/.local/share}/dctl/images/`
+only so `dctl init` can seed them into user config.
 
 ## User Customization Pattern
 
-1. Copy an installed managed Dockerfile into `~/.config/dctl/images/<name>/`
-2. Modify it
+1. Run `dctl init --template <name>` to seed the managed Dockerfile into
+   `~/.config/dctl/images/<name>/`
+2. Modify the seeded Dockerfile as needed
 3. Run `dctl image build <name>`
 
 `make install` never overwrites files under `~/.config/`.
@@ -45,11 +47,13 @@ The registry field `dockerfile` can be:
 - a managed target name such as `agents` or `python-dev`
 - a direct filesystem path to a Dockerfile
 
-Managed target names still use the two-layer hierarchy. Direct paths are
+Managed target names use user-config Dockerfile resolution. Direct paths are
 validated directly.
 
 ## Architecture Notes
 
 - devcontainer templates remain config-only artifacts
 - images remain build-only artifacts
-- `dctl init` seeds the template-associated Dockerfile to `~/.config/dctl/images/` on first init (or with `--force`/`--reset`/`--image-only`)
+- installed image files are seed sources only
+- `dctl init` seeds the template-associated Dockerfile to `~/.config/dctl/images/`
+  on first init (or with `--force`/`--reset`/`--image-only`)

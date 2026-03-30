@@ -148,13 +148,12 @@ Expected result:
 Scenario:
 
 - `~/.config/dctl/images/agents/Dockerfile` exists
-- `~/.local/share/dctl/images/agents/Dockerfile` exists
 - User runs `dctl image build agents`
 
 Expected result:
 
 - The user Dockerfile is used
-- The installed version is not used
+- Installed files are not consulted at runtime
 
 ### 12. Registry dockerfile field (managed target)
 
@@ -167,7 +166,7 @@ Scenario:
 Expected result:
 
 - The registry value directs target selection
-- Dockerfile resolution uses the two-layer hierarchy for the specified target
+- Dockerfile resolution uses user-config resolution for the specified target
 - An explicit CLI target wins over the registry value
 
 ### 13. Registry dockerfile field (direct path)
@@ -181,7 +180,7 @@ Scenario:
 Expected result:
 
 - The direct path is validated and used
-- The two-layer managed lookup is not consulted
+- The managed lookup is not consulted
 
 ### 14. Schema validation
 

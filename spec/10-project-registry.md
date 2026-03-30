@@ -114,8 +114,8 @@ CLI flag and environment variable and before the local workspace file.
 
 For Dockerfile selection, the registry can:
 
-- point to a managed target name, which then uses the two-layer Dockerfile
-  hierarchy, or
+- point to a managed target name, which then uses user-config Dockerfile
+  resolution, or
 - point to a direct Dockerfile path, which is validated directly
 
 ## Security and Trust Model

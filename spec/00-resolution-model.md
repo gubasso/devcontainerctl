@@ -88,10 +88,10 @@ Dockerfile resolution applies only to `dctl image build`.
 For a managed target, resolution is:
 
 1. `~/.config/dctl/images/<target>/Dockerfile`
-2. `~/.local/share/dctl/images/<target>/Dockerfile`
 
 If the project registry provides `dockerfile: /absolute/path`, that direct path
-is validated and used without the two-layer managed lookup.
+is validated and used without the managed lookup. Installed Dockerfiles are seed
+sources only and must be copied into user config by `dctl init`.
 
 ## Error Handling
 

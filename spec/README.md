@@ -29,7 +29,7 @@ set, terminology, and rationale for the current codebase.
 | [`10-project-registry.md`](./10-project-registry.md) | Per-project YAML registry, canonical name derivation, and JSON Schema validation. | Implemented |
 | [`20-devcontainer-resolution.md`](./20-devcontainer-resolution.md) | `devcontainer.json` lookup algorithm and command integration rules. | Implemented |
 | [`30-templates.md`](./30-templates.md) | Template categories, defaults, discovery order, and `dctl init` behavior. | Implemented |
-| [`40-dockerfile-hierarchy.md`](./40-dockerfile-hierarchy.md) | User-overridden versus installed Dockerfile resolution for managed images. | Implemented |
+| [`40-dockerfile-hierarchy.md`](./40-dockerfile-hierarchy.md) | User-config-only Dockerfile resolution for managed images. | Implemented |
 | [`45-devcontainer-metadata-extraction.md`](./45-devcontainer-metadata-extraction.md) | Historical record of moving shared config out of the image layer and into templates. | Implemented |
 | [`90-implementation-impact.md`](./90-implementation-impact.md) | Mapping from approved design work to the landed code changes. | Implemented |
 | [`99-acceptance-criteria.md`](./99-acceptance-criteria.md) | Cross-cutting acceptance scenarios and non-regression expectations. | Implemented |

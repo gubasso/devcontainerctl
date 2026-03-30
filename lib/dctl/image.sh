@@ -17,7 +17,7 @@ Usage: dctl image <command> [options]
 
 Commands:
   build [OPTIONS] [IMAGE...]
-      Build devcontainer base images from $XDG_DATA_HOME/dctl/images.
+      Build devcontainer base images from $XDG_CONFIG_HOME/dctl/images.
       If no image is specified, launches interactive fzf selection.
 
       Options:
@@ -45,25 +45,13 @@ EOF
 }
 
 discover_image_targets() {
-  local -A seen=()
   local targets=()
   shopt -s nullglob
   local dir name
-  # User image overrides first
   for dir in "$DCTL_IMAGES_DIR"/*/; do
     if [[ -f "${dir}Dockerfile" ]]; then
       name="$(basename "$dir")"
-      seen["$name"]=1
       targets+=("$name")
-    fi
-  done
-  # Installed images (skipped if user override exists)
-  for dir in "$IMAGES_DIR"/*/; do
-    if [[ -f "${dir}Dockerfile" ]]; then
-      name="$(basename "$dir")"
-      if [[ -z "${seen[$name]:-}" ]]; then
-        targets+=("$name")
-      fi
     fi
   done
   shopt -u nullglob
@@ -76,14 +64,7 @@ resolve_dockerfile() {
   local user_path
   user_path="$(config_image_path "$target")"
   if [[ -f "$user_path" ]]; then
-    log "Using Dockerfile override from $user_path" >&2
     printf '%s\n' "$user_path"
-    return 0
-  fi
-  local installed_path
-  installed_path="$(installed_image_path "$target")"
-  if [[ -f "$installed_path" ]]; then
-    printf '%s\n' "$installed_path"
     return 0
   fi
   return 1
@@ -98,7 +79,7 @@ select_image_targets() {
   mapfile -t available < <(discover_image_targets)
 
   if [[ ${#available[@]} -eq 0 ]]; then
-    err "No images found in $IMAGES_DIR (no directories with Dockerfiles)"
+    err "No user image config found in $DCTL_IMAGES_DIR. Run: dctl init --template <name>"
   fi
   if ! command -v fzf >/dev/null 2>&1; then
     err "fzf not found. Install fzf or specify targets explicitly."
@@ -121,9 +102,9 @@ select_image_targets() {
 }
 
 ensure_image_dir_exists() {
-  if [[ ! -d "$IMAGES_DIR" && ! -d "$DCTL_IMAGES_DIR" ]]; then
-    log "No images directory found"
-    log "Install with: make install"
+  if [[ ! -d "$DCTL_IMAGES_DIR" ]]; then
+    log "No user image config found"
+    log "Run: dctl init --template <name>"
     return 1
   fi
 }
@@ -206,7 +187,7 @@ cmd_image_build() {
   if [[ "$all" == true ]]; then
     mapfile -t targets < <(discover_image_targets)
     if [[ ${#targets[@]} -eq 0 ]]; then
-      err "No images found (no directories with Dockerfiles)"
+      err "No user image config found in $DCTL_IMAGES_DIR. Run: dctl init --template <name>"
     fi
   elif [[ ${#targets[@]} -eq 0 ]]; then
     # Check project registry for a dockerfile target
@@ -239,7 +220,8 @@ cmd_image_build() {
   for target in "${targets[@]}"; do
     [[ "$target" == "__registry_direct__" ]] && continue
     if ! resolve_dockerfile "$target" >/dev/null 2>&1; then
-      printf '\033[1;31mERROR:\033[0m Unknown image: %s\n' "$target" >&2
+      printf '\033[1;31mERROR:\033[0m Unknown image: %s (not seeded in %s)\n' "$target" "$DCTL_IMAGES_DIR" >&2
+      printf "Run: dctl init --template <name>\n" >&2
       printf 'Available images:\n' >&2
       discover_image_targets | sed 's/^/  /' >&2
       exit 1
