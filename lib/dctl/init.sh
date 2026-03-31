@@ -115,13 +115,28 @@ merge_two_configs() {
   local base_path="$1"
   local template_path="$2"
 
+  local base_json tmpl_json jq_err
+
+  base_json="$(_strip_jsonc_comments "$base_path")" || return 1
+  tmpl_json="$(_strip_jsonc_comments "$template_path")" || return 1
+
+  # Validate each file individually so parse errors show correct file + line
+  if ! jq_err="$(jq empty <<< "$base_json" 2>&1)"; then
+    printf 'JSON syntax error in %s:\n  %s\n' "$base_path" "$jq_err" >&2
+    return 1
+  fi
+  if ! jq_err="$(jq empty <<< "$tmpl_json" 2>&1)"; then
+    printf 'JSON syntax error in %s:\n  %s\n' "$template_path" "$jq_err" >&2
+    return 1
+  fi
+
   jq -s '
     .[0] as $base | .[1] as $tmpl |
     $base * $tmpl |
     .mounts = (($base.mounts // []) + ($tmpl.mounts // [])) |
     .postCreateCommand = (($base.postCreateCommand // {}) * ($tmpl.postCreateCommand // {})) |
     .containerEnv = (($base.containerEnv // {}) * ($tmpl.containerEnv // {}))
-  ' <(_strip_jsonc_comments "$base_path") <(_strip_jsonc_comments "$template_path")
+  ' <(echo "$base_json") <(echo "$tmpl_json")
 }
 
 discover_config_layers() {
