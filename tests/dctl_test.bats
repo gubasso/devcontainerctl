@@ -1375,6 +1375,35 @@ YAML
   [ "$(jq -r '.remoteUser' "$deployed")" = "testuser" ]
 }
 
+# bats test_tags=unit
+@test "cmd_init --template switches project from one template to another" {
+  create_template_fixture python "devimg/python-dev:latest"
+  create_template_fixture rust "devimg/rust-dev:latest"
+  # shellcheck disable=SC2329
+  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+
+  # First init with python
+  run cmd_init --template python
+  [ "$status" -eq 0 ]
+
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  local python_deployed="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
+  [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "$python_deployed" ]
+
+  # Now switch to rust
+  run cmd_init --template rust
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Switching"* ]]
+
+  local rust_deployed="${XDG_CACHE_HOME}/dctl/devcontainer/rust/devcontainer.json"
+  [ -f "$rust_deployed" ]
+  [ "$(jq -r '.image' "$rust_deployed")" = "devimg/rust-dev:latest" ]
+  # Registry updated to point to rust
+  [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "$rust_deployed" ]
+}
+
 @test "cmd_init --force updates registry but preserves sibling_discovery" {
   create_template_fixture python "devimg/python-dev:latest"
   local canonical
