@@ -387,7 +387,15 @@ cmd_init() {
 
   if [[ "$do_devcontainer" == true ]]; then
     if [[ -n "$existing_registry_path" && "$force" != true && "$reset" != true ]]; then
-      if [[ -f "$existing_registry_path" ]]; then
+      # If user explicitly requested a different template, skip short-circuit
+      local registered_template_name=""
+      if [[ -f "$existing_registry_path" && "$existing_registry_path" == "${DCTL_DEVCONTAINER_CACHE_DIR}/"* ]]; then
+        registered_template_name="$(basename "$(dirname "$existing_registry_path")")"
+      fi
+      if [[ -n "$template" && -n "$registered_template_name" && "$template" != "$registered_template_name" ]]; then
+        warn "Switching project '$canonical_name' from template '$registered_template_name' to '$template'"
+        registry_force=true
+      elif [[ -f "$existing_registry_path" ]]; then
         if [[ "$existing_registry_path" == "${DCTL_DEVCONTAINER_CACHE_DIR}/"* ]]; then
           # Cache path — refresh if stale
           local registered_template
@@ -424,10 +432,12 @@ cmd_init() {
           return $?
         fi
       fi
-      # Registry entry exists but path is stale — force registry update only
-      warn "Registered config path no longer exists: $existing_registry_path; re-deploying"
-      registry_force=true
-      deploy_force=true
+      if [[ ! -f "$existing_registry_path" ]]; then
+        # Registry entry exists but path is stale — force registry update only
+        warn "Registered config path no longer exists: $existing_registry_path; re-deploying"
+        registry_force=true
+        deploy_force=true
+      fi
     fi
   fi
 
