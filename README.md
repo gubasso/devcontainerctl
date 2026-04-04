@@ -88,16 +88,7 @@ dctl ws shell
 
 ## Workflow Comparison
 
-| Task | `dctl` | Dev Container CLI | Docker |
-| --- | --- | --- | --- |
-| Set up a new Python workspace | `dctl init --template python` | Create `.devcontainer/devcontainer.json` manually | Write a `Dockerfile` and container run args manually |
-| Start the workspace | `dctl ws up` | `devcontainer up --workspace-folder . --config /path/to/devcontainer.json` | `docker run -it ...` |
-| Open a shell | `dctl ws shell` | `devcontainer exec --workspace-folder . bash` | `docker exec -it <container> bash` |
-| Run an agent | `dctl ws shell claude` | `devcontainer exec --workspace-folder . bash -lic claude` | `docker exec -it <container> bash -lic claude` |
-| Run a command | `dctl ws exec -- pytest` | `devcontainer exec --workspace-folder . pytest` | `docker exec -it <container> pytest` |
-| Rebuild after config/image changes | `dctl ws reup` | `devcontainer up --workspace-folder . --remove-existing-container` | Rebuild image, remove container, rerun container |
-| Build managed base images | `dctl image build --all` | No built-in global image build flow | Rebuild every project image separately |
-| Stop and remove the workspace | `dctl ws down` | `devcontainer stop` + manual `docker rm` | `docker stop <container> && docker rm <container>` |
+Every `dctl` command has a Docker and Dev Container CLI equivalent — `dctl` just removes the boilerplate, flag repetition, and manual config authoring. See the [full workflow comparison](docs/WORKFLOW-COMPARISON.md) for a step-by-step walkthrough with complete commands, pain points, and command counts for all three approaches.
 
 ## Config System
 

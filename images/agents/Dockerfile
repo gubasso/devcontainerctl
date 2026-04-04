@@ -45,6 +45,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     pkg-config \
     libclang-dev \
+    libdbus-1-dev \
     # X11 build dependencies (suckless: dwm, st, dmenu, etc.)
     libx11-dev \
     libxft-dev \
