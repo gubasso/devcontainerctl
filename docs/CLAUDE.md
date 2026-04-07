@@ -30,7 +30,7 @@ Tests are written with `bats`.
 ## Key Invariants
 
 - `dctl init` writes to XDG-managed config/cache under `~/.config/dctl/` and `~/.cache/dctl/`, not to a local workspace `.devcontainer/`
-- `_00-base` is internal and excluded from template discovery and `dctl init --list`
+- `_00-base` is internal and excluded from deploy list output and pickers
 - `dctl` resolves `devcontainer.json` through a six-level precedence chain: CLI flag, env var, registry, local file, sibling discovery, user default
 - `dctl ws` commands match containers by workspace label, so work-clones keep separate container identity
 - Installed files (`~/.local/share/dctl/`) are seed sources only — `dctl` never builds, merges, or runs containers from installed files directly; all runtime operations use user config (`~/.config/dctl/`) exclusively

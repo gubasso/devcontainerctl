@@ -29,11 +29,11 @@ The relevant runtime XDG root is:
 - `${XDG_CONFIG_HOME:-$HOME/.config}/dctl/images/`
 
 Installed Dockerfiles live under `${XDG_DATA_HOME:-$HOME/.local/share}/dctl/images/`
-only so `dctl init` can seed them into user config.
+only so `dctl deploy image ...` can seed them into user config.
 
 ## User Customization Pattern
 
-1. Run `dctl init --template <name>` to seed the managed Dockerfile into
+1. Run `dctl deploy image <name>` to seed the managed Dockerfile into
    `~/.config/dctl/images/<name>/`
 2. Modify the seeded Dockerfile as needed
 3. Run `dctl image build <name>`
@@ -55,5 +55,5 @@ validated directly.
 - devcontainer templates remain config-only artifacts
 - images remain build-only artifacts
 - installed image files are seed sources only
-- `dctl init` seeds the template-associated Dockerfile to `~/.config/dctl/images/`
-  on first init (or with `--force`/`--reset`/`--image-only`)
+- `dctl deploy image ...` seeds the managed Dockerfile into
+  `~/.config/dctl/images/`

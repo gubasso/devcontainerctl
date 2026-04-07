@@ -79,7 +79,7 @@ select_image_targets() {
   mapfile -t available < <(discover_image_targets)
 
   if [[ ${#available[@]} -eq 0 ]]; then
-    err "No user image config found in $DCTL_IMAGES_DIR. Run: dctl init --template <name>"
+    err "No user image config found in $DCTL_IMAGES_DIR. Run: dctl deploy image <name> or dctl deploy --all-images"
   fi
   if ! command -v fzf >/dev/null 2>&1; then
     err "fzf not found. Install fzf or specify targets explicitly."
@@ -104,7 +104,7 @@ select_image_targets() {
 ensure_image_dir_exists() {
   if [[ ! -d "$DCTL_IMAGES_DIR" ]]; then
     log "No user image config found"
-    log "Run: dctl init --template <name>"
+    log "Run: dctl deploy image <name> or dctl deploy --all-images"
     return 1
   fi
 }
@@ -187,7 +187,7 @@ cmd_image_build() {
   if [[ "$all" == true ]]; then
     mapfile -t targets < <(discover_image_targets)
     if [[ ${#targets[@]} -eq 0 ]]; then
-      err "No user image config found in $DCTL_IMAGES_DIR. Run: dctl init --template <name>"
+      err "No user image config found in $DCTL_IMAGES_DIR. Run: dctl deploy image <name> or dctl deploy --all-images"
     fi
   elif [[ ${#targets[@]} -eq 0 ]]; then
     # Check project registry for a dockerfile target
@@ -221,7 +221,7 @@ cmd_image_build() {
     [[ "$target" == "__registry_direct__" ]] && continue
     if ! resolve_dockerfile "$target" >/dev/null 2>&1; then
       printf '\033[1;31mERROR:\033[0m Unknown image: %s (not seeded in %s)\n' "$target" "$DCTL_IMAGES_DIR" >&2
-      printf "Run: dctl init --template <name>\n" >&2
+      printf "Run: dctl deploy image <name> or dctl deploy --all-images\n" >&2
       printf 'Available images:\n' >&2
       discover_image_targets | sed 's/^/  /' >&2
       exit 1

@@ -108,8 +108,12 @@ are live in the current codebase:
 - per-project registry support in `~/.config/dctl/projects.yaml`
 - `_00-base` plus selectable template composition with generated cache output under
   `~/.cache/dctl/devcontainer/`
+- `dctl deploy` as the install-to-config seeding command for managed templates
+  and managed Dockerfiles
 - user-config-only Dockerfile resolution for `dctl image build`
 - metadata extraction from the Dockerfile into the template system
+- slim `dctl init` that reads only deployed user config, auto-builds missing
+  managed images, writes cache, and registers the project
 
 The spec set remains useful as a design record and glossary:
 
@@ -118,6 +122,7 @@ The spec set remains useful as a design record and glossary:
 - [`../spec/10-project-registry.md`](../spec/10-project-registry.md) — per-project registry design
 - [`../spec/20-devcontainer-resolution.md`](../spec/20-devcontainer-resolution.md) — devcontainer resolution flow
 - [`../spec/30-templates.md`](../spec/30-templates.md) — template system
+- [`../spec/35-deploy.md`](../spec/35-deploy.md) — deploy command semantics
 - [`../spec/40-dockerfile-hierarchy.md`](../spec/40-dockerfile-hierarchy.md) — Dockerfile override hierarchy
 - [`../spec/45-devcontainer-metadata-extraction.md`](../spec/45-devcontainer-metadata-extraction.md) — metadata extraction history
 
@@ -224,7 +229,8 @@ devcontainer --version
 ## Base Images
 
 Dockerfiles are installed by `make install` into `~/.local/share/dctl/images/`,
-then seeded into `~/.config/dctl/images/` by `dctl init` for runtime use.
+then deployed into `~/.config/dctl/images/` by `dctl deploy image ...` for
+runtime use.
 
 **Source files** (single source of truth):
 
@@ -865,7 +871,7 @@ alongside it.
 
 ### Base Configuration Reuse via the `_00-base` Template
 
-Shared devcontainer defaults live in the `_00-base` template at `devcontainers/_00-base/devcontainer.json` (installed to `~/.local/share/dctl/devcontainers/_00-base/`). When you run `dctl init`, all user config layers named `_*/devcontainer.json` are merged alphabetically and the selected project template is applied last.
+Shared devcontainer defaults live in the `_00-base` template at `devcontainers/_00-base/devcontainer.json` (installed to `~/.local/share/dctl/devcontainers/_00-base/`). When you run `dctl deploy devcontainer ...`, internal `_*/` layers are copied into `~/.config/dctl/devcontainer/`. When you run `dctl init`, all user config layers named `_*/devcontainer.json` are merged alphabetically and the selected project template is applied last.
 
 **Defaults provided by `_00-base`:**
 
@@ -1149,8 +1155,10 @@ See [README.md](../README.md) and [QUICKSTART.md](QUICKSTART.md) for the
 baseline install/init/up/shell flow. The key `dctl`-specific workflow behavior
 to keep in mind is:
 
-- `dctl init` seeds `_00-base` plus a selected template into
-  `~/.config/dctl/devcontainer/`, then writes the merged config to
+- `dctl deploy devcontainer ...` and `dctl deploy image ...` copy installed
+  managed assets into `~/.config/dctl/`
+- `dctl init` selects a deployed template from `~/.config/dctl/devcontainer/`,
+  then writes the merged config to
   `~/.cache/dctl/devcontainer/<name>/devcontainer.json`
 - `dctl ws up` and `dctl ws reup` resolve config through the six-level
   precedence chain before invoking the Dev Container CLI

@@ -7,20 +7,21 @@ Reusable project templates live here for versioned tracking in this repo.
 ```text
 devcontainers/  ──make install──>  ~/.local/share/dctl/devcontainers/
                                   │
-                                  └──seed if missing──>  ~/.config/dctl/devcontainer/
+                                  └──dctl deploy──>  ~/.config/dctl/devcontainer/
                                                              │
                                                              └──merge _00-base + _NN-* + template──>  ~/.cache/dctl/devcontainer/
 ```
 
 - **Installed** (`~/.local/share/dctl/devcontainers/`): built-in templates shipped by `make install`
-- **Config** (`~/.config/dctl/devcontainer/`): seeded config files, then user-editable
+- **Config** (`~/.config/dctl/devcontainer/`): deployed config files, then user-editable
 - **Cache** (`~/.cache/dctl/devcontainer/`): generated merged `devcontainer.json` output consumed by `dctl ws up`
 
 ## Installed Files Are Seed Sources Only
 
 Installed files under `~/.local/share/dctl/` are never used directly at runtime.
-`dctl init --template <name>` seeds **both** the template's devcontainer config layers
-and its associated managed Dockerfile into user config:
+`dctl deploy devcontainer <name>` copies the template's devcontainer config into
+user config, and `dctl deploy image <name>` copies the associated managed image
+files into user config:
 
 - `~/.config/dctl/devcontainer/` — devcontainer.json layers (base + template)
 - `~/.config/dctl/images/` — managed Dockerfile and helper scripts
@@ -45,7 +46,8 @@ to customize their setup.
 
 ## Merge Semantics
 
-`dctl init` merges all user config layers named `_*/devcontainer.json` in alphabetical order, then merges the selected template on top using `jq`.
+`dctl init` merges all user config layers named `_*/devcontainer.json` in
+alphabetical order, then merges the selected template on top using `jq`.
 
 - `mounts` are concatenated in merge order
 - `postCreateCommand` is merged by key
@@ -54,6 +56,7 @@ to customize their setup.
 
 ## Discovery Rules
 
-- Template discovery reads installed templates only from `~/.local/share/dctl/devcontainers/`
-- Directories starting with `_` are internal and excluded from `dctl init --list`
+- Directories starting with `_` are internal
+- Internal templates are never shown in picker or list output
+- Internal templates are always reconciled during devcontainer deploys
 - User customization happens in `~/.config/dctl/devcontainer/`, and those user config files are the only merge inputs

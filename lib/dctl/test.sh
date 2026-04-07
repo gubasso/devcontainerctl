@@ -98,7 +98,7 @@ build_workspace_image_if_managed() {
       (cmd_image_build "$target")
       return $?
     fi
-    warn "Managed image '$image' not seeded. Run: dctl init --template <name>"
+    warn "Managed image '$image' not deployed. Run: dctl deploy image ${target} or dctl deploy --all-images"
     return 1
   fi
 
