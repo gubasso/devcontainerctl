@@ -37,6 +37,13 @@ Tests are written with `bats`.
 - Installed templates seed user config, but composed devcontainer output is built only from `~/.config/dctl/devcontainer/`
 - Dotfiles are optional and belong in a user layer such as `_01-dotfiles`, not in shipped defaults or image build inputs
 
+## Mermaid Diagrams
+
+- Target mermaid **10.2.x** compatibility (nvim markdown-preview renderer)
+- Use only `flowchart`, `sequenceDiagram`, `classDiagram`, `stateDiagram-v2`, `erDiagram`, `gantt`, `pie`, `gitgraph`
+- Do **not** use `block-beta` (requires 10.9+), `timeline` (requires 10.7+), `mindmap` (requires 10.1+ but buggy), `sankey` (requires 10.3+), or `xychart` (requires 10.5+)
+- Avoid special characters in node labels — use `·` instead of `()`, escape parens if needed
+
 ## References
 
 - [README.md](../README.md) — product overview, install, CLI, XDG layout
