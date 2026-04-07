@@ -36,40 +36,24 @@ Every approach starts with a Dockerfile that defines the image. But the Dockerfi
 
 ### Docker
 
-Ana writes a Dockerfile from scratch. The real file is around 45 lines — base image, apt packages, gh CLI, mise for Python and Node, Poetry, pre-commit, Claude Code, Codex, Gemini CLI, non-root user. Here is a condensed view:
+Ana writes a Dockerfile from scratch — around 45 lines covering everything from OS packages to AI agent CLIs:
 
-```dockerfile
-FROM debian:bookworm-slim
-
-ARG USERNAME=ana
-ARG USER_UID=1000
-ARG USER_GID=1000
-
-ENV DEBIAN_FRONTEND=noninteractive
-ENV MISE_DATA_DIR=/opt/mise
-ENV MISE_INSTALL_PATH=/opt/mise/bin/mise
-ENV PATH=/opt/mise/shims:/opt/mise/bin:/home/${USERNAME}/.local/bin:${PATH}
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    bash build-essential ca-certificates curl git jq pipx sudo unzip \
-    && rm -rf /var/lib/apt/lists/*
-
-# ... gh CLI installed via apt repository (~8 lines) ...
-
-RUN groupadd --gid "${USER_GID}" "${USERNAME}" \
-    && useradd --uid "${USER_UID}" --gid "${USER_GID}" -m -s /bin/bash "${USERNAME}" \
-    && echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/${USERNAME}"
-
-RUN curl -fsSL https://mise.run | sh && mise use --global python@3.12 node@lts
-
-USER ${USERNAME}
-RUN pipx install poetry pre-commit
-RUN npm install -g @anthropic-ai/claude-code @openai/codex @google/gemini-cli
-
-WORKDIR /workspaces/snackbar-api
+```
+snackbar-api/
+└── Dockerfile          ← ~45 lines, committed to the repo
 ```
 
-She saves the file at `~/projects/snackbar-api/Dockerfile` and builds it:
+```mermaid
+flowchart TD
+    A["FROM debian:bookworm-slim"] --> B["apt: bash, build-essential, curl, git, jq, pipx, sudo …"]
+    B --> C["gh CLI via apt repository"]
+    C --> D["non-root user: ana · uid 1000"]
+    D --> E["mise → python 3.12, node LTS"]
+    E --> F["pipx → poetry, pre-commit"]
+    F --> G["npm → claude-code, codex, gemini-cli"]
+```
+
+She builds it:
 
 ```bash
 cd ~/projects/snackbar-api
@@ -305,7 +289,7 @@ Ana did not write any of this. It came from the seeded defaults, and she can cus
 | Runtime config location | CLI flags (re-typed every run) | `devcontainer.json` (declared once) | Pre-seeded config (already done) |
 | Commands to start | 2 (volume create + 15-line `docker run`) + manual setup commands | 1 (`devcontainer up`) | 1 (`dctl ws up`) |
 | Post-create hooks | None — manual `docker exec` after every creation | `postCreateCommand` in JSON | Pre-configured in seeded template |
-| Credential forwarding | Manual `$(gh auth token)` extraction | Manual `${localEnv:GH_TOKEN}` + host export | Automatic at exec time |
+| Credential forwarding | Manual `$(gh auth token)` extraction | Manual `${localEnv:GH_TOKEN}` + host export | Automatic at exec time (gh/glab; silently skipped if unavailable) |
 | Config reuse across projects | None | None — per-project JSON | Shared across all workspaces |
 
 ## Step 3: Scale to multiple projects
@@ -550,14 +534,14 @@ Benefits:
 
 - `dctl` finds the container by workspace label.
 - It forwards `TERM`, `COLORTERM`, `TERM_PROGRAM`, `TERM_PROGRAM_VERSION`, and Kitty-specific vars automatically.
-- It also forwards `GH_TOKEN` and `GITLAB_TOKEN` automatically.
+- It also forwards `GH_TOKEN` and `GITLAB_TOKEN` automatically — extracted from `gh auth token` / `glab auth status` on the host. If either CLI is missing or not authenticated, that token is silently skipped (no errors, no prompts).
 
 | | Docker | Dev Container CLI | dctl |
 |---|---|---|---|
 | Commands | 2 (`docker ps` + `docker exec`) | 1 (`devcontainer exec`) | 1 (`dctl ws shell`) |
 | Container lookup | Manual — scan `docker ps` output | Automatic — by workspace label | Automatic — by workspace label |
 | Terminal env forwarding | No | No | Yes (`TERM`, `COLORTERM`, Kitty vars) |
-| Credential forwarding | No | No | Yes (`GH_TOKEN`, `GITLAB_TOKEN`) |
+| Credential forwarding | No | No | Yes (`GH_TOKEN`, `GITLAB_TOKEN`; graceful fallback if CLIs are missing) |
 
 ## Step 5: Run an agent
 
@@ -892,4 +876,4 @@ Benefits:
 | **Manual files** | **1 Dockerfile per project** | **1 Dockerfile + 1 JSON per project** | **0** |
 | **Per-project duplication** | **Yes** | **Yes (both files)** | **No** |
 
-`dctl` does not replace Docker or devcontainers — it builds on both. The value is in conventions: managed images, shared config, workspace-aware container identity, and automatic credential forwarding. Ana writes zero boilerplate, and her teammates get the same setup with `make install && dctl init`.
+`dctl` does not replace Docker or devcontainers — it builds on both. The value is in conventions: managed images, shared config, workspace-aware container identity, and automatic credential forwarding for GitHub (`gh`) and GitLab (`glab`) — with graceful degradation when either CLI is missing or unauthenticated. Ana writes zero boilerplate, and her teammates get the same setup with `make install && dctl init`.

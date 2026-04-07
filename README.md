@@ -185,7 +185,10 @@ dctl ws down
 
 `dctl ws` adds a few important host-side conveniences:
 
-- forwards `GH_TOKEN` and `GITLAB_TOKEN` into the container by extracting them from `gh`/`glab` when available
+- **Credential forwarding (GitHub and GitLab):** on every `exec`, `shell`, or `run`, `dctl` extracts tokens and injects them into the container as `GH_TOKEN` and `GITLAB_TOKEN`. The extraction follows a precedence chain:
+  - `GH_TOKEN` env var → `GITHUB_TOKEN` env var → `gh auth token` CLI
+  - `GITLAB_TOKEN` env var → `glab auth status --show-token` CLI
+  - If a CLI is not installed or not authenticated, that token is silently skipped — `dctl` never errors on missing credentials.
 - forwards terminal-related env vars such as `TERM`, `COLORTERM`, `TERM_PROGRAM`, and Kitty-specific vars
 - bind-mounts the shared git common dir automatically for linked worktrees
 
