@@ -5,8 +5,8 @@
 ## Purpose
 
 This document defines the implemented config resolution model used by `dctl`.
-It covers both `devcontainer.json` resolution and the narrower Dockerfile
-resolution used by `dctl image build`.
+It covers `devcontainer.json` resolution, managed asset deployment, and the
+Dockerfile resolution used by `dctl image build`.
 
 ## Goals
 
@@ -14,6 +14,7 @@ resolution used by `dctl image build`.
 - Allow explicit overrides from the CLI and environment
 - Support host-side project configuration in `projects.yaml`
 - Keep user config, installed assets, and generated cache separated by XDG role
+- Make the user config directory the only runtime-authoritative location
 - Make selection deterministic and debuggable
 
 ## Devcontainer.json Precedence
@@ -46,6 +47,17 @@ The implemented split is:
   - generated merged `devcontainer.json` files
 
 All paths honor `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, and `XDG_CACHE_HOME`.
+
+## Global Managed-Asset Rule
+
+If files are not in `~/.config/dctl/`, they cannot be used at runtime.
+
+- Installed files under `~/.local/share/dctl/` are seed sources only
+- `dctl deploy` copies managed assets from installed data into user config
+- Runtime operations read only from user config and cache
+
+This rule applies to both managed Dockerfiles and managed devcontainer
+templates.
 
 ## Path Normalization
 
@@ -90,8 +102,9 @@ For a managed target, resolution is:
 1. `~/.config/dctl/images/<target>/Dockerfile`
 
 If the project registry provides `dockerfile: /absolute/path`, that direct path
-is validated and used without the managed lookup. Installed Dockerfiles are seed
-sources only and must be copied into user config by `dctl init`.
+is validated and used without the managed lookup. Installed Dockerfiles are
+seed sources only and must be copied into user config by `dctl deploy image ...`
+or `dctl deploy --all-images`.
 
 ## Error Handling
 

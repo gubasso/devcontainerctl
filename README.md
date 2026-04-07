@@ -2,7 +2,7 @@
 
 Pre-built Docker images and a unified `dctl` CLI for devcontainer workspaces — especially useful for running AI coding agents (Claude Code, Codex, OpenCode, Gemini CLI) in safe, isolated sandboxes.
 
-- One-command project setup with `dctl init` and reusable templates.
+- A two-step project setup flow with `dctl deploy` and `dctl init`.
 - Pre-built images with AI agent tooling and language-specific layers ready to go.
 - A composable config system built around `_00-base`, optional `_NN-*` user layers, and user-editable XDG config.
 - Multi-agent workflows with shared containers, token forwarding, and work-clone support.
@@ -30,16 +30,18 @@ Pre-built Docker images and a unified `dctl` CLI for devcontainer workspaces —
 | `rust` | `devimg/rust-dev:latest` | Rust cache volumes and `cargo build` bootstrap |
 | `zig` | `devimg/zig-dev:latest` | Zig/ZLS cache volumes and `zig-zls-init` bootstrap |
 
-### How `dctl init --template` works
+### How `dctl deploy` + `dctl init` work
 
-Each template bundles two things: a `devcontainer.json` config and a managed Dockerfile (the image that config references). When you run `dctl init --template python`, `dctl` seeds **both** into your user config:
+`dctl deploy` copies installed seed assets into user config. `dctl init` then
+selects only from that deployed config, builds any missing managed image, and
+registers the current project:
 
 ```text
 Installed (seed sources only, never used at runtime)
   ~/.local/share/dctl/devcontainers/python/devcontainer.json
   ~/.local/share/dctl/images/python-dev/Dockerfile
 
-        ──dctl init──>
+        ──dctl deploy──>
 
 User config (runtime source of truth, user-editable)
   ~/.config/dctl/devcontainer/_00-base/devcontainer.json   ← shared base layer
@@ -50,9 +52,16 @@ User config (runtime source of truth, user-editable)
 
 Cache (generated, not edited)
   ~/.cache/dctl/devcontainer/python/devcontainer.json      ← merged output used by dctl ws up
+
+        ──dctl init──>
+
+Project registry
+  ~/.config/dctl/projects.yaml                             ← points at merged cache for this project
 ```
 
-After init, all runtime operations (`dctl image build`, `dctl ws up`, `dctl test`) use only the user config and cache — never the installed files directly. You can freely edit the user config files to customize your setup.
+All runtime operations (`dctl image build`, `dctl ws up`, `dctl test`) use only
+the user config and cache — never the installed files directly. You can freely
+edit the user config files to customize your setup.
 
 ### Composable config
 
@@ -62,7 +71,9 @@ The devcontainer config uses a layered merge system:
 - Optional `_NN-*` user layers add personal config (dotfiles, editor mounts)
 - The selected template adds the project-specific layer (image tag, cache volumes, bootstrap commands)
 
-`dctl init` merges all `_*/devcontainer.json` layers alphabetically, then merges the selected template on top. The merge output is cached under `~/.cache/dctl/devcontainer/` and consumed by `dctl ws up`.
+`dctl init` merges all `_*/devcontainer.json` layers alphabetically, then
+merges the selected template on top. The merge output is cached under
+`~/.cache/dctl/devcontainer/` and consumed by `dctl ws up`.
 
 ## Quick Start
 
@@ -74,17 +85,21 @@ Prerequisites:
 ```bash
 make install
 cd ~/projects/my-api
-dctl init --template python
+dctl deploy devcontainer python
+dctl deploy image python-dev
+dctl init --devcontainer python
 dctl image build
 dctl ws up
 dctl ws shell
 ```
 
 1. `make install` — installs `dctl` and copies images/templates to `~/.local/share/dctl/` (seed sources only)
-2. `dctl init --template python` — seeds the Python `devcontainer.json` layers and `python-dev` Dockerfile into `~/.config/dctl/`, merges config to `~/.cache/dctl/`, and registers the project
-3. `dctl image build` — builds `devimg/python-dev:latest` from the seeded Dockerfile in `~/.config/dctl/images/python-dev/`
-4. `dctl ws up` — starts the devcontainer using the merged config from `~/.cache/dctl/`
-5. `dctl ws shell` — drops you into a shell inside the running container
+2. `dctl deploy devcontainer python` — deploys the Python template plus internal `_*/` layers into `~/.config/dctl/devcontainer/`
+3. `dctl deploy image python-dev` — deploys the managed Dockerfile into `~/.config/dctl/images/python-dev/`
+4. `dctl init --devcontainer python` — merges config to `~/.cache/dctl/`, auto-builds the managed image if missing, and registers the project
+5. `dctl image build` — optional explicit rebuild from the deployed Dockerfile in `~/.config/dctl/images/python-dev/`
+6. `dctl ws up` — starts the devcontainer using the merged config from `~/.cache/dctl/`
+7. `dctl ws shell` — drops you into a shell inside the running container
 
 ## Workflow Comparison
 
@@ -105,7 +120,10 @@ Templates add the project-specific layer:
 - language-specific cache volumes
 - language-specific `postCreateCommand` entries
 
-`dctl init` discovers every `~/.config/dctl/devcontainer/_*/devcontainer.json`, merges those internal layers alphabetically, then merges the selected template on top. Installed templates under `~/.local/share/dctl/devcontainers/` are only used to seed missing user config files.
+`dctl init` discovers every `~/.config/dctl/devcontainer/_*/devcontainer.json`,
+merges those internal layers alphabetically, then merges the selected template
+on top. Installed templates under `~/.local/share/dctl/devcontainers/` are seed
+sources only; `dctl deploy` copies them into user config.
 
 ### Custom layers
 
@@ -130,6 +148,7 @@ If you work in sibling clones such as `repo/` and `repo.42-add-auth/`, `dctl` ca
 
 ```bash
 $EDITOR ~/.config/dctl/devcontainer/python/devcontainer.json
+dctl deploy devcontainer python   # optional: resync internal layers from install
 dctl init
 dctl ws reup
 ```
@@ -148,27 +167,47 @@ dctl version
 
 `--config` overrides config resolution for commands that need a `devcontainer.json`.
 
+### `dctl deploy`
+
+```bash
+dctl deploy devcontainer python
+dctl deploy image python-dev
+dctl deploy --all
+dctl deploy --all-devcontainers
+dctl deploy --all-images
+dctl deploy --list
+```
+
+- `devcontainer <name>` deploys one template from `~/.local/share/dctl/devcontainers/` into `~/.config/dctl/devcontainer/`
+- `image <name>` deploys one managed image from `~/.local/share/dctl/images/` into `~/.config/dctl/images/`
+- `--all`, `--all-devcontainers`, `--all-images` deploy bulk selections
+- `--reset` backs up and overwrites shipped files
+- `--dry-run` prints the per-file plan and changes nothing
+- `--list`, `--list-devcontainers`, `--list-images` show `installed`, `deployed`, or `user-only`
+
+Internal devcontainer dirs whose names start with `_` are always reconciled on
+every devcontainer deploy. They are hidden from list output and pickers.
+
 ### `dctl init`
 
 ```bash
-dctl init --template python
-dctl init --image-only --template python
-dctl init --devcontainer-only --template python
-dctl init --list
-dctl init --force --template rust
-dctl init --reset --template rust
-dctl init --no-register --template zig
+dctl init --devcontainer python
+dctl init --force --devcontainer rust
+dctl init
 ```
 
-- `--template <name>` selects a template and seeds both its `devcontainer.json` layers and the associated managed Dockerfile into user config (`~/.config/dctl/`)
-- `--image-only` seeds only the managed Dockerfile (skip devcontainer deploy and smoke test)
-- `--devcontainer-only` seeds only the devcontainer config layers (skip Dockerfile seeding)
-- `--list` prints the selectable templates
-- `--force` rebuilds the cached merged config and re-registers (preserves your user config)
-- `--reset` re-seeds config from installed defaults, rebuilds cache, and re-registers (overwrites user config)
-- `--no-register` skips writing the project registry entry
+- `--devcontainer <name>` selects a deployed template from `~/.config/dctl/devcontainer/`
+- `--force` rebuilds the cached merged config and re-registers the project
 
-On first-time init (or with `--force`/`--reset`), `dctl init` seeds both the devcontainer config layers and the template's managed Dockerfile to user config. Already-registered projects skip seeding unless forced. After seeding, all runtime operations (`dctl image build`, `dctl ws up`) use user config exclusively — installed files are never used directly.
+If the selected devcontainer references a managed image like
+`devimg/python-dev:latest`, `dctl init` validates that
+`~/.config/dctl/images/python-dev/Dockerfile` exists and automatically builds
+the image when it is missing locally.
+
+After registering the project, `dctl init` runs `dctl test` (the workspace
+smoke test) and prints a final summary covering the chosen devcontainer,
+image status, cache and registry paths, and the smoke-test result. `dctl
+init` exits non-zero if the smoke test fails.
 
 ### `dctl ws`
 
@@ -208,7 +247,8 @@ dctl image list
 
 - `~/.config/dctl/images/<target>/Dockerfile`
 
-Run `dctl init` to seed image configs from installed defaults.
+Run `dctl deploy image <name>` or `dctl deploy --all-images` to seed image
+configs from installed defaults.
 
 ### `dctl config`
 
@@ -246,8 +286,8 @@ devimg/agents:latest
 
 | Directory | Purpose | Used at runtime? |
 | --- | --- | --- |
-| `~/.local/share/dctl/` | Installed assets: Dockerfiles, devcontainer templates, schemas. Seed sources only. | No — only read by `dctl init` to populate user config |
-| `~/.config/dctl/` | User config: seeded devcontainer layers, seeded Dockerfiles, project registry, defaults | Yes — sole runtime source for builds, merges, and container operations |
+| `~/.local/share/dctl/` | Installed assets: Dockerfiles, devcontainer templates, schemas. Seed sources only. | No — only read by `dctl deploy` |
+| `~/.config/dctl/` | User config: deployed devcontainer layers, deployed Dockerfiles, project registry, defaults | Yes — sole runtime source for builds, merges, and container operations |
 | `~/.cache/dctl/` | Generated artifacts: merged `devcontainer.json` output | Yes — consumed by `dctl ws up` |
 
 All of these honor `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, and `XDG_CACHE_HOME`.
@@ -280,7 +320,9 @@ This installs:
 - devcontainer templates to `~/.local/share/dctl/devcontainers/` (seed sources — not used at runtime)
 - schema files to `~/.local/share/dctl/schemas/`
 
-`make install` does not write to `~/.config/dctl/` or `~/.cache/dctl/`. Run `dctl init --template <name>` after install to seed images and config into user config for runtime use.
+`make install` does not write to `~/.config/dctl/` or `~/.cache/dctl/`. Run
+`dctl deploy ...` after install to copy managed assets into user config, then
+run `dctl init` to register the current project.
 
 ### Install systemd units
 

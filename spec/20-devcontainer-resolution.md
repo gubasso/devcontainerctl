@@ -86,10 +86,22 @@ config lives elsewhere.
 
 ### `dctl init`
 
-- seeds config files into `~/.config/dctl/devcontainer/`
+- selects a devcontainer only from `~/.config/dctl/devcontainer/`
+- errors if no deployed devcontainers are available and instructs the user to
+  run `dctl deploy`
+- reads the selected devcontainer's `.image` field
+- for managed `devimg/<name>:latest` images, validates that
+  `~/.config/dctl/images/<name>/Dockerfile` exists
+- for managed images, runs `docker image inspect` and automatically calls
+  `dctl image build <name>` when the image is missing locally
 - writes merged output to `~/.cache/dctl/devcontainer/<name>/devcontainer.json`
 - registers the generated cache path in `~/.config/dctl/projects.yaml`
+- runs `dctl test` against the resolved cache and prints a final summary
+  (project, devcontainer, image status, cache path, registry path, smoke-test
+  result); exits non-zero if the smoke test fails
 - does not write local workspace `.devcontainer/` files
+- does not read from installed templates directly
+- does not override `.image` in the generated cache
 
 ### `dctl ws exec`, `dctl ws shell`, `dctl ws run`
 

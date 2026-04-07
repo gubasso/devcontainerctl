@@ -87,18 +87,18 @@ Expected result:
 Scenario:
 
 - `~/.local/share/dctl/devcontainers/python/devcontainer.json` exists
-- User runs `dctl init --list`
+- User runs `dctl deploy --list-devcontainers`
 
 Expected result:
 
-- `python` appears in the template list
+- `python` appears in the deploy list
 - Discovery is based on installed templates only
 
 ### 7. Coordinator template
 
 Scenario:
 
-- User runs `dctl init --template coordinator`
+- User runs `dctl init --devcontainer coordinator`
 
 Expected result:
 
@@ -198,7 +198,7 @@ Expected result:
 
 Scenario:
 
-- User runs `dctl init --template python`
+- User runs `dctl init --devcontainer python`
 
 Expected result:
 
@@ -209,7 +209,7 @@ Expected result:
 
 Scenario:
 
-- User runs `dctl init --template general`
+- User runs `dctl init --devcontainer general`
 
 Expected result:
 
@@ -221,7 +221,7 @@ Expected result:
 
 Scenario:
 
-- User runs `dctl init --template python`
+- User runs `dctl init --devcontainer python`
 - User edits `~/.config/dctl/devcontainer/_00-base/devcontainer.json`
 - User runs `dctl init` again
 
@@ -234,7 +234,7 @@ Expected result:
 
 Scenario:
 
-- User runs `dctl init --force --template python`
+- User runs `dctl init --force --devcontainer python`
 
 Expected result:
 
@@ -245,9 +245,9 @@ Expected result:
 
 Scenario:
 
-- User runs `dctl init --template python`
+- User runs `dctl init --devcontainer python`
 - User edits `~/.config/dctl/devcontainer/_00-base/devcontainer.json`
-- User runs `dctl init --force --template python`
+- User runs `dctl init --force --devcontainer python`
 
 Expected result:
 
@@ -258,7 +258,7 @@ Expected result:
 
 Scenario:
 
-- User runs `dctl init --template python`
+- User runs `dctl init --devcontainer python`
 - User edits `~/.config/dctl/devcontainer/python/devcontainer.json`
 - User runs `dctl init` again
 
@@ -273,7 +273,7 @@ Expected result:
 Scenario:
 
 - User deletes `~/.cache/dctl/` entirely
-- User runs `dctl init --template python`
+- User runs `dctl init --devcontainer python`
 
 Expected result:
 
@@ -296,7 +296,7 @@ Expected result:
 Scenario:
 
 - `~/.local/share/dctl/devcontainers/_00-base/devcontainer.json` exists
-- User runs `dctl init --list`
+- User runs `dctl deploy --list-devcontainers`
 
 Expected result:
 
@@ -313,3 +313,81 @@ Expected result:
 
 - Files are written only to installed data/bin/lib locations
 - No files are written to `~/.config/dctl/` or `~/.cache/dctl/`
+
+### 25. `deploy --list` shows deployment state for both categories
+
+Scenario:
+
+- User runs `dctl deploy --list`
+
+Expected result:
+
+- Output is grouped into devcontainers and images
+- Each listed entry is marked as `installed`, `deployed`, or `user-only`
+- Internal `_*/` devcontainer entries are excluded
+
+### 26. `deploy devcontainer` seeds user config
+
+Scenario:
+
+- User runs `dctl deploy devcontainer python`
+
+Expected result:
+
+- `~/.config/dctl/devcontainer/python/` is created
+- all installed internal `_*/` devcontainer dirs are also deployed
+- the project registry is unchanged
+
+### 27. `deploy --reset` backs up and overwrites shipped files
+
+Scenario:
+
+- `~/.config/dctl/images/python-dev/Dockerfile` exists and differs from the
+  installed copy
+- User runs `dctl deploy image python-dev --reset`
+
+Expected result:
+
+- The existing file is backed up to `Dockerfile.bak.<UTC-ISO-DATE>`
+- The shipped Dockerfile is copied into place
+- user-only neighboring files are untouched
+
+### 28. `init` registers from deployed config only
+
+Scenario:
+
+- `~/.config/dctl/devcontainer/python/devcontainer.json` exists
+- `~/.config/dctl/images/python-dev/Dockerfile` exists
+- User runs `dctl init --devcontainer python`
+
+Expected result:
+
+- The cached config is generated from user config
+- The project registry points at the cache path
+- The registry does not store image-selection duplication from `init`
+
+### 29. `init` errors when nothing is deployed
+
+Scenario:
+
+- `~/.config/dctl/devcontainer/` has no selectable deployed devcontainers
+- User runs `dctl init`
+
+Expected result:
+
+- `dctl` fails with guidance to run `dctl deploy`
+
+### 30. `init` auto-builds missing managed images
+
+Scenario:
+
+- `~/.config/dctl/devcontainer/python/devcontainer.json` references
+  `devimg/python-dev:latest`
+- `~/.config/dctl/images/python-dev/Dockerfile` exists
+- `docker image inspect devimg/python-dev:latest` fails
+- User runs `dctl init --devcontainer python`
+
+Expected result:
+
+- `dctl` automatically runs `dctl image build python-dev`
+- cache generation and registry registration proceed after a successful build

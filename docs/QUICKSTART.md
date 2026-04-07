@@ -4,14 +4,15 @@
 
 - Docker with `buildx`
 - Dev Container CLI installed (`devcontainer`)
-- Managed images built: `dctl image build --all`
 
 ## Setup
 
 ```bash
 make install
 cd ~/projects/my-api
-dctl init --template python
+dctl deploy devcontainer python
+dctl deploy image python-dev
+dctl init --devcontainer python
 dctl ws up
 dctl ws shell
 ```
@@ -31,7 +32,8 @@ Shared settings come from the `_00-base` template and any optional `_NN-*` user 
 ## Common Commands
 
 ```bash
-dctl init --list
+dctl deploy --list
+dctl init --devcontainer python
 dctl ws up
 dctl ws reup
 dctl ws shell
