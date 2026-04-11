@@ -40,16 +40,6 @@ only so `dctl deploy image ...` can seed them into user config.
 
 `make install` never overwrites files under `~/.config/`.
 
-## Relationship to Project Registry
-
-The registry field `dockerfile` can be:
-
-- a managed target name such as `agents` or `python-dev`
-- a direct filesystem path to a Dockerfile
-
-Managed target names use user-config Dockerfile resolution. Direct paths are
-validated directly.
-
 ## Architecture Notes
 
 - devcontainer templates remain config-only artifacts

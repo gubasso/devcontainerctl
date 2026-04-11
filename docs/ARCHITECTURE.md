@@ -105,12 +105,14 @@ are live in the current codebase:
 
 - config resolution with CLI, env, registry, local-file, sibling-discovery, and
   user-default precedence
-- per-project registry support in `~/.config/dctl/projects.yaml`
+- per-project registry support in `~/.config/dctl/projects.yaml` for
+  `devcontainer` selection and explicit `sibling_discovery: false`
 - `_00-base` plus selectable template composition with generated cache output under
   `~/.cache/dctl/devcontainer/`
 - `dctl deploy` as the install-to-config seeding command for managed templates
   and managed Dockerfiles
-- user-config-only Dockerfile resolution for `dctl image build`
+- user-config-only Dockerfile resolution for `dctl image build`, with no
+  project-registry coupling
 - metadata extraction from the Dockerfile into the template system
 - slim `dctl init` that reads only deployed user config, auto-builds missing
   managed images, writes cache, and registers the project

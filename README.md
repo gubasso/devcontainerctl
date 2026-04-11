@@ -97,7 +97,7 @@ dctl ws shell
 2. `dctl deploy devcontainer python` — deploys the Python template plus internal `_*/` layers into `~/.config/dctl/devcontainer/`
 3. `dctl deploy image python-dev` — deploys the managed Dockerfile into `~/.config/dctl/images/python-dev/`
 4. `dctl init --devcontainer python` — merges config to `~/.cache/dctl/`, auto-builds the managed image if missing, and registers the project
-5. `dctl image build` — optional explicit rebuild from the deployed Dockerfile in `~/.config/dctl/images/python-dev/`
+5. `dctl image build` — optional rebuild from deployed managed images via an explicit target, the no-arg picker, or `--all`
 6. `dctl ws up` — starts the devcontainer using the merged config from `~/.cache/dctl/`
 7. `dctl ws shell` — drops you into a shell inside the running container
 
@@ -246,6 +246,10 @@ dctl image list
 `dctl image build` resolves Dockerfiles from user config only:
 
 - `~/.config/dctl/images/<target>/Dockerfile`
+
+With no positional image name, `dctl image build` opens an `fzf` picker over
+the deployed managed images under `~/.config/dctl/images/` and does not consult
+the project registry.
 
 Run `dctl deploy image <name>` or `dctl deploy --all-images` to seed image
 configs from installed defaults.

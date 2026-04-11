@@ -322,6 +322,44 @@ teardown() {
   [[ "$output" == *"Unknown image: unknown"* ]]
 }
 
+@test "cmd_image_build with no args invokes picker over deployed images" {
+  create_user_image_fixture python-dev
+  enable_mocks
+  create_mock fzf 0 "python-dev"
+
+  run script -qec "env PATH='${PATH}' XDG_DATA_HOME='${XDG_DATA_HOME}' XDG_CONFIG_HOME='${XDG_CONFIG_HOME}' XDG_CACHE_HOME='${XDG_CACHE_HOME}' WORKSPACE_FOLDER='${WORKSPACE_FOLDER}' DCTL_LIB_DIR='${DCTL_LIB_DIR}' bash -lc 'set -euo pipefail; source \"${DCTL_LIB_DIR}/common.sh\"; source \"${DCTL_LIB_DIR}/auth.sh\"; source \"${DCTL_LIB_DIR}/image.sh\"; cmd_image_build --dry-run'" /dev/null
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[dry-run] Would build: devimg/python-dev:latest"* ]]
+}
+
+@test "cmd_image_build with no args errors when fzf missing" {
+  create_user_image_fixture agents
+  local old_path="$PATH"
+  PATH="/usr/bin:/bin"
+
+  run cmd_image_build --dry-run
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"fzf not found"* ]]
+
+  PATH="$old_path"
+}
+
+@test "cmd_image_build with no args errors when stdin is not a TTY" {
+  create_user_image_fixture agents
+
+  run cmd_image_build --dry-run
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"requires a terminal"* ]]
+}
+
+@test "cmd_image_build with explicit name builds managed image" {
+  create_user_image_fixture agents
+
+  run cmd_image_build --dry-run agents
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"devimg/agents:latest"* ]]
+}
+
 # bats test_tags=integration
 @test "make install puts Dockerfiles in DATA_DIR/images" {
   local bin_dir data_home lib_dir
@@ -886,52 +924,6 @@ MOCK
   [ "$status" -ne 0 ]
 }
 
-@test "cmd_image_build uses registry managed target when no CLI target" {
-  create_user_image_fixture python-dev
-  local canonical
-  canonical="$(resolve_canonical_project_name)"
-  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
-${canonical}:
-  dockerfile: python-dev
-YAML
-
-  run cmd_image_build --dry-run
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"devimg/python-dev:latest"* ]]
-}
-
-@test "cmd_image_build uses registry direct path when set" {
-  local custom_dir="${TEST_TMPDIR}/custom-docker"
-  mkdir -p "$custom_dir"
-  printf 'FROM alpine\n' >"$custom_dir/Dockerfile"
-  local canonical
-  canonical="$(resolve_canonical_project_name)"
-  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
-${canonical}:
-  dockerfile: ${custom_dir}/Dockerfile
-YAML
-
-  run cmd_image_build --dry-run
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"direct path"* ]]
-}
-
-@test "cmd_image_build CLI target wins over registry dockerfile" {
-  create_user_image_fixture agents
-  create_user_image_fixture python-dev
-  local canonical
-  canonical="$(resolve_canonical_project_name)"
-  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
-${canonical}:
-  dockerfile: python-dev
-YAML
-
-  run cmd_image_build --dry-run agents
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"devimg/agents:latest"* ]]
-  [[ "$output" != *"python-dev"* ]]
-}
-
 @test "discover_image_targets includes user image targets" {
   create_user_image_fixture custom-img
   create_image_fixture agents
@@ -1142,9 +1134,10 @@ JSON
   [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "$deployed" ]
   [ "$(yq -r ".\"${canonical}\".dockerfile // \"\"" "$registry")" = "" ]
   [ "$(yq -r ".\"${canonical}\".image // \"\"" "$registry")" = "" ]
+  [ "$(yq -r ".\"${canonical}\" | has(\"sibling_discovery\")" "$registry")" = "false" ]
 }
 
-@test "cmd_init --force clears stale registry image fields and preserves sibling_discovery" {
+@test "cmd_init --force preserves explicit sibling_discovery: false" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
   create_user_image_fixture python-dev
@@ -1156,8 +1149,6 @@ JSON
   cat >"$registry" <<YAML
 ${canonical}:
   devcontainer: /tmp/existing.json
-  dockerfile: existing-target
-  image: devimg/existing:latest
   sibling_discovery: false
 YAML
   # shellcheck disable=SC2329

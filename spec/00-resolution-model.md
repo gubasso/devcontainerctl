@@ -101,10 +101,10 @@ For a managed target, resolution is:
 
 1. `~/.config/dctl/images/<target>/Dockerfile`
 
-If the project registry provides `dockerfile: /absolute/path`, that direct path
-is validated and used without the managed lookup. Installed Dockerfiles are
-seed sources only and must be copied into user config by `dctl deploy image ...`
-or `dctl deploy --all-images`.
+No-arg `dctl image build` presents an interactive picker over deployed managed
+images and never consults the project registry. Installed Dockerfiles are seed
+sources only and must be copied into user config by `dctl deploy image ...` or
+`dctl deploy --all-images`.
 
 ## Error Handling
 

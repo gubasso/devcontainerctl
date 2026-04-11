@@ -70,7 +70,9 @@ selected template last.
 4. for managed `devimg/<name>:latest` images, validates that the corresponding
    Dockerfile exists in `~/.config/dctl/images/<name>/Dockerfile`
 5. for managed images, auto-builds the local image when missing
-6. registers the generated cache path in `~/.config/dctl/projects.yaml`
+6. registers the generated cache path in `~/.config/dctl/projects.yaml` — the
+   entry contains `devcontainer:` only, plus `sibling_discovery: false` when
+   explicitly overridden
 7. runs `dctl test` (the workspace smoke test) against the resolved cache
 8. prints a final summary with project, devcontainer, image status, cache and
    registry paths, and the smoke-test result

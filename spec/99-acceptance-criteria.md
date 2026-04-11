@@ -155,34 +155,47 @@ Expected result:
 - The user Dockerfile is used
 - Installed files are not consulted at runtime
 
-### 12. Registry dockerfile field (managed target)
+### 12. Image build target selection
 
 Scenario:
 
-- `~/.config/dctl/projects.yaml` contains `org-repo: { dockerfile: python-dev }`
-- User runs `dctl image build` from a matching workspace without specifying a
-  target on the CLI
+- `~/.config/dctl/images/agents/Dockerfile` exists
+- User runs `dctl image build agents`
 
 Expected result:
 
-- The registry value directs target selection
-- Dockerfile resolution uses user-config resolution for the specified target
-- An explicit CLI target wins over the registry value
-
-### 13. Registry dockerfile field (direct path)
+- `devimg/agents:latest` is built from the deployed managed Dockerfile
 
 Scenario:
 
-- `~/.config/dctl/projects.yaml` contains
-  `org-repo: { dockerfile: /home/alice/custom/Dockerfile }`
-- User runs `dctl image build` from a matching workspace
+- `~/.config/dctl/images/agents/Dockerfile` exists
+- User runs `dctl image build` in a TTY with `fzf` available
 
 Expected result:
 
-- The direct path is validated and used
-- The managed lookup is not consulted
+- `dctl` presents a picker over deployed managed images from
+  `~/.config/dctl/images/`
+- `projects.yaml` is not consulted
 
-### 14. Schema validation
+Scenario:
+
+- `~/.config/dctl/images/agents/Dockerfile` exists
+- User runs `dctl image build` with no args and `fzf` is missing
+
+Expected result:
+
+- `dctl` errors with a message naming `fzf`
+
+Scenario:
+
+- `~/.config/dctl/images/agents/Dockerfile` exists
+- User runs `dctl image build` with no args and stdin is not a TTY
+
+Expected result:
+
+- `dctl` errors with a message about requiring a terminal
+
+### 13. Schema validation
 
 Scenario:
 

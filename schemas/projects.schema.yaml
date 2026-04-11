@@ -12,16 +12,6 @@ additionalProperties:
       description: >
         Path to a devcontainer.json file. Overrides local file discovery
         and sibling discovery.
-    dockerfile:
-      type: string
-      description: >
-        Managed Dockerfile target name (e.g., python-dev) or direct
-        filesystem path to a custom Dockerfile. Applies only to
-        dctl image build.
-    image:
-      type: string
-      description: >
-        Optional image tag override (e.g., devimg/python-dev:latest).
     sibling_discovery:
       type: boolean
       default: true
