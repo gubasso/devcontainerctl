@@ -144,15 +144,26 @@ YAML
   [ "$output" = "false" ]
 }
 
-@test "registry dockerfile lookup returns value" {
-  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
-my-repo:
+@test "registry validation rejects dockerfile key" {
+  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<'YAML'
+proj:
   dockerfile: python-dev
 YAML
 
-  run _registry_lookup_dockerfile "my-repo"
-  [ "$status" -eq 0 ]
-  [ "$output" = "python-dev" ]
+  run _registry_lookup_devcontainer "proj"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Unrecognized key"* || "$output" == *"additional properties"* || "$output" == *"ailed"* ]]
+}
+
+@test "registry validation rejects image key" {
+  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<'YAML'
+proj:
+  image: devimg/foo:latest
+YAML
+
+  run _registry_lookup_devcontainer "proj"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Unrecognized key"* || "$output" == *"additional properties"* || "$output" == *"ailed"* ]]
 }
 
 # --- Schema validation ---
@@ -161,7 +172,17 @@ YAML
   cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
 my-repo:
   devcontainer: /path/to/config.json
-  sibling_discovery: true
+YAML
+
+  run _validate_registry "${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  [ "$status" -eq 0 ]
+}
+
+@test "registry validation accepts explicit sibling_discovery false" {
+  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
+my-repo:
+  devcontainer: /path/to/config.json
+  sibling_discovery: false
 YAML
 
   run _validate_registry "${XDG_CONFIG_HOME}/dctl/projects.yaml"
@@ -273,20 +294,20 @@ YAML
 @test "register_project_defaults creates registry from scratch" {
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
 
-  run register_project_defaults "proj-a" "/tmp/proj-a/devcontainer.json" "python-dev" "devimg/python-dev:latest"
+  run register_project_defaults "proj-a" "/tmp/proj-a/devcontainer.json"
   [ "$status" -eq 0 ]
   [ -f "$registry" ]
   [ "$(yq -r '."proj-a".devcontainer' "$registry")" = "/tmp/proj-a/devcontainer.json" ]
-  [ "$(yq -r '."proj-a".dockerfile' "$registry")" = "python-dev" ]
-  [ "$(yq -r '."proj-a".image' "$registry")" = "devimg/python-dev:latest" ]
-  [ "$(yq -r '."proj-a".sibling_discovery' "$registry")" = "true" ]
+  [ "$(yq -r '."proj-a" | has("dockerfile")' "$registry")" = "false" ]
+  [ "$(yq -r '."proj-a" | has("image")' "$registry")" = "false" ]
+  [ "$(yq -r '."proj-a" | has("sibling_discovery")' "$registry")" = "false" ]
 }
 
 @test "register_project_defaults stores \$HOME in devcontainer path" {
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
   local home_path="${HOME}/config/devcontainer.json"
 
-  run register_project_defaults "proj-home" "$home_path" "" ""
+  run register_project_defaults "proj-home" "$home_path"
   [ "$status" -eq 0 ]
   [ -f "$registry" ]
   # Raw YAML should contain $HOME, not expanded path
@@ -299,17 +320,13 @@ YAML
   cat >"$registry" <<'YAML'
 proj-a:
   devcontainer: /tmp/original.json
-  dockerfile: agents
-  image: devimg/agents:latest
   sibling_discovery: false
 YAML
 
-  run register_project_defaults "proj-a" "/tmp/new.json" "python-dev" "devimg/python-dev:latest"
+  run register_project_defaults "proj-a" "/tmp/new.json"
   [ "$status" -eq 0 ]
   [[ "$output" == *"already registered"* ]]
   [ "$(yq -r '."proj-a".devcontainer' "$registry")" = "/tmp/original.json" ]
-  [ "$(yq -r '."proj-a".dockerfile' "$registry")" = "agents" ]
-  [ "$(yq -r '."proj-a".image' "$registry")" = "devimg/agents:latest" ]
   [ "$(yq -r '."proj-a".sibling_discovery' "$registry")" = "false" ]
 }
 
@@ -318,35 +335,31 @@ YAML
   cat >"$registry" <<'YAML'
 proj-a:
   devcontainer: /tmp/original.json
-  dockerfile: agents
-  image: devimg/agents:latest
   sibling_discovery: false
 YAML
 
-  run register_project_defaults "proj-a" "/tmp/new.json" "python-dev" "devimg/python-dev:latest" "true"
-  [ "$status" -eq 0 ]
-  [ "$(yq -r '."proj-a".devcontainer' "$registry")" = "/tmp/new.json" ]
-  [ "$(yq -r '."proj-a".dockerfile' "$registry")" = "python-dev" ]
-  [ "$(yq -r '."proj-a".image' "$registry")" = "devimg/python-dev:latest" ]
-  [ "$(yq -r '."proj-a".sibling_discovery' "$registry")" = "false" ]
-}
-
-@test "register_project_defaults with force removes stale dockerfile/image" {
-  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
-  cat >"$registry" <<'YAML'
-proj-a:
-  devcontainer: /tmp/original.json
-  dockerfile: agents
-  image: devimg/agents:latest
-  sibling_discovery: true
-YAML
-
-  run register_project_defaults "proj-a" "/tmp/new.json" "" "" "true"
+  run register_project_defaults "proj-a" "/tmp/new.json" "true"
   [ "$status" -eq 0 ]
   [ "$(yq -r '."proj-a".devcontainer' "$registry")" = "/tmp/new.json" ]
   [ "$(yq -r '."proj-a" | has("dockerfile")' "$registry")" = "false" ]
   [ "$(yq -r '."proj-a" | has("image")' "$registry")" = "false" ]
-  [ "$(yq -r '."proj-a".sibling_discovery' "$registry")" = "true" ]
+  [ "$(yq -r '."proj-a".sibling_discovery' "$registry")" = "false" ]
+}
+
+@test "register_project_defaults with force strips default sibling_discovery" {
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  cat >"$registry" <<'YAML'
+proj-a:
+  devcontainer: /tmp/original.json
+  sibling_discovery: true
+YAML
+
+  run register_project_defaults "proj-a" "/tmp/new.json" "true"
+  [ "$status" -eq 0 ]
+  [ "$(yq -r '."proj-a".devcontainer' "$registry")" = "/tmp/new.json" ]
+  [ "$(yq -r '."proj-a" | has("dockerfile")' "$registry")" = "false" ]
+  [ "$(yq -r '."proj-a" | has("image")' "$registry")" = "false" ]
+  [ "$(yq -r '."proj-a" | has("sibling_discovery")' "$registry")" = "false" ]
 }
 
 @test "register_project_defaults appends to existing registry" {
@@ -354,35 +367,32 @@ YAML
   cat >"$registry" <<'YAML'
 proj-a:
   devcontainer: /tmp/proj-a.json
-  dockerfile: agents
-  image: devimg/agents:latest
-  sibling_discovery: true
 YAML
 
-  run register_project_defaults "proj-b" "/tmp/proj-b.json" "rust-dev" "devimg/rust-dev:latest"
+  run register_project_defaults "proj-b" "/tmp/proj-b.json"
   [ "$status" -eq 0 ]
   [ "$(yq -r '."proj-a".devcontainer' "$registry")" = "/tmp/proj-a.json" ]
   [ "$(yq -r '."proj-b".devcontainer' "$registry")" = "/tmp/proj-b.json" ]
-  [ "$(yq -r '."proj-b".dockerfile' "$registry")" = "rust-dev" ]
-  [ "$(yq -r '."proj-b".image' "$registry")" = "devimg/rust-dev:latest" ]
-  [ "$(yq -r '."proj-b".sibling_discovery' "$registry")" = "true" ]
+  [ "$(yq -r '."proj-b" | has("dockerfile")' "$registry")" = "false" ]
+  [ "$(yq -r '."proj-b" | has("image")' "$registry")" = "false" ]
+  [ "$(yq -r '."proj-b" | has("sibling_discovery")' "$registry")" = "false" ]
 }
 
-@test "register_project_defaults without dockerfile/image omits them" {
+@test "register_project_defaults writes minimum-viable entry" {
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
 
-  run register_project_defaults "proj-a" "/tmp/proj-a.json" "" ""
+  run register_project_defaults "proj-a" "/tmp/proj-a.json"
   [ "$status" -eq 0 ]
   [ "$(yq -r '."proj-a".devcontainer' "$registry")" = "/tmp/proj-a.json" ]
-  [ "$(yq -r '."proj-a".sibling_discovery' "$registry")" = "true" ]
   [ "$(yq -r '."proj-a" | has("dockerfile")' "$registry")" = "false" ]
   [ "$(yq -r '."proj-a" | has("image")' "$registry")" = "false" ]
+  [ "$(yq -r '."proj-a" | has("sibling_discovery")' "$registry")" = "false" ]
 }
 
 @test "register_project_defaults fails on invalid existing registry" {
   printf 'not: valid: yaml: [broken\n' >"${XDG_CONFIG_HOME}/dctl/projects.yaml"
 
-  run register_project_defaults "proj-a" "/tmp/proj-a.json" "python-dev" "devimg/python-dev:latest"
+  run register_project_defaults "proj-a" "/tmp/proj-a.json"
   [ "$status" -ne 0 ]
   [[ "$output" == *"Invalid YAML"* || "$output" == *"ailed"* ]]
 }
@@ -391,7 +401,7 @@ YAML
   rm -rf "${XDG_CONFIG_HOME}/dctl"
   [ ! -d "${XDG_CONFIG_HOME}/dctl" ]
 
-  run register_project_defaults "proj-a" "/tmp/proj-a.json" "python-dev" "devimg/python-dev:latest"
+  run register_project_defaults "proj-a" "/tmp/proj-a.json"
   [ "$status" -eq 0 ]
   [ -d "${XDG_CONFIG_HOME}/dctl" ]
   [ -f "${XDG_CONFIG_HOME}/dctl/projects.yaml" ]

@@ -304,7 +304,7 @@ cmd_init() {
 
   ensure_image_available_for_devcontainer "$devcontainer"
 
-  register_project_defaults "$canonical_name" "$deployed_config" "" "" "$registry_force"
+  register_project_defaults "$canonical_name" "$deployed_config" "$registry_force"
 
   local test_status="passed"
   if ! DCTL_CLI_CONFIG="$deployed_config" cmd_test; then

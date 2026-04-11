@@ -73,7 +73,7 @@ _validate_registry() {
   local bad_keys
   bad_keys="$(yq eval '
     to_entries | .[].value | to_entries | .[] |
-    select(.key != "devcontainer" and .key != "dockerfile" and .key != "image" and .key != "sibling_discovery") |
+    select(.key != "devcontainer" and .key != "sibling_discovery") |
     .key
   ' "$registry" 2>/dev/null || true)"
   if [[ -n "$bad_keys" ]]; then
@@ -81,19 +81,16 @@ _validate_registry() {
   fi
 
   # Check string fields are strings
-  local field
-  for field in devcontainer dockerfile image; do
-    local bad_str
-    bad_str="$(yq eval '
-      to_entries | .[].value |
-      select(has("'"$field"'")) |
-      select(.'"$field"' | type != "!!str") |
-      parent | to_entries | .[0].key
-    ' "$registry" 2>/dev/null || true)"
-    if [[ -n "$bad_str" ]]; then
-      err "Invalid type for $field in $registry: expected string"
-    fi
-  done
+  local bad_str
+  bad_str="$(yq eval '
+    to_entries | .[].value |
+    select(has("devcontainer")) |
+    select(.devcontainer | type != "!!str") |
+    parent | to_entries | .[0].key
+  ' "$registry" 2>/dev/null || true)"
+  if [[ -n "$bad_str" ]]; then
+    err "Invalid type for devcontainer in $registry: expected string"
+  fi
 
   # Check sibling_discovery is boolean if present
   local bad_bool
@@ -162,11 +159,6 @@ _registry_lookup_sibling_discovery() {
   fi
 }
 
-_registry_lookup_dockerfile() {
-  local canonical_name="$1"
-  _registry_read_field "$canonical_name" "dockerfile"
-}
-
 _registry_update_devcontainer() {
   local canonical_name="$1"
   local new_path="$2"
@@ -205,9 +197,7 @@ _registry_has_project() {
 register_project_defaults() {
   local canonical_name="$1"
   local devcontainer_path="$2"
-  local dockerfile="${3:-}"
-  local image="${4:-}"
-  local force="${5:-false}"
+  local force="${3:-false}"
 
   # Store paths with $HOME for portability across machines
   devcontainer_path="${devcontainer_path/#$HOME/\$HOME}"
@@ -242,28 +232,20 @@ register_project_defaults() {
   if [[ "$existing_sibling" == "false" ]]; then
     yq_expr+=' | .[env(YQ_KEY)].sibling_discovery = false'
   else
-    yq_expr+=' | .[env(YQ_KEY)].sibling_discovery = true'
+    yq_expr+=' | del(.[env(YQ_KEY)].sibling_discovery)'
   fi
-  if [[ -n "$dockerfile" ]]; then
-    yq_expr+=' | .[env(YQ_KEY)].dockerfile = env(YQ_DOCKERFILE)'
-  elif [[ "$force" == true && "$project_exists" == true ]]; then
-    yq_expr+=' | del(.[env(YQ_KEY)].dockerfile)'
-  fi
-  if [[ -n "$image" ]]; then
-    yq_expr+=' | .[env(YQ_KEY)].image = env(YQ_IMAGE)'
-  elif [[ "$force" == true && "$project_exists" == true ]]; then
-    yq_expr+=' | del(.[env(YQ_KEY)].image)'
+  if [[ "$force" == true && "$project_exists" == true ]]; then
+    yq_expr+=' | del(.[env(YQ_KEY)].dockerfile) | del(.[env(YQ_KEY)].image)'
   fi
 
   local tmp_registry="${registry}.tmp.$$"
-  export YQ_KEY="$canonical_name" YQ_DEVCONTAINER="$devcontainer_path" \
-    YQ_DOCKERFILE="$dockerfile" YQ_IMAGE="$image"
+  export YQ_KEY="$canonical_name" YQ_DEVCONTAINER="$devcontainer_path"
   if [[ -s "$registry" ]]; then
     yq eval "$yq_expr" "$registry" >"$tmp_registry"
   else
     yq -n "$yq_expr" >"$tmp_registry"
   fi
-  unset YQ_KEY YQ_DEVCONTAINER YQ_DOCKERFILE YQ_IMAGE
+  unset YQ_KEY YQ_DEVCONTAINER
 
   mv "$tmp_registry" "$registry"
   _validate_registry "$registry"

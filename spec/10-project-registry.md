@@ -27,15 +27,10 @@ Example:
 ```yaml
 org-repo:
   devcontainer: /home/alice/.cache/dctl/devcontainer/python/devcontainer.json
-  dockerfile: python-dev
-  image: devimg/python-dev:latest
-  sibling_discovery: true
 
 acme-docs:
+  devcontainer: /home/alice/.cache/dctl/devcontainer/docs/devcontainer.json
   sibling_discovery: false
-
-personal-api:
-  dockerfile: /home/alice/custom/Dockerfile
 ```
 
 Format rules:
@@ -89,18 +84,6 @@ Examples:
 - path to a `devcontainer.json`
 - participates in the main resolution chain
 
-### `dockerfile`
-
-- managed target name such as `python-dev`, or
-- absolute path to a custom Dockerfile
-
-This field applies only to `dctl image build`.
-
-### `image`
-
-- optional image tag recorded by `dctl init`
-- available in the registry for future consumers and introspection
-
 ### `sibling_discovery`
 
 - boolean
@@ -111,12 +94,6 @@ This field applies only to `dctl image build`.
 
 The registry is third in the `devcontainer.json` precedence chain, after the
 CLI flag and environment variable and before the local workspace file.
-
-For Dockerfile selection, the registry can:
-
-- point to a managed target name, which then uses user-config Dockerfile
-  resolution, or
-- point to a direct Dockerfile path, which is validated directly
 
 ## Security and Trust Model
 

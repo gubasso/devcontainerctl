@@ -18,7 +18,8 @@ Usage: dctl image <command> [options]
 Commands:
   build [OPTIONS] [IMAGE...]
       Build devcontainer base images from $XDG_CONFIG_HOME/dctl/images.
-      If no image is specified, launches interactive fzf selection.
+      If no image is specified, launches an interactive fzf picker over
+      the deployed managed images under ~/.config/dctl/images/.
 
       Options:
         --all              Build all discovered images
@@ -74,33 +75,6 @@ get_image_tag() {
   printf 'devimg/%s:latest\n' "$1"
 }
 
-select_image_targets() {
-  local available=()
-  mapfile -t available < <(discover_image_targets)
-
-  if [[ ${#available[@]} -eq 0 ]]; then
-    err "No user image config found in $DCTL_IMAGES_DIR. Run: dctl deploy image <name> or dctl deploy --all-images"
-  fi
-  if ! command -v fzf >/dev/null 2>&1; then
-    err "fzf not found. Install fzf or specify targets explicitly."
-  fi
-  if [[ ! -t 0 ]]; then
-    err "Interactive mode requires a terminal. Use --all or specify targets explicitly."
-  fi
-
-  local selected
-  if ! selected=$(printf '%s\n' "${available[@]}" | fzf --multi \
-    --height=~50% \
-    --layout=reverse \
-    --border \
-    --prompt="Select images to build: " \
-    --header="TAB: multi-select, ENTER: confirm, ESC: cancel"); then
-    return 1
-  fi
-
-  printf '%s\n' "$selected"
-}
-
 ensure_image_dir_exists() {
   if [[ ! -d "$DCTL_IMAGES_DIR" ]]; then
     log "No user image config found"
@@ -124,7 +98,6 @@ cmd_image_build() {
   local no_cache=false
   local dry_run=false
   local targets=()
-  local _registry_direct_dockerfile=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -171,9 +144,6 @@ cmd_image_build() {
     err "Do not run as root (would bake UID 0 into images)"
   fi
 
-  # Note: we don't fail early on missing image dirs because registry
-  # direct-path Dockerfiles don't need them. Validation happens per-target.
-
   if [[ "$dry_run" != true ]]; then
     require_cmd docker
     if ! docker info >/dev/null 2>&1; then
@@ -190,35 +160,28 @@ cmd_image_build() {
       err "No user image config found in $DCTL_IMAGES_DIR. Run: dctl deploy image <name> or dctl deploy --all-images"
     fi
   elif [[ ${#targets[@]} -eq 0 ]]; then
-    # Check project registry for a dockerfile target
-    local canonical_name registry_dockerfile
-    canonical_name="$(resolve_canonical_project_name)"
-    registry_dockerfile="$(_registry_lookup_dockerfile "$canonical_name")"
-    if [[ -n "$registry_dockerfile" ]]; then
-      if [[ "$registry_dockerfile" == /* ]]; then
-        # Direct path — validate and use directly
-        [[ -f "$registry_dockerfile" ]] || err "Registry Dockerfile path does not exist: $registry_dockerfile"
-        _registry_direct_dockerfile="$registry_dockerfile"
-        targets=("__registry_direct__")
-        log "Using Dockerfile from registry direct path: $registry_dockerfile"
-      else
-        # Managed target name
-        targets=("$registry_dockerfile")
-        log "Using Dockerfile target from registry: $registry_dockerfile"
-      fi
-    else
-      if ! mapfile -t targets < <(select_image_targets); then
-        return 0
-      fi
-      if [[ ${#targets[@]} -eq 0 ]]; then
-        return 0
-      fi
+    local available=()
+    local picked
+    mapfile -t available < <(discover_image_targets)
+    if [[ ${#available[@]} -eq 0 ]]; then
+      err "No user image config found in $DCTL_IMAGES_DIR. Run: dctl deploy image <name> or dctl deploy --all-images"
     fi
+    if ! command -v fzf >/dev/null 2>&1; then
+      err "fzf not found. Install fzf or specify targets explicitly."
+    fi
+    if [[ ! -t 0 ]]; then
+      err "Interactive mode requires a terminal. Use --all or specify targets explicitly."
+    fi
+    if ! picked="$(printf '%s\n' "${available[@]}" | _fzf_pick \
+      "Select image to build: " \
+      "ENTER: confirm, ESC: cancel")"; then
+      return 0
+    fi
+    targets=("$picked")
   fi
 
   local target
   for target in "${targets[@]}"; do
-    [[ "$target" == "__registry_direct__" ]] && continue
     if ! resolve_dockerfile "$target" >/dev/null 2>&1; then
       printf '\033[1;31mERROR:\033[0m Unknown image: %s (not seeded in %s)\n' "$target" "$DCTL_IMAGES_DIR" >&2
       printf "Run: dctl deploy image <name> or dctl deploy --all-images\n" >&2
@@ -251,31 +214,6 @@ cmd_image_build() {
   failed=()
 
   for target in "${targets[@]}"; do
-    # Handle registry direct-path Dockerfile
-    if [[ "$target" == "__registry_direct__" && -n "$_registry_direct_dockerfile" ]]; then
-      local direct_context
-      direct_context="$(dirname "$_registry_direct_dockerfile")"
-      local direct_tag
-      direct_tag="devimg/$(basename "$direct_context"):latest"
-
-      if [[ "$dry_run" == true ]]; then
-        log "[dry-run] Would build: $direct_tag from $direct_context (direct path)"
-        continue
-      fi
-
-      log "Building ${direct_tag} from ${_registry_direct_dockerfile}"
-      if ! docker buildx build --load \
-        "${build_args[@]}" \
-        "${secret_flag[@]}" \
-        -f "$_registry_direct_dockerfile" \
-        -t "$direct_tag" \
-        "$direct_context/"; then
-        warn "Failed to build from direct path: $_registry_direct_dockerfile"
-        failed+=("$target")
-      fi
-      continue
-    fi
-
     local tag
     tag="$(get_image_tag "$target")"
 
