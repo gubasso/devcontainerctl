@@ -334,14 +334,17 @@ teardown() {
 
 @test "cmd_image_build with no args errors when fzf missing" {
   create_user_image_fixture agents
-  local old_path="$PATH"
-  PATH="/usr/bin:/bin"
+  # shellcheck disable=SC2329
+  command() {
+    if [[ "$1" == "-v" && "$2" == "fzf" ]]; then return 1; fi
+    builtin command "$@"
+  }
 
   run cmd_image_build --dry-run
   [ "$status" -ne 0 ]
   [[ "$output" == *"fzf not found"* ]]
 
-  PATH="$old_path"
+  unset -f command
 }
 
 @test "cmd_image_build with no args errors when stdin is not a TTY" {
