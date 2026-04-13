@@ -247,7 +247,7 @@ The container user is created with the same name as your host `$USER`, and UID/G
 
 ### Layer 0: Agent Tools Base (agents/)
 
-Foundation layer using Debian bookworm-slim for broad compatibility and package availability.
+Foundation layer using Debian trixie-slim for broad compatibility and package availability.
 
 **Includes**:
 
@@ -744,8 +744,22 @@ Need to edit files and sync to host?
 ## Per-Project Configuration
 
 Shared auth mounts and baseline container settings come from the `base`
-layer (merged by `dctl init` via the YAML manifest). The examples below show only
-project-local deltas.
+layer, merged by `dctl init` via the YAML manifest. Each selectable config is
+defined by a manifest that declares its layer composition:
+
+```yaml
+# python.yaml — shipped manifest
+name: python
+layers:
+  - base      # shared layer: remote user, auth mounts, terminal env
+  - python    # leaf layer: image tag, cache volumes, bootstrap commands
+```
+
+The last layer is the **leaf** (user-protected on deploy); preceding layers are
+**shared** (reconciled from installed sources on every deploy). Manifests are
+validated against `schemas/compose.schema.yaml`.
+
+The examples below show only project-local deltas (the leaf layer content).
 
 ### Standard Python Configuration
 
@@ -862,6 +876,24 @@ Shared devcontainer defaults live in the `base` layer at `devcontainers/base/dev
 - `mounts` arrays are concatenated in layer order
 - `postCreateCommand` and `containerEnv` objects are merged by key (template wins)
 - scalar fields use last-wins (later layers and templates override earlier ones)
+
+### Creating a Custom Manifest
+
+To compose a custom layer stack (e.g. adding a dotfiles layer), create a
+manifest in user config:
+
+```yaml
+# ~/.config/dctl/devcontainer/myproject.yaml
+name: myproject
+layers:
+  - base
+  - dotfiles    # personal layer (see examples/dotfiles/)
+  - python      # leaf — last layer, user-protected on deploy
+```
+
+Add your layer directory with a `devcontainer.json` at
+`~/.config/dctl/devcontainer/dotfiles/devcontainer.json`, then run
+`dctl init --devcontainer myproject`.
 
 After editing `base`, a custom layer, or a manifest, regenerate and recreate:
 
