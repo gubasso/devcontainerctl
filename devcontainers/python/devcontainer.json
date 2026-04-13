@@ -1,14 +1,6 @@
 {
   "name": "${localWorkspaceFolderBasename}-sandbox",
   "image": "devimg/python-dev:latest",
-  "mounts": [
-    // python caches
-    {
-      "source": "poetry-cache",
-      "target": "${localEnv:HOME}/.cache/pypoetry",
-      "type": "volume"
-    }
-  ],
   "postCreateCommand": {
     "pre-commit": "pre-commit install"
   }

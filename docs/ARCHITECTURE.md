@@ -442,10 +442,10 @@ This keeps the shared image layer reusable while giving each project exact versi
 | Component | Scope | Storage |
 | --------- | ----- | ------- |
 | Python interpreters | Per-container | Installed by `mise install` during container creation |
-| Rust toolchains | Shared across projects | `rustup-toolchains` volume |
-| Zig global cache | Shared across projects | `zig-cache` volume (`/home/<user>/.cache/zig`) |
-| Cargo registry/git | Shared across projects | `cargo-registry`, `cargo-git` volumes |
-| zls binaries | Shared across projects | `zls-cache` volume (`/home/<user>/.local/share/zls`) |
+| Rust toolchains | User-scoped volume | `rustup-toolchains-<user>` volume |
+| Cargo registry/git | User-scoped volume | `cargo-registry-<user>`, `cargo-git-<user>` volumes |
+| Poetry cache | Per-container (ephemeral) | `~/.cache/pypoetry` (no volume) |
+| Zig/zls cache | Per-container (ephemeral) | `~/.cache/zig`, `~/.local/share/zls` (no volume) |
 | Python virtualenvs | Per-project | `.venv/` in project dir (created by container, read by host LSP) |
 | Rust target dirs | Per-project | `target/` in project dir |
 
@@ -754,19 +754,6 @@ deltas.
 {
   "name": "${localWorkspaceFolderBasename}-sandbox",
   "image": "devimg/python-dev:latest",
-  "mounts": [
-    // python caches
-    {
-      "source": "mise-cache",
-      "target": "${localEnv:HOME}/.local/share/mise",
-      "type": "volume"
-    },
-    {
-      "source": "poetry-cache",
-      "target": "${localEnv:HOME}/.cache/pypoetry",
-      "type": "volume"
-    }
-  ],
   "postCreateCommand": {
     "pre-commit": "pre-commit install"
   }
@@ -780,19 +767,19 @@ deltas.
   "name": "${localWorkspaceFolderBasename}-sandbox",
   "image": "devimg/rust-dev:latest",
   "mounts": [
-    // rust caches
+    // rust toolchain + registry (user-scoped volumes to avoid ownership conflicts)
     {
-      "source": "rustup-toolchains",
+      "source": "rustup-toolchains-${localEnv:USER}",
       "target": "${localEnv:HOME}/.rustup",
       "type": "volume"
     },
     {
-      "source": "cargo-registry",
+      "source": "cargo-registry-${localEnv:USER}",
       "target": "${localEnv:HOME}/.cargo/registry",
       "type": "volume"
     },
     {
-      "source": "cargo-git",
+      "source": "cargo-git-${localEnv:USER}",
       "target": "${localEnv:HOME}/.cargo/git",
       "type": "volume"
     }
@@ -810,19 +797,6 @@ deltas.
 {
   "name": "${localWorkspaceFolderBasename}-sandbox",
   "image": "devimg/zig-dev:latest",
-  "mounts": [
-    // zig caches
-    {
-      "source": "zig-cache",
-      "target": "${localEnv:HOME}/.cache/zig",
-      "type": "volume"
-    },
-    {
-      "source": "zls-cache",
-      "target": "${localEnv:HOME}/.local/share/zls",
-      "type": "volume"
-    }
-  ],
   "postCreateCommand": {
     "zig-zls": "zig-zls-init --allow-unsigned || true",
     "pre-commit": "pre-commit install"
@@ -838,8 +812,6 @@ deltas.
   "image": "devimg/python-dev:latest",
 
   "mounts": [
-    "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume",
-
     "source=${localEnv:HOME}/.ssh/known_hosts,target=/home/${localEnv:USER}/.ssh/known_hosts,type=bind,readonly"
   ],
 
@@ -861,7 +833,6 @@ alongside it.
   "image": "devimg/python-dev:latest",
 
   "mounts": [
-    "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume",
     "source=${localEnv:HOME}/projects/shared-lib,target=/workspaces/shared-lib,type=bind,readonly"
   ],
 
@@ -918,45 +889,35 @@ dctl ws reup
 
 ### Common Patterns
 
-#### Pattern 1: Runtime + Cache Volumes (Python)
+#### Pattern 1: User-Scoped Cache Volumes (Rust)
+
+Rust toolchains and registry downloads are large and slow to rebuild. Use
+user-scoped named volumes so each host user gets a separate volume, avoiding
+ownership conflicts when multiple users share the same Docker daemon:
 
 ```jsonc
 {
   "mounts": [
-    "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume",
-    "source=pip-cache,target=/home/${localEnv:USER}/.cache/pip,type=volume"
+    "source=rustup-toolchains-${localEnv:USER},target=/home/${localEnv:USER}/.rustup,type=volume",
+    "source=cargo-registry-${localEnv:USER},target=/home/${localEnv:USER}/.cargo/registry,type=volume",
+    "source=cargo-git-${localEnv:USER},target=/home/${localEnv:USER}/.cargo/git,type=volume"
   ]
 }
 ```
 
-#### Pattern 2: Runtime + Cache Volumes (Rust)
+#### Pattern 2: Ephemeral Caches (Python, Zig)
 
-```jsonc
-{
-  "mounts": [
-    "source=rustup-toolchains,target=/home/${localEnv:USER}/.rustup,type=volume",
-    "source=cargo-registry,target=/home/${localEnv:USER}/.cargo/registry,type=volume",
-    "source=cargo-git,target=/home/${localEnv:USER}/.cargo/git,type=volume"
-  ]
-}
-```
+Package manager caches that are small and fast to rebuild (Poetry, pip, Zig)
+should **not** use volumes. Let each container manage its own ephemeral cache
+under `~/.cache/`. This avoids permission mismatches, concurrent-write
+corruption, and debugging overhead that outweighs the download-time savings.
 
 #### Cache Volume Hygiene
 
-For truly untrusted sessions, prefer **per-project cache volumes**:
-
-```jsonc
-{
-  "mounts": [
-    "source=poetry-cache-project-a,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume"
-  ]
-}
-```
-
-Wipe caches when needed:
+Wipe user-scoped Rust volumes when corruption is suspected:
 
 ```bash
-docker volume rm poetry-cache-project-a 2>/dev/null || true
+docker volume rm rustup-toolchains-${USER} cargo-registry-${USER} cargo-git-${USER} 2>/dev/null || true
 ```
 
 #### Pattern 3: Project + Shared Libraries (RO)
@@ -964,7 +925,6 @@ docker volume rm poetry-cache-project-a 2>/dev/null || true
 ```jsonc
 {
   "mounts": [
-    "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume",
     "source=${localEnv:HOME}/libs/common,target=/workspaces/libs/common,type=bind,readonly",
     "source=${localEnv:HOME}/libs/sdk,target=/workspaces/libs/sdk,type=bind,readonly"
   ]
@@ -1100,9 +1060,7 @@ docker compose -f .devcontainer/docker-compose.yml down
 
   "privileged": false,
 
-  "mounts": [
-    "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume"
-  ]
+  "mounts": []
 }
 ```
 
@@ -1264,7 +1222,6 @@ services:
     volumes:
       - ..:/workspaces/<project-name>
       - ~/.gitconfig:/home/${USER}/.gitconfig:ro
-      - poetry-cache:/home/${USER}/.cache/pypoetry
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/dev
     depends_on:
@@ -1284,7 +1241,6 @@ services:
 
 volumes:
   postgres-data:
-  poetry-cache:
 ```
 
 ### Features (Pre-built Extensions)
@@ -1353,7 +1309,7 @@ UID/GID should match if the image was built with the correct `USER_UID`/`USER_GI
 If caches were created with a different UID/GID:
 
 ```bash
-docker volume rm poetry-cache rustup-toolchains cargo-registry cargo-git zig-cache zls-cache
+docker volume rm rustup-toolchains-${USER} cargo-registry-${USER} cargo-git-${USER} 2>/dev/null || true
 ```
 
 ### mise Install Fails
@@ -1443,8 +1399,8 @@ If symlinks point outside the mounted tree, use rsync snapshot with `-L` flag.
 # Stop/remove all devcontainer-labeled containers
 docker ps -aq --filter "label=devcontainer.local_folder" | xargs -r docker rm -f
 
-# Remove all cache volumes
-docker volume rm mise-cache poetry-cache pip-cache rustup-toolchains cargo-registry cargo-git zig-cache zls-cache 2>/dev/null || true
+# Remove user-scoped cache volumes
+docker volume rm rustup-toolchains-${USER} cargo-registry-${USER} cargo-git-${USER} 2>/dev/null || true
 
 # Prune dangling volumes
 docker volume prune
@@ -1511,14 +1467,14 @@ dctl image build --all
 
 ### Volume Reference
 
-| Volume | Contents | Shared? |
-| ------ | -------- | ------- |
-| `poetry-cache` | Poetry package cache | Yes |
-| `rustup-toolchains` | Rust toolchains | Yes |
-| `cargo-registry` | Crates.io index + crates | Yes |
-| `cargo-git` | Git-based dependencies | Yes |
-| `zig-cache` | Zig global cache | Yes |
-| `zls-cache` | zls binaries | Yes |
+| Volume | Contents | Scope |
+| ------ | -------- | ----- |
+| `rustup-toolchains-<user>` | Rust toolchains | User-scoped |
+| `cargo-registry-<user>` | Crates.io index + crates | User-scoped |
+| `cargo-git-<user>` | Git-based dependencies | User-scoped |
+
+Poetry, pip, Zig, and zls caches are ephemeral (no volume). Each container
+creates its own cache under `~/.cache/` on first use.
 
 ### Mount Types
 
@@ -1571,8 +1527,6 @@ Open from the `my-api` project directory.
     // Internal SDK (read-only context)
     "source=${localEnv:HOME}/libs/internal-sdk,target=/workspaces/internal-sdk,type=bind,readonly",
 
-    // Cache volumes
-    "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume"
   ],
 
   "postCreateCommand": {
@@ -1593,10 +1547,7 @@ symlink-heavy SDK into a flat directory at container creation time.
 
   "mounts": [
     // Source for rsync (temporary mount point)
-    "source=${localEnv:HOME}/libs/legacy-sdk,target=/mnt/src-legacy-sdk,type=bind,readonly",
-
-    // Cache volumes
-    "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume"
+    "source=${localEnv:HOME}/libs/legacy-sdk,target=/mnt/src-legacy-sdk,type=bind,readonly"
   ],
 
   // Snapshot legacy-sdk into /workspaces (resolves symlinks), then setup project
@@ -1629,10 +1580,7 @@ monorepo packages alongside it.
 
     // Root configs for tooling (read-only)
     "source=${localEnv:HOME}/monorepo/pyproject.toml,target=/workspaces/pyproject.toml,type=bind,readonly",
-    "source=${localEnv:HOME}/monorepo/poetry.lock,target=/workspaces/poetry.lock,type=bind,readonly",
-
-    // Cache volumes
-    "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume"
+    "source=${localEnv:HOME}/monorepo/poetry.lock,target=/workspaces/poetry.lock,type=bind,readonly"
   ]
 }
 ```

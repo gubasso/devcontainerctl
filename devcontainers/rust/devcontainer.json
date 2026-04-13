@@ -2,19 +2,19 @@
   "name": "${localWorkspaceFolderBasename}-sandbox",
   "image": "devimg/rust-dev:latest",
   "mounts": [
-    // rust caches
+    // rust toolchain + registry (user-scoped volumes to avoid ownership conflicts)
     {
-      "source": "rustup-toolchains",
+      "source": "rustup-toolchains-${localEnv:USER}",
       "target": "${localEnv:HOME}/.rustup",
       "type": "volume"
     },
     {
-      "source": "cargo-registry",
+      "source": "cargo-registry-${localEnv:USER}",
       "target": "${localEnv:HOME}/.cargo/registry",
       "type": "volume"
     },
     {
-      "source": "cargo-git",
+      "source": "cargo-git-${localEnv:USER}",
       "target": "${localEnv:HOME}/.cargo/git",
       "type": "volume"
     }
