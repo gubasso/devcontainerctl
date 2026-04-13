@@ -7,7 +7,7 @@ Pre-built Docker images and the unified `dctl` CLI for AI-agent devcontainer san
 - `bin/dctl` — thin CLI entrypoint (bootstrap, source modules, dispatch)
 - `lib/dctl/` — shell library modules (`common`, `ws`, `image`, `init`, `test`, `auth`, `config`)
 - `images/` — managed Dockerfiles, one subdir per image
-- `devcontainers/` — `_00-base` plus selectable `devcontainer.json` templates
+- `devcontainers/` — layer directories plus YAML composition manifests
 - `systemd/` — weekly image rebuild timer + service
 - `tests/` — bats-based unit and integration coverage
 
@@ -30,12 +30,12 @@ Tests are written with `bats`.
 ## Key Invariants
 
 - `dctl init` writes to XDG-managed config/cache under `~/.config/dctl/` and `~/.cache/dctl/`, not to a local workspace `.devcontainer/`
-- `_00-base` is internal and excluded from deploy list output and pickers
+- Selectable devcontainers are defined by YAML manifests (`*.yaml`); layer directories without manifests are not listed or selectable
 - `dctl` resolves `devcontainer.json` through a six-level precedence chain: CLI flag, env var, registry, local file, sibling discovery, user default
 - `dctl ws` commands match containers by workspace label, so work-clones keep separate container identity
 - Installed files (`~/.local/share/dctl/`) are seed sources only — `dctl` never builds, merges, or runs containers from installed files directly; all runtime operations use user config (`~/.config/dctl/`) exclusively
 - Installed templates seed user config, but composed devcontainer output is built only from `~/.config/dctl/devcontainer/`
-- Dotfiles are optional and belong in a user layer such as `_01-dotfiles`, not in shipped defaults or image build inputs
+- Dotfiles are optional and belong in a user layer such as `dotfiles`, not in shipped defaults or image build inputs
 
 ## Mermaid Diagrams
 

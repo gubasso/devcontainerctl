@@ -1,6 +1,7 @@
 {
   // Example optional layer. Copy this directory to:
-  // ~/.config/dctl/devcontainer/_01-dotfiles/
+  // ~/.config/dctl/devcontainer/dotfiles/
+  // Then add "dotfiles" to the layers list in your chosen manifest.
   "containerEnv": {
     "KITTY_LISTEN_ON": "${localEnv:KITTY_LISTEN_ON}",
     "KITTY_WINDOW_ID": "${localEnv:KITTY_WINDOW_ID}"

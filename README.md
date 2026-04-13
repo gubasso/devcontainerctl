@@ -4,7 +4,7 @@ Pre-built Docker images and a unified `dctl` CLI for devcontainer workspaces —
 
 - A two-step project setup flow with `dctl deploy` and `dctl init`.
 - Pre-built images with AI agent tooling and language-specific layers ready to go.
-- A composable config system built around `_00-base`, optional `_NN-*` user layers, and user-editable XDG config.
+- A composable config system built around manifest-backed layer stacks and user-editable XDG config.
 - Multi-agent workflows with shared containers, token forwarding, and work-clone support.
 
 ## What You Get
@@ -20,7 +20,7 @@ Pre-built Docker images and a unified `dctl` CLI for devcontainer workspaces —
 
 ### Ready-to-use templates
 
-`_00-base` is the shared internal foundation. The selectable templates below add the user-facing project shape on top of it.
+`base` is the shared shipped foundation layer. Selectable configs declare their full composition order in YAML manifests.
 
 | Template | Image | What it adds |
 | --- | --- | --- |
@@ -38,14 +38,17 @@ registers the current project:
 
 ```text
 Installed (seed sources only, never used at runtime)
+  ~/.local/share/dctl/devcontainers/python.yaml             ← manifest for the python config
+  ~/.local/share/dctl/devcontainers/base/devcontainer.json  ← shared base layer
   ~/.local/share/dctl/devcontainers/python/devcontainer.json
   ~/.local/share/dctl/images/python-dev/Dockerfile
 
         ──dctl deploy──>
 
 User config (runtime source of truth, user-editable)
-  ~/.config/dctl/devcontainer/_00-base/devcontainer.json   ← shared base layer
-  ~/.config/dctl/devcontainer/python/devcontainer.json     ← template layer
+  ~/.config/dctl/devcontainer/python.yaml                  ← deployed manifest
+  ~/.config/dctl/devcontainer/base/devcontainer.json       ← shared base layer
+  ~/.config/dctl/devcontainer/python/devcontainer.json     ← leaf layer
   ~/.config/dctl/images/python-dev/Dockerfile              ← managed Dockerfile
 
         ──merge──>
@@ -67,12 +70,12 @@ edit the user config files to customize your setup.
 
 The devcontainer config uses a layered merge system:
 
-- `_00-base` owns the shared universal infrastructure (remote user, auth mounts, terminal env)
-- Optional `_NN-*` user layers add personal config (dotfiles, editor mounts)
-- The selected template adds the project-specific layer (image tag, cache volumes, bootstrap commands)
+- `base` owns the shared universal infrastructure (remote user, auth mounts, terminal env)
+- Optional user layers add personal config (dotfiles, editor mounts)
+- The selected manifest adds an explicit ordered layer list whose last entry is the leaf config
 
-`dctl init` merges all `_*/devcontainer.json` layers alphabetically, then
-merges the selected template on top. The merge output is cached under
+`dctl init` reads the selected manifest from `~/.config/dctl/devcontainer/<name>.yaml`,
+merges its listed layers in order, and writes the result under
 `~/.cache/dctl/devcontainer/` and consumed by `dctl ws up`.
 
 ## Quick Start
@@ -94,7 +97,7 @@ dctl ws shell
 ```
 
 1. `make install` — installs `dctl` and copies images/templates to `~/.local/share/dctl/` (seed sources only)
-2. `dctl deploy devcontainer python` — deploys the Python template plus internal `_*/` layers into `~/.config/dctl/devcontainer/`
+2. `dctl deploy devcontainer python` — deploys the Python manifest plus its managed shared layers into `~/.config/dctl/devcontainer/`
 3. `dctl deploy image python-dev` — deploys the managed Dockerfile into `~/.config/dctl/images/python-dev/`
 4. `dctl init --devcontainer python` — merges config to `~/.cache/dctl/`, auto-builds the managed image if missing, and registers the project
 5. `dctl image build` — optional rebuild from deployed managed images via an explicit target, the no-arg picker, or `--all`
@@ -107,27 +110,28 @@ Every `dctl` command has a Docker and Dev Container CLI equivalent — `dctl` ju
 
 ## Config System
 
-`_00-base` owns the shared universal infrastructure:
+`base` owns the shared universal infrastructure:
 
 - `remoteUser` and UID behavior
 - readonly `.gitconfig`
 - shared auth/config mounts for `gh`, `glab-cli`, and Claude
 - base container env for `TERM` and `COLORTERM`
 
-Templates add the project-specific layer:
+Leaf layers add the project-specific settings:
 
 - the image tag
 - language-specific cache volumes
 - language-specific `postCreateCommand` entries
 
-`dctl init` discovers every `~/.config/dctl/devcontainer/_*/devcontainer.json`,
-merges those internal layers alphabetically, then merges the selected template
-on top. Installed templates under `~/.local/share/dctl/devcontainers/` are seed
-sources only; `dctl deploy` copies them into user config.
+`dctl init` reads the selected deployed manifest, resolves each listed layer
+from `~/.config/dctl/devcontainer/<layer>/devcontainer.json`, and merges them
+in manifest order. Installed manifests and layers under
+`~/.local/share/dctl/devcontainers/` are seed sources only; `dctl deploy`
+copies them into user config.
 
 ### Custom layers
 
-Personal configuration is now opt-in. To add dotfiles, editor mounts, or extra terminal integration, copy [examples/_01-dotfiles/devcontainer.json](/workspaces/devcontainerctl/examples/_01-dotfiles/devcontainer.json) into `~/.config/dctl/devcontainer/_01-dotfiles/devcontainer.json` and edit it for your host paths.
+Personal configuration is now opt-in. To add dotfiles, editor mounts, or extra terminal integration, copy [examples/dotfiles/devcontainer.json](/workspaces/devcontainerctl/examples/dotfiles/devcontainer.json) into `~/.config/dctl/devcontainer/dotfiles/devcontainer.json`, edit it for your host paths, then add `dotfiles` to your manifest's `layers`.
 
 ### Config resolution
 
@@ -148,12 +152,12 @@ If you work in sibling clones such as `repo/` and `repo.42-add-auth/`, `dctl` ca
 
 ```bash
 $EDITOR ~/.config/dctl/devcontainer/python/devcontainer.json
-dctl deploy devcontainer python   # optional: resync internal layers from install
+dctl deploy devcontainer python   # optional: resync managed manifest/layers from install
 dctl init
 dctl ws reup
 ```
 
-Edit the user config layer file, rerun `dctl init` to regenerate the cached merged config if needed, then use `dctl ws reup` to recreate the container from that updated cache.
+Edit the user layer or manifest file, rerun `dctl init` to regenerate the cached merged config if needed, then use `dctl ws reup` to recreate the container from that updated cache.
 
 ## CLI Reference
 
@@ -178,15 +182,16 @@ dctl deploy --all-images
 dctl deploy --list
 ```
 
-- `devcontainer <name>` deploys one template from `~/.local/share/dctl/devcontainers/` into `~/.config/dctl/devcontainer/`
+- `devcontainer <name>` deploys one manifest-backed config from `~/.local/share/dctl/devcontainers/` into `~/.config/dctl/devcontainer/`
 - `image <name>` deploys one managed image from `~/.local/share/dctl/images/` into `~/.config/dctl/images/`
 - `--all`, `--all-devcontainers`, `--all-images` deploy bulk selections
 - `--reset` backs up and overwrites shipped files
 - `--dry-run` prints the per-file plan and changes nothing
 - `--list`, `--list-devcontainers`, `--list-images` show `installed`, `deployed`, or `user-only`
 
-Internal devcontainer dirs whose names start with `_` are always reconciled on
-every devcontainer deploy. They are hidden from list output and pickers.
+Manifest files are always managed on deploy. Non-leaf manifest layers are
+reconciled on every devcontainer deploy, while the leaf layer remains
+user-protected unless `--reset` is used.
 
 ### `dctl init`
 
@@ -196,7 +201,7 @@ dctl init --force --devcontainer rust
 dctl init
 ```
 
-- `--devcontainer <name>` selects a deployed template from `~/.config/dctl/devcontainer/`
+- `--devcontainer <name>` selects a deployed manifest from `~/.config/dctl/devcontainer/<name>.yaml`
 - `--force` rebuilds the cached merged config and re-registers the project
 
 If the selected devcontainer references a managed image like

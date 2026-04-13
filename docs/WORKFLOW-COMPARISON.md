@@ -147,7 +147,7 @@ This does three things:
 $EDITOR ~/.config/dctl/images/python-dev/Dockerfile
 ```
 
-**2. Deploys devcontainer config** to `~/.config/dctl/devcontainer/`. This includes a shared base config and the Python template config. Together they serve the same role as the `devcontainer.json` Ana wrote by hand — image reference, `remoteUser`, and workspace-dependent setup hooks. The Python template comes with `pre-commit install` as a `postCreateCommand` out of the box, and Ana can add more (like `poetry install`) by editing the config. She can inspect and customize them:
+**2. Deploys devcontainer config** to `~/.config/dctl/devcontainer/`. This includes a YAML manifest (`python.yaml`) declaring the ordered layer list, plus the referenced layer directories (the shared `base` layer and the `python` leaf layer). Together they serve the same role as the `devcontainer.json` Ana wrote by hand — image reference, `remoteUser`, and workspace-dependent setup hooks. The Python leaf layer comes with `pre-commit install` as a `postCreateCommand` out of the box, and Ana can add more (like `poetry install`) by editing the leaf config. She can inspect and customize it:
 
 ```bash
 $EDITOR ~/.config/dctl/devcontainer/python/devcontainer.json
@@ -163,7 +163,7 @@ $EDITOR ~/.config/dctl/devcontainer/python/devcontainer.json
 |---|---|---|---|
 | Manual files to write | 1 Dockerfile (~45 lines) | 1 Dockerfile + 1 JSON config | 0 |
 | Build commands | 1 (`docker buildx build`) | 1 (`docker buildx build`) | 0 (deferred to `dctl image build`) |
-| Post-create setup | Manual — `docker exec` or custom entrypoint | Declarative — `postCreateCommand` in JSON | Pre-configured in deployed template |
+| Post-create setup | Manual — `docker exec` or custom entrypoint | Declarative — `postCreateCommand` in JSON | Pre-configured in deployed config |
 | Per-project duplication | Yes — each repo gets its own Dockerfile | Yes — each repo gets both files | No — shared across workspaces |
 | Team onboarding | Clone repo, write/copy Dockerfile, build | Clone repo, write/copy both files, build | `make install && dctl deploy ... && dctl init --devcontainer python` |
 
@@ -288,7 +288,7 @@ Ana did not write any of this. It came from the deployed defaults, and she can c
 |---|---|---|---|
 | Runtime config location | CLI flags (re-typed every run) | `devcontainer.json` (declared once) | Pre-deployed config (already done) |
 | Commands to start | 2 (volume create + 15-line `docker run`) + manual setup commands | 1 (`devcontainer up`) | 1 (`dctl ws up`) |
-| Post-create hooks | None — manual `docker exec` after every creation | `postCreateCommand` in JSON | Pre-configured in deployed template |
+| Post-create hooks | None — manual `docker exec` after every creation | `postCreateCommand` in JSON | Pre-configured in deployed config |
 | Credential forwarding | Manual `$(gh auth token)` extraction | Manual `${localEnv:GH_TOKEN}` + host export | Automatic at exec time (gh/glab; silently skipped if unavailable) |
 | Config reuse across projects | None | None — per-project JSON | Shared across all workspaces |
 
@@ -417,8 +417,8 @@ This is where the composable layer model pays off. Instead of duplicating config
 
 ```mermaid
 graph TD
-  BASE["_00-base -- remoteUser + auth mounts + terminal env -- SHARED BY ALL"]
-  DOT["_01-dotfiles -- optional personal layer"]
+  BASE["base -- remoteUser + auth mounts + terminal env -- SHARED BY ALL"]
+  DOT["dotfiles -- optional personal layer"]
   PY["python template -- python-dev image + Poetry cache"]
   RS["rust template -- rust-dev image + rustup/cargo caches"]
 
@@ -434,11 +434,11 @@ graph TD
 
 The layers:
 
-1. **`_00-base/devcontainer.json`** is shared across all projects. It provides `remoteUser`, `containerEnv` (TERM, COLORTERM), and the 6 shared mounts (`.gitconfig`, `.config/gh`, `.config/glab-cli`, `.claude`, `.claude.json`, `/tmp`). Ana edits this file once at `~/.config/dctl/devcontainer/_00-base/devcontainer.json`, and every project inherits the change.
+1. **`base/devcontainer.json`** is shared across all projects. It provides `remoteUser`, `containerEnv` (TERM, COLORTERM), and the shared mounts (`.gitconfig`, `.config/gh`, `.config/glab-cli`, `/tmp`). Ana edits this file once at `~/.config/dctl/devcontainer/base/devcontainer.json`, and every project inherits the change.
 
-2. **Optional `_NN-*` user layers** add personal config. For example, the [`examples/_01-dotfiles/devcontainer.json`](../examples/_01-dotfiles/devcontainer.json) shows editor mounts, dotfiles, and Kitty terminal vars. Ana copies it to `~/.config/dctl/devcontainer/_01-dotfiles/` once, and it applies to every project automatically.
+2. **Optional user layers** add personal config. For example, the [`examples/dotfiles/devcontainer.json`](../examples/dotfiles/devcontainer.json) shows editor mounts, dotfiles, and Kitty terminal vars. Ana adds a `dotfiles/` layer directory to `~/.config/dctl/devcontainer/` once and references it in her manifests — it applies to every project automatically.
 
-3. **Template layers** add project-type specifics on top of the base:
+3. **Project-type layers** add specifics on top of the shared layers:
    - `python/devcontainer.json` adds `image: "devimg/python-dev:latest"` and `postCreateCommand` with `pre-commit install`. Poetry cache is ephemeral (no volume).
    - `rust/devcontainer.json` adds `image: "devimg/rust-dev:latest"`, three user-scoped cache volumes (`rustup-toolchains-<user>`, `cargo-registry-<user>`, `cargo-git-<user>`), and `postCreateCommand` with `cargo build` plus `pre-commit install`.
 
@@ -461,19 +461,19 @@ cd ~/projects/widget-api   && dctl init --devcontainer python
 cd ~/projects/order-engine && dctl init --devcontainer rust
 ```
 
-`dctl init` merges `_00-base` + any `_NN-*` layers alphabetically + the selected template into `~/.cache/dctl/devcontainer/<template>/devcontainer.json`. Both Python projects reuse the exact same deployed config layers and image. The Rust project uses a different template and image, but shares the same `_00-base`.
+`dctl init` reads the YAML manifest for the selected config (e.g., `python.yaml` lists `layers: [base, python]`) and merges those layers in order into `~/.cache/dctl/devcontainer/<config>/devcontainer.json`. Both Python projects reuse the exact same deployed config layers and image. The Rust project uses a different manifest and image, but shares the same `base` layer.
 
-When the team adds a new shared mount, Ana edits `_00-base` once, runs `dctl init` in each project to refresh the cache, and every workspace picks up the change. No files to copy, no duplication to maintain.
+When the team adds a new shared mount, Ana edits `base` once, runs `dctl init` in each project to refresh the cache, and every workspace picks up the change. No files to copy, no duplication to maintain.
 
 | | Docker | Dev Container CLI | dctl |
 |---|---|---|---|
 | Files across 3 projects | 3 Dockerfiles + 3 run commands/scripts | 3 Dockerfiles + 3 JSON configs | 0 per-project files |
-| Shared base config | None — duplicated in each Dockerfile | None — duplicated in each JSON | `_00-base/devcontainer.json` (1 file, shared) |
-| Add another Python project | Copy Dockerfile + build | Copy Dockerfile + JSON + build | `dctl init --devcontainer python` (reuses deployed template) |
-| Add a Rust project | Write new Dockerfile from scratch | Write new Dockerfile + JSON from scratch | `dctl init --devcontainer rust` (reuses deployed template) |
+| Shared base config | None — duplicated in each Dockerfile | None — duplicated in each JSON | `base/devcontainer.json` (1 file, shared) |
+| Add another Python project | Copy Dockerfile + build | Copy Dockerfile + JSON + build | `dctl init --devcontainer python` (reuses deployed config) |
+| Add a Rust project | Write new Dockerfile from scratch | Write new Dockerfile + JSON from scratch | `dctl init --devcontainer rust` (reuses deployed config) |
 | Post-create hooks across 3 projects | 3 manual `docker exec` commands (per project type) | Declarative in each JSON (but duplicated) | Pre-configured in shared templates |
-| Change a shared mount | Update 3 `docker run` commands/scripts | Update 3 JSON files | Edit `_00-base` once |
-| Personal config (dotfiles, editor) | Add more `-v` flags per project | Duplicate in each JSON | Add a `_01-dotfiles` layer once — applies everywhere |
+| Change a shared mount | Update 3 `docker run` commands/scripts | Update 3 JSON files | Edit `base` once |
+| Personal config (dotfiles, editor) | Add more `-v` flags per project | Duplicate in each JSON | Add a `dotfiles` layer once — applies everywhere |
 
 ## Step 4: Open a shell
 

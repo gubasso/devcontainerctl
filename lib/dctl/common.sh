@@ -15,6 +15,7 @@ WORKSPACE_FOLDER="$(cd -- "$WORKSPACE_FOLDER" && pwd -P)"
 : "${DCTL_DEVCONTAINER_CACHE_DIR:=${DCTL_CACHE_DIR}/devcontainer}"
 : "${DCTL_DEVCONTAINER_DIR:=${DCTL_CONFIG_DIR}/devcontainer}"
 : "${DCTL_IMAGES_DIR:=${DCTL_CONFIG_DIR}/images}"
+: "${DCTL_SCHEMAS_DIR:=${XDG_DATA_HOME:-$HOME/.local/share}/dctl/schemas}"
 
 readonly DCTL_VERSION
 readonly WORKSPACE_FOLDER
@@ -25,6 +26,7 @@ readonly DCTL_CACHE_DIR
 readonly DCTL_DEVCONTAINER_CACHE_DIR
 readonly DCTL_DEVCONTAINER_DIR
 readonly DCTL_IMAGES_DIR
+readonly DCTL_SCHEMAS_DIR
 
 log() {
   printf '\033[1;34m==>\033[0m %s\n' "$1"
@@ -89,6 +91,16 @@ deployed_devcontainer_path() {
 config_devcontainer_path() {
   local name="$1"
   printf '%s/%s/devcontainer.json\n' "$DCTL_DEVCONTAINER_DIR" "$name"
+}
+
+installed_compose_manifest_path() {
+  local name="$1"
+  printf '%s/%s.yaml\n' "$DEVCONTAINERS_DIR" "$name"
+}
+
+config_compose_manifest_path() {
+  local name="$1"
+  printf '%s/%s.yaml\n' "$DCTL_DEVCONTAINER_DIR" "$name"
 }
 
 config_image_path() {

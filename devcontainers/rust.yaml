@@ -1,0 +1,4 @@
+name: rust
+layers:
+  - base
+  - rust

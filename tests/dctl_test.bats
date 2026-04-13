@@ -32,6 +32,9 @@ create_template_fixture() {
   local image="$2"
   mkdir -p "${XDG_DATA_HOME}/dctl/devcontainers/${name}"
   printf '{\n  "image": "%s"\n}\n' "$image" >"${XDG_DATA_HOME}/dctl/devcontainers/${name}/devcontainer.json"
+  if [[ "$name" != "base" ]]; then
+    create_installed_manifest_fixture "$name" base "$name"
+  fi
 }
 
 create_user_devcontainer_fixture() {
@@ -39,11 +42,42 @@ create_user_devcontainer_fixture() {
   local image="$2"
   mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/${name}"
   printf '{\n  "image": "%s"\n}\n' "$image" >"${XDG_CONFIG_HOME}/dctl/devcontainer/${name}/devcontainer.json"
+  if [[ "$name" != "base" ]]; then
+    create_user_manifest_fixture "$name" base "$name"
+  fi
+}
+
+create_installed_manifest_fixture() {
+  local name="$1"
+  shift
+  mkdir -p "${XDG_DATA_HOME}/dctl/devcontainers"
+  {
+    printf 'name: %s\n' "$name"
+    printf 'layers:\n'
+    local layer
+    for layer in "$@"; do
+      printf '  - %s\n' "$layer"
+    done
+  } >"${XDG_DATA_HOME}/dctl/devcontainers/${name}.yaml"
+}
+
+create_user_manifest_fixture() {
+  local name="$1"
+  shift
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer"
+  {
+    printf 'name: %s\n' "$name"
+    printf 'layers:\n'
+    local layer
+    for layer in "$@"; do
+      printf '  - %s\n' "$layer"
+    done
+  } >"${XDG_CONFIG_HOME}/dctl/devcontainer/${name}.yaml"
 }
 
 create_user_base_layer_fixture() {
-  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base"
-  cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json" <<'USERBASE'
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/base"
+  cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json" <<'USERBASE'
 {
   "remoteUser": "testuser",
   "init": true,
@@ -53,8 +87,8 @@ USERBASE
 }
 
 create_base_template_fixture() {
-  mkdir -p "${XDG_DATA_HOME}/dctl/devcontainers/_00-base"
-  cat >"${XDG_DATA_HOME}/dctl/devcontainers/_00-base/devcontainer.json" <<'BASEJSON'
+  mkdir -p "${XDG_DATA_HOME}/dctl/devcontainers/base"
+  cat >"${XDG_DATA_HOME}/dctl/devcontainers/base/devcontainer.json" <<'BASEJSON'
 {
   "remoteUser": "testuser",
   "init": true,
@@ -382,7 +416,9 @@ teardown() {
   [ -f "${data_home}/dctl/images/zig-dev/zig-zls-init" ]
   [ -x "${data_home}/dctl/images/zig-dev/zig-zls-init" ]
   [ -f "${data_home}/dctl/devcontainers/python/devcontainer.json" ]
-  [ -f "${data_home}/dctl/devcontainers/_00-base/devcontainer.json" ]
+  [ -f "${data_home}/dctl/devcontainers/base/devcontainer.json" ]
+  [ -f "${data_home}/dctl/devcontainers/python.yaml" ]
+  [ -f "${data_home}/dctl/schemas/compose.schema.yaml" ]
 }
 
 @test "cmd_init errors when no devcontainers are deployed" {
@@ -715,7 +751,7 @@ MOCK
   [[ "$output" == *"--reset"* ]]
 }
 
-@test "cmd_deploy --list shows statuses and hides internal templates" {
+@test "cmd_deploy --list shows manifest-backed devcontainer statuses" {
   create_template_fixture python "devimg/python-dev:latest"
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
   create_user_devcontainer_fixture custom "devimg/custom:latest"
@@ -730,7 +766,7 @@ MOCK
   [[ "$output" == *"user-only  custom"* ]]
   [[ "$output" == *"deployed  agents"* ]]
   [[ "$output" == *"user-only  custom-img"* ]]
-  [[ "$output" != *"_00-base"* ]]
+  [[ "$output" != *$'\n  installed  base'* ]]
 }
 
 @test "cmd_deploy --list-devcontainers only lists devcontainers" {
@@ -749,13 +785,14 @@ MOCK
   [[ "$output" != *"Devcontainers:"* ]]
 }
 
-@test "cmd_deploy devcontainer copies selected template and internal base" {
+@test "cmd_deploy devcontainer copies selected manifest and managed base layer" {
   create_template_fixture python "devimg/python-dev:latest"
 
   run cmd_deploy devcontainer python
   [ "$status" -eq 0 ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json" ]
+  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json" ]
   [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json" ]
+  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml" ]
 }
 
 @test "cmd_deploy image copies recursive supporting files and preserves executable bits" {
@@ -772,7 +809,7 @@ MOCK
   [ -x "${XDG_CONFIG_HOME}/dctl/images/zig-dev/hooks/bootstrap.sh" ]
 }
 
-@test "cmd_deploy skips existing non-internal user files by default" {
+@test "cmd_deploy skips existing leaf layer files by default" {
   create_template_fixture python "devimg/python-dev:latest"
   mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/python"
   printf '{"image":"custom"}\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
@@ -808,17 +845,17 @@ MOCK
   run ! compgen -G "${XDG_CONFIG_HOME}/dctl/images/agents/notes.txt.bak.*"
 }
 
-@test "cmd_deploy --reset backs up internal _*/ files before overwriting" {
+@test "cmd_deploy --reset backs up managed shared layers before overwriting" {
   create_template_fixture python "devimg/python-dev:latest"
   run cmd_deploy devcontainer python
   [ "$status" -eq 0 ]
-  printf '{"remoteUser":"drifted"}\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json"
+  printf '{"remoteUser":"drifted"}\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json"
 
   run cmd_deploy devcontainer python --reset
   [ "$status" -eq 0 ]
-  [ "$(jq -r '.remoteUser' "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json")" = "testuser" ]
+  [ "$(jq -r '.remoteUser' "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json")" = "testuser" ]
   local internal_backups
-  internal_backups=("${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json.bak."*)
+  internal_backups=("${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json.bak."*)
   [ "${#internal_backups[@]}" -eq 1 ]
   [ -f "${internal_backups[0]}" ]
   [ "$(jq -r '.remoteUser' "${internal_backups[0]}")" = "drifted" ]
@@ -826,18 +863,64 @@ MOCK
   [[ "$suffix" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z$ ]]
 }
 
-@test "cmd_deploy reconciles internal drift without reset" {
+@test "cmd_deploy reconciles drifted manifest file without reset" {
+  create_template_fixture python "devimg/python-dev:latest"
+
+  run cmd_deploy devcontainer python
+  [ "$status" -eq 0 ]
+  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml" ]
+
+  # Drift the deployed manifest
+  printf 'name: python\nlayers:\n  - base\n  - python\n  - extra\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml"
+
+  run cmd_deploy devcontainer python
+  [ "$status" -eq 0 ]
+  # Manifest should be reconciled (overwritten) back to installed version
+  local deployed_layers installed_layers
+  deployed_layers="$(yq eval '.layers | length' "${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml")"
+  installed_layers="$(yq eval '.layers | length' "${XDG_DATA_HOME}/dctl/devcontainers/python.yaml")"
+  [ "$deployed_layers" -eq "$installed_layers" ]
+  [[ "$output" == *"reconciled"* ]]
+  # No backup created without --reset
+  run bash -lc "compgen -G '${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml.bak.*' >/dev/null"
+  [ "$status" -ne 0 ]
+}
+
+@test "cmd_deploy --reset backs up drifted manifest file" {
   create_template_fixture python "devimg/python-dev:latest"
 
   run cmd_deploy devcontainer python
   [ "$status" -eq 0 ]
 
-  printf '{"remoteUser":"drifted"}\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json"
+  # Drift the deployed manifest
+  printf 'name: python\nlayers:\n  - base\n  - python\n  - extra\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml"
+
+  run cmd_deploy devcontainer python --reset
+  [ "$status" -eq 0 ]
+  # Manifest should be overwritten
+  local deployed_layers installed_layers
+  deployed_layers="$(yq eval '.layers | length' "${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml")"
+  installed_layers="$(yq eval '.layers | length' "${XDG_DATA_HOME}/dctl/devcontainers/python.yaml")"
+  [ "$deployed_layers" -eq "$installed_layers" ]
+  # Backup must exist
+  local backups
+  backups=("${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml.bak."*)
+  [ "${#backups[@]}" -eq 1 ]
+  [ -f "${backups[0]}" ]
+}
+
+@test "cmd_deploy reconciles managed shared layer drift without reset" {
+  create_template_fixture python "devimg/python-dev:latest"
 
   run cmd_deploy devcontainer python
   [ "$status" -eq 0 ]
-  [ "$(jq -r '.remoteUser' "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json")" = "testuser" ]
-  run bash -lc "compgen -G '${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json.bak.*' >/dev/null"
+
+  printf '{"remoteUser":"drifted"}\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json"
+
+  run cmd_deploy devcontainer python
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.remoteUser' "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json")" = "testuser" ]
+  run bash -lc "compgen -G '${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json.bak.*' >/dev/null"
   [ "$status" -ne 0 ]
 }
 
@@ -847,11 +930,12 @@ MOCK
   run cmd_deploy devcontainer python --dry-run
   [ "$status" -eq 0 ]
   [[ "$output" == *"CREATE"* ]]
-  # Zero filesystem mutations: no target file, no parent dir, no internal _*/ deploy,
+  # Zero filesystem mutations: no target file, no parent dir, no managed shared-layer deploy,
   # no backups, no temp artifacts anywhere under the user config dir.
   [ ! -e "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json" ]
   [ ! -e "${XDG_CONFIG_HOME}/dctl/devcontainer/python" ]
-  [ ! -e "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base" ]
+  [ ! -e "${XDG_CONFIG_HOME}/dctl/devcontainer/base" ]
+  [ ! -e "${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml" ]
   run ! compgen -G "${XDG_CONFIG_HOME}/dctl/devcontainer/**/*.bak.*"
   run ! compgen -G "${XDG_CONFIG_HOME}/dctl/**/*.tmp"
 }
@@ -860,13 +944,13 @@ MOCK
   create_template_fixture python "devimg/python-dev:latest"
   run cmd_deploy devcontainer python
   [ "$status" -eq 0 ]
-  printf '{"remoteUser":"drifted"}\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json"
+  printf '{"remoteUser":"drifted"}\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json"
 
   run cmd_deploy devcontainer python --dry-run
   [ "$status" -eq 0 ]
-  # Drifted internal file untouched, no backups created.
-  [ "$(jq -r '.remoteUser' "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json")" = "drifted" ]
-  run ! compgen -G "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/*.bak.*"
+  # Drifted managed shared-layer file untouched, no backups created.
+  [ "$(jq -r '.remoteUser' "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json")" = "drifted" ]
+  run ! compgen -G "${XDG_CONFIG_HOME}/dctl/devcontainer/base/*.bak.*"
   run ! compgen -G "${XDG_CONFIG_HOME}/dctl/devcontainer/python/*.bak.*"
 }
 
@@ -876,25 +960,27 @@ MOCK
   [[ "$output" == *"Cannot use --dry-run with --reset"* ]]
 }
 
-@test "cmd_deploy --all deploys both categories and internal templates" {
+@test "cmd_deploy --all deploys both categories and managed shared layers" {
   create_template_fixture python "devimg/python-dev:latest"
   printf 'FROM alpine\n' >"${XDG_DATA_HOME}/dctl/images/agents/Dockerfile"
 
   run cmd_deploy --all
   [ "$status" -eq 0 ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json" ]
+  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json" ]
   [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json" ]
+  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml" ]
   [ -f "${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile" ]
 }
 
-@test "cmd_deploy --all-devcontainers deploys selectable and internal templates only" {
+@test "cmd_deploy --all-devcontainers deploys selectable manifests and managed shared layers only" {
   create_template_fixture python "devimg/python-dev:latest"
   printf 'FROM alpine\n' >"${XDG_DATA_HOME}/dctl/images/agents/Dockerfile"
 
   run cmd_deploy --all-devcontainers
   [ "$status" -eq 0 ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json" ]
+  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json" ]
   [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json" ]
+  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml" ]
   [ ! -e "${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile" ]
 }
 
@@ -904,7 +990,7 @@ MOCK
   run cmd_deploy --all-images
   [ "$status" -eq 0 ]
   [ -f "${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile" ]
-  [ ! -e "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json" ]
+  [ ! -e "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json" ]
 }
 
 @test "resolve_dockerfile fails when only installed image exists" {
@@ -945,19 +1031,92 @@ MOCK
   [[ "$output" != *"agents"* ]]
 }
 
-@test "discover_config_layers returns sorted _* dirs from user config" {
-  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base"
-  printf '{"name":"base"}\n' > "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json"
-  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/_10-extra"
-  printf '{"name":"ten"}\n' > "${XDG_CONFIG_HOME}/dctl/devcontainer/_10-extra/devcontainer.json"
-  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/_05-middle"
-  printf '{"name":"five"}\n' > "${XDG_CONFIG_HOME}/dctl/devcontainer/_05-middle/devcontainer.json"
+@test "discover_config_layers returns layers in manifest order" {
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/base"
+  printf '{"name":"base"}\n' > "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json"
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/middle"
+  printf '{"name":"middle"}\n' > "${XDG_CONFIG_HOME}/dctl/devcontainer/middle/devcontainer.json"
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/top"
+  printf '{"name":"top"}\n' > "${XDG_CONFIG_HOME}/dctl/devcontainer/top/devcontainer.json"
+  create_user_manifest_fixture stack base middle top
 
-  run discover_config_layers
+  run discover_config_layers stack
   [ "$status" -eq 0 ]
-  [ "${lines[0]}" = "${XDG_CONFIG_HOME}/dctl/devcontainer/_00-base/devcontainer.json" ]
-  [ "${lines[1]}" = "${XDG_CONFIG_HOME}/dctl/devcontainer/_05-middle/devcontainer.json" ]
-  [ "${lines[2]}" = "${XDG_CONFIG_HOME}/dctl/devcontainer/_10-extra/devcontainer.json" ]
+  [ "${lines[0]}" = "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json" ]
+  [ "${lines[1]}" = "${XDG_CONFIG_HOME}/dctl/devcontainer/middle/devcontainer.json" ]
+  [ "${lines[2]}" = "${XDG_CONFIG_HOME}/dctl/devcontainer/top/devcontainer.json" ]
+}
+
+@test "_validate_compose_manifest rejects invalid YAML" {
+  local manifest="${XDG_CONFIG_HOME}/dctl/devcontainer/broken.yaml"
+  mkdir -p "$(dirname "$manifest")"
+  printf 'name: [\n' >"$manifest"
+
+  run _validate_compose_manifest "$manifest"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Invalid YAML in manifest"* ]]
+}
+
+@test "_validate_compose_manifest rejects missing layers key" {
+  local manifest="${XDG_CONFIG_HOME}/dctl/devcontainer/broken.yaml"
+  mkdir -p "$(dirname "$manifest")"
+  printf 'name: broken\n' >"$manifest"
+
+  run _validate_compose_manifest "$manifest"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"'layers' must be an array"* ]]
+}
+
+@test "_validate_compose_manifest rejects empty layers array" {
+  local manifest="${XDG_CONFIG_HOME}/dctl/devcontainer/broken.yaml"
+  mkdir -p "$(dirname "$manifest")"
+  cat >"$manifest" <<'YAML'
+name: broken
+layers: []
+YAML
+
+  run _validate_compose_manifest "$manifest"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"'layers' must not be empty"* ]]
+}
+
+@test "discover_config_layers errors when manifest references a missing layer" {
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/base"
+  printf '{"name":"base"}\n' > "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json"
+  create_user_manifest_fixture broken base missing
+
+  run discover_config_layers broken
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Layer 'missing' referenced in manifest 'broken' not found"* ]]
+}
+
+@test "cmd_deploy errors when manifest references layer with missing devcontainer.json" {
+  # Create manifest referencing a layer whose directory exists but has no devcontainer.json
+  create_installed_manifest_fixture broken base empty-layer
+  create_base_template_fixture
+  mkdir -p "${XDG_DATA_HOME}/dctl/devcontainers/empty-layer"
+  # No devcontainer.json in empty-layer
+
+  run cmd_deploy devcontainer broken
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"devcontainer.json not found"* ]]
+  [[ "$output" == *"empty-layer"* ]]
+}
+
+@test "cmd_deploy errors when manifest references nonexistent layer directory" {
+  create_installed_manifest_fixture broken base nonexistent
+  create_base_template_fixture
+
+  run cmd_deploy devcontainer broken
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"installed directory not found"* ]]
+  [[ "$output" == *"nonexistent"* ]]
+}
+
+@test "discover_config_layers errors when manifest is missing" {
+  run discover_config_layers missing
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"No manifest found for 'missing'"* ]]
 }
 
 @test "cache_is_fresh checks all layer files" {
@@ -981,7 +1140,31 @@ MOCK
   [ "$status" -ne 0 ]
 }
 
-@test "generate_cached_devcontainer works with single layer plus template" {
+@test "cache_is_fresh checks manifest files too" {
+  local cached="${TEST_TMPDIR}/cached.json"
+  local manifest="${TEST_TMPDIR}/python.yaml"
+  local layer="${TEST_TMPDIR}/layer.json"
+
+  cat >"$manifest" <<'YAML'
+name: python
+layers:
+  - base
+  - python
+YAML
+  printf '{}\n' > "$layer"
+  sleep 1
+  printf '{}\n' > "$cached"
+
+  run cache_is_fresh "$cached" "$manifest" "$layer"
+  [ "$status" -eq 0 ]
+
+  sleep 1
+  touch "$manifest"
+  run cache_is_fresh "$cached" "$manifest" "$layer"
+  [ "$status" -ne 0 ]
+}
+
+@test "generate_cached_devcontainer works with manifest-defined layers" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
 
@@ -996,11 +1179,10 @@ MOCK
   [ "$(jq -r '.image' "$deployed")" = "devimg/python-dev:latest" ]
 }
 
-@test "generate_cached_devcontainer merges multiple layers with correct ordering" {
+@test "generate_cached_devcontainer merges multiple manifest layers with correct ordering" {
   create_user_base_layer_fixture
-  create_user_devcontainer_fixture python "devimg/python-dev:latest"
-  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/_05-middle"
-  cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/_05-middle/devcontainer.json" <<'JSON'
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/middle"
+  cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/middle/devcontainer.json" <<'JSON'
 {
   "name": "middle",
   "containerEnv": {
@@ -1015,10 +1197,11 @@ MOCK
   ]
 }
 JSON
-  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/_10-top"
-  cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/_10-top/devcontainer.json" <<'JSON'
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/python"
+  cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json" <<'JSON'
 {
   "name": "top",
+  "image": "devimg/python-dev:latest",
   "containerEnv": {
     "LEVEL": "top"
   },
@@ -1031,6 +1214,7 @@ JSON
   ]
 }
 JSON
+  create_user_manifest_fixture python base middle python
 
   run generate_cached_devcontainer python
   [ "$status" -eq 0 ]

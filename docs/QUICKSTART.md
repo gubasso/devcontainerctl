@@ -17,7 +17,7 @@ dctl ws up
 dctl ws shell
 ```
 
-Shared settings come from the `_00-base` template and any optional `_NN-*` user layers, merged automatically by `dctl init`.
+Shared settings come from the `base` layer and any additional layers declared in each config's YAML manifest, merged automatically by `dctl init`.
 
 ## Available Templates
 

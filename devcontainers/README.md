@@ -9,7 +9,7 @@ devcontainers/  ──make install──>  ~/.local/share/dctl/devcontainers/
                                   │
                                   └──dctl deploy──>  ~/.config/dctl/devcontainer/
                                                              │
-                                                             └──merge _00-base + _NN-* + template──>  ~/.cache/dctl/devcontainer/
+                                                             └──merge manifest-declared layers──>  ~/.cache/dctl/devcontainer/
 ```
 
 - **Installed** (`~/.local/share/dctl/devcontainers/`): built-in templates shipped by `make install`
@@ -19,11 +19,11 @@ devcontainers/  ──make install──>  ~/.local/share/dctl/devcontainers/
 ## Installed Files Are Seed Sources Only
 
 Installed files under `~/.local/share/dctl/` are never used directly at runtime.
-`dctl deploy devcontainer <name>` copies the template's devcontainer config into
-user config, and `dctl deploy image <name>` copies the associated managed image
+`dctl deploy devcontainer <name>` copies the manifest and referenced layer files
+into user config, and `dctl deploy image <name>` copies the associated managed image
 files into user config:
 
-- `~/.config/dctl/devcontainer/` — devcontainer.json layers (base + template)
+- `~/.config/dctl/devcontainer/` — deployed manifests plus devcontainer.json layers
 - `~/.config/dctl/images/` — managed Dockerfile and helper scripts
 
 User config (`~/.config/dctl/`) is the sole runtime source for all operations:
@@ -32,11 +32,10 @@ to customize their setup.
 
 ## Template Catalog
 
-### Internal
+### Shipped Layers and Manifests
 
-- `_00-base/devcontainer.json` — shared universal settings (remote user, auth mounts, terminal env). Internal only and never user-selectable.
-
-### Selectable
+- `base/devcontainer.json` — shared universal settings (remote user, auth mounts, terminal env)
+- `general.yaml`, `coordinator.yaml`, `python.yaml`, `rust.yaml`, `zig.yaml` — selectable manifests
 
 - `general/devcontainer.json` — general-purpose sandbox on `devimg/agents:latest`
 - `coordinator/devcontainer.json` — coordinator workflow with a read-only parent-area mount
@@ -46,8 +45,8 @@ to customize their setup.
 
 ## Merge Semantics
 
-`dctl init` merges all user config layers named `_*/devcontainer.json` in
-alphabetical order, then merges the selected template on top using `jq`.
+`dctl init` reads a deployed manifest and merges its listed layers in order
+using `jq`.
 
 - `mounts` are concatenated in merge order
 - `postCreateCommand` is merged by key
@@ -56,7 +55,7 @@ alphabetical order, then merges the selected template on top using `jq`.
 
 ## Discovery Rules
 
-- Directories starting with `_` are internal
-- Internal templates are never shown in picker or list output
-- Internal templates are always reconciled during devcontainer deploys
+- Selectable entries are manifest files (`*.yaml`)
+- Manifest-referenced non-leaf layers are treated as managed shared layers during deploy
+- The last manifest layer is the user-protected leaf layer
 - User customization happens in `~/.config/dctl/devcontainer/`, and those user config files are the only merge inputs

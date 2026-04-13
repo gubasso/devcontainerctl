@@ -29,9 +29,9 @@ dctl deploy --help
 
 ## Categories
 
-- `devcontainer`: copies installed template files from
-  `~/.local/share/dctl/devcontainers/<name>/` into
-  `~/.config/dctl/devcontainer/<name>/`
+- `devcontainer`: copies the installed manifest (`<name>.yaml`) and its
+  referenced layer directories from `~/.local/share/dctl/devcontainers/`
+  into `~/.config/dctl/devcontainer/`
 - `image`: copies installed image files from
   `~/.local/share/dctl/images/<name>/` into `~/.config/dctl/images/<name>/`
 
@@ -55,8 +55,8 @@ Exactly one of these modes applies:
 ### Default mode
 
 - creates missing target files
-- skips existing non-internal files
-- for internal devcontainer files, reconciles drift back to the installed copy
+- skips existing leaf-layer files
+- for managed manifest files and non-leaf devcontainer layers, reconciles drift back to the installed copy
 
 ### `--reset`
 
@@ -88,27 +88,27 @@ Example:
 devcontainer.json.bak.2026-04-07T12-34-56Z
 ```
 
-## Internal Devcontainer Invariant
+## Managed Manifest Invariant
 
-Any installed devcontainer directory whose basename starts with `_` is internal.
+Any installed devcontainer manifest (`*.yaml`) is selectable and always managed.
+For each selected manifest:
 
-- internal devcontainer dirs are always processed on every
+- the manifest file itself is always processed on every
   `dctl deploy devcontainer ...`
-- internal devcontainer dirs are always processed on every
-  `dctl deploy --all` and `dctl deploy --all-devcontainers`
-- internal devcontainer dirs are never listed
-- internal devcontainer dirs are never shown in pickers
-- internal devcontainer files are always brought into sync with the installed
-  copy
+- all non-leaf manifest layers are always processed on every
+  `dctl deploy devcontainer ...`
+- the same rules apply to `dctl deploy --all` and `dctl deploy --all-devcontainers`
+- only manifest names are listed or shown in pickers
+- manifest files and non-leaf layer files are always brought into sync with the installed copy
 
 Reconciliation behavior:
 
-- default mode: overwrite differing internal files without backup
-- reset mode: back up differing internal files, then overwrite
+- default mode: overwrite differing manifest files and non-leaf layer files without backup
+- reset mode: back up differing manifest files and non-leaf layer files, then overwrite
 - identical files: no-op
 
-This makes internal layers managed shared infrastructure rather than
-user-protected leaf templates.
+This makes manifest files and non-leaf layers managed shared infrastructure
+rather than user-protected leaf layers.
 
 ## Listing
 
@@ -118,7 +118,7 @@ Listing output is grouped by category and prints one of:
 - `deployed`: present in both installed sources and user config
 - `user-only`: present only in user config
 
-Internal `_*/` devcontainer entries are excluded.
+Shared layers without a manifest are excluded.
 
 ## Interactive Picker
 
@@ -130,5 +130,5 @@ Interactive deploy proceeds in three steps:
 
 The item picker uses `fzf --multi` with a preview pane:
 
-- devcontainers preview `devcontainer.json`
+- devcontainers preview the manifest YAML
 - images preview `Dockerfile`

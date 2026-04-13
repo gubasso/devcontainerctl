@@ -11,7 +11,7 @@
 # guarantees, pin versions and validate checksums. Current approach favors
 # simplicity for personal devcontainers with weekly rebuilds.
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
@@ -19,8 +19,8 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # System dependencies + build tools for native extensions
 # Package names follow Debian conventions. Verify availability with:
-#   docker run --rm debian:bookworm-slim bash -c "apt-get update && apt-cache policy <pkg>"
-# Or check: https://packages.debian.org/bookworm/
+#   docker run --rm debian:trixie-slim bash -c "apt-get update && apt-cache policy <pkg>"
+# Or check: https://packages.debian.org/trixie/
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \

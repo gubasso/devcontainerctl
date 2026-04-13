@@ -8,6 +8,8 @@ readonly _DCTL_DEPLOY_LOADED=1
 
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/common.sh"
+# shellcheck source=/dev/null
+source "${DCTL_LIB_DIR}/config.sh"
 
 usage_deploy() {
   cat <<'EOF'
@@ -33,34 +35,28 @@ Interactive:
 EOF
 }
 
-_is_internal_template() {
-  [[ "$1" == _* ]]
-}
-
 _discover_installed_devcontainers() {
-  local templates=()
+  local manifests=()
   shopt -s nullglob
-  local dir name
-  for dir in "$DEVCONTAINERS_DIR"/*/; do
-    [[ -f "${dir}devcontainer.json" ]] || continue
-    name="$(basename "$dir")"
-    templates+=("$name")
+  local f name
+  for f in "$DEVCONTAINERS_DIR"/*.yaml; do
+    name="$(basename "$f" .yaml)"
+    manifests+=("$name")
   done
   shopt -u nullglob
-  [[ ${#templates[@]} -gt 0 ]] && printf '%s\n' "${templates[@]}"
+  [[ ${#manifests[@]} -gt 0 ]] && printf '%s\n' "${manifests[@]}"
 }
 
 _discover_deployed_devcontainers() {
-  local templates=()
+  local manifests=()
   shopt -s nullglob
-  local dir name
-  for dir in "$DCTL_DEVCONTAINER_DIR"/*/; do
-    [[ -f "${dir}devcontainer.json" ]] || continue
-    name="$(basename "$dir")"
-    templates+=("$name")
+  local f name
+  for f in "$DCTL_DEVCONTAINER_DIR"/*.yaml; do
+    name="$(basename "$f" .yaml)"
+    manifests+=("$name")
   done
   shopt -u nullglob
-  [[ ${#templates[@]} -gt 0 ]] && printf '%s\n' "${templates[@]}"
+  [[ ${#manifests[@]} -gt 0 ]] && printf '%s\n' "${manifests[@]}"
 }
 
 _discover_installed_images() {
@@ -90,21 +86,11 @@ _discover_deployed_images() {
 }
 
 _discover_installed_selectable_devcontainers() {
-  local name
-  while IFS= read -r name; do
-    [[ -n "$name" ]] || continue
-    _is_internal_template "$name" && continue
-    printf '%s\n' "$name"
-  done < <(_discover_installed_devcontainers)
+  _discover_installed_devcontainers
 }
 
 _discover_deployed_selectable_devcontainers() {
-  local name
-  while IFS= read -r name; do
-    [[ -n "$name" ]] || continue
-    _is_internal_template "$name" && continue
-    printf '%s\n' "$name"
-  done < <(_discover_deployed_devcontainers)
+  _discover_deployed_devcontainers
 }
 
 _category_installed_root() {
@@ -188,15 +174,45 @@ _collect_deploy_plan() {
 
   case "$category" in
     devcontainer)
-      if ! _is_internal_template "$name"; then
-        local internal_name
-        while IFS= read -r internal_name; do
-          [[ -n "$internal_name" ]] || continue
-          _is_internal_template "$internal_name" || continue
-          _collect_dir_plan_entries "$category" "$internal_name" "$mode" true
-        done < <(_discover_installed_devcontainers)
+      local manifest
+      manifest="$(installed_compose_manifest_path "$name")"
+      [[ -f "$manifest" ]] || return 0
+      _validate_compose_manifest "$manifest"
+
+      local -a layers=()
+      mapfile -t layers < <(_read_manifest_layers "$manifest")
+      local layer_count="${#layers[@]}"
+      local i=0
+      local layer_name is_leaf src_layer_dir
+      for layer_name in "${layers[@]}"; do
+        src_layer_dir="${DEVCONTAINERS_DIR}/${layer_name}"
+        [[ -d "$src_layer_dir" ]] || err "Manifest '${name}' references layer '${layer_name}' but installed directory not found: ${src_layer_dir}"
+        [[ -f "${src_layer_dir}/devcontainer.json" ]] || err "Manifest '${name}' references layer '${layer_name}' but devcontainer.json not found in: ${src_layer_dir}"
+        i=$((i + 1))
+        if [[ "$i" -eq "$layer_count" ]]; then
+          is_leaf=true
+        else
+          is_leaf=false
+        fi
+        _collect_dir_plan_entries "$category" "$layer_name" "$mode" "$([[ "$is_leaf" == false ]] && printf true || printf false)"
+      done
+
+      local src_manifest dest_manifest action
+      src_manifest="$(installed_compose_manifest_path "$name")"
+      dest_manifest="$(config_compose_manifest_path "$name")"
+      if [[ -f "$src_manifest" ]]; then
+        if [[ ! -f "$dest_manifest" ]]; then
+          action="CREATE"
+        elif cmp -s "$src_manifest" "$dest_manifest"; then
+          action="NOOP-IDENTICAL"
+        elif [[ "$mode" == "reset" ]]; then
+          action="OVERWRITE-WITH-BACKUP"
+        else
+          action="OVERWRITE"
+        fi
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+          "$action" "$category" "$name" "true" "$src_manifest" "$dest_manifest"
       fi
-      _collect_dir_plan_entries "$category" "$name" "$mode" "$(_is_internal_template "$name" && printf true || printf false)"
       ;;
     image)
       _collect_dir_plan_entries "$category" "$name" "$mode" false
@@ -265,7 +281,7 @@ _apply_deploy_plan() {
         mkdir -p "$(dirname "$dest")"
         mode="$(_install_mode_for_source "$source")"
         install -m "$mode" "$source" "$dest"
-        log "reconciled internal ${category} '${name}': ${dest}"
+        log "reconciled managed ${category} '${name}': ${dest}"
         ;;
       OVERWRITE-WITH-BACKUP)
         backup_path="$(_backup_target_file "$dest")"
@@ -386,7 +402,17 @@ _select_deploy_targets_interactive() {
 
   preview_file="$(_preview_file_for_category "$category")"
   root="$(_category_installed_root "$category")"
-  preview_cmd="bash -lc 'file=\"${root}/{}/${preview_file}\"; [[ -f \"\$file\" ]] && sed -n \"1,200p\" \"\$file\"'"
+  case "$category" in
+    devcontainer)
+      preview_cmd="bash -lc 'file=\"${root}/{}.yaml\"; [[ -f \"\$file\" ]] && sed -n \"1,200p\" \"\$file\"'"
+      ;;
+    image)
+      preview_cmd="bash -lc 'file=\"${root}/{}/${preview_file}\"; [[ -f \"\$file\" ]] && sed -n \"1,200p\" \"\$file\"'"
+      ;;
+    *)
+      err "Unknown deploy category: $category"
+      ;;
+  esac
 
   printf '%s\n' "${available[@]}" | fzf --multi \
     --height=~50% \
@@ -412,10 +438,20 @@ _confirm_deploy_plan_interactive() {
 _installed_entry_exists() {
   local category="$1"
   local name="$2"
-  local root preview
-  root="$(_category_installed_root "$category")"
-  preview="$(_preview_file_for_category "$category")"
-  [[ -f "${root}/${name}/${preview}" ]]
+  case "$category" in
+    devcontainer)
+      [[ -f "${DEVCONTAINERS_DIR}/${name}.yaml" ]]
+      ;;
+    image)
+      local root preview
+      root="$(_category_installed_root "$category")"
+      preview="$(_preview_file_for_category "$category")"
+      [[ -f "${root}/${name}/${preview}" ]]
+      ;;
+    *)
+      err "Unknown deploy category: $category"
+      ;;
+  esac
 }
 
 cmd_deploy() {
@@ -519,18 +555,22 @@ cmd_deploy() {
   fi
 
   if [[ "$all" == true ]]; then
-    local dev_name image_name
+    local dev_name image_name plan_output
     while IFS= read -r dev_name; do
       [[ -n "$dev_name" ]] || continue
-      plan+="$(_collect_deploy_plan devcontainer "$dev_name" "$([[ "$reset" == true ]] && printf reset || printf normal)")"$'\n'
+      plan_output="$(_collect_deploy_plan devcontainer "$dev_name" "$([[ "$reset" == true ]] && printf reset || printf normal)")" || exit $?
+      plan+="$plan_output"$'\n'
     done < <(_discover_installed_devcontainers)
     while IFS= read -r image_name; do
       [[ -n "$image_name" ]] || continue
-      plan+="$(_collect_deploy_plan image "$image_name" "$([[ "$reset" == true ]] && printf reset || printf normal)")"$'\n'
+      plan_output="$(_collect_deploy_plan image "$image_name" "$([[ "$reset" == true ]] && printf reset || printf normal)")" || exit $?
+      plan+="$plan_output"$'\n'
     done < <(_discover_installed_images)
   else
     for name in "${names[@]}"; do
-      plan+="$(_collect_deploy_plan "$category" "$name" "$([[ "$reset" == true ]] && printf reset || printf normal)")"$'\n'
+      local plan_output
+      plan_output="$(_collect_deploy_plan "$category" "$name" "$([[ "$reset" == true ]] && printf reset || printf normal)")" || exit $?
+      plan+="$plan_output"$'\n'
     done
   fi
 
