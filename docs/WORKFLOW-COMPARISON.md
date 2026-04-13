@@ -169,23 +169,20 @@ $EDITOR ~/.config/dctl/devcontainer/python/devcontainer.json
 
 ## Step 2: Start the workspace
 
-**What Ana is trying to do:** launch the container with the project mounted, credentials available, Poetry cache persisted, and terminal env forwarded.
+**What Ana is trying to do:** launch the container with the project mounted, credentials available, and terminal env forwarded.
 
 In Step 1 Ana prepared the image. Now she needs to configure the runtime: which directories to mount into the container, which env vars to forward, which volumes to persist. With Docker this is all CLI flags typed at run time. With devcontainers it is declared in the `devcontainer.json` file. With `dctl` it is already in the deployed config.
 
 ### Docker
 
-Ana creates a named volume for the Poetry cache and runs a `docker run` command that specifies every mount, env var, and runtime option by hand:
+Ana runs a `docker run` command that specifies every mount, env var, and runtime option by hand:
 
 ```bash
-docker volume create snackbar-poetry-cache
-
 docker run -d \
   --name snackbar-api-dev \
   --hostname snackbar-api-dev \
   --workdir /workspaces/snackbar-api \
   -v "$HOME/projects/snackbar-api:/workspaces/snackbar-api" \
-  -v "snackbar-poetry-cache:/home/ana/.cache/pypoetry" \
   -v "$HOME/.gitconfig:/home/ana/.gitconfig:ro" \
   -v "$HOME/.config/gh:/home/ana/.config/gh" \
   -v "$HOME/.config/glab-cli:/home/ana/.config/glab-cli" \
@@ -234,7 +231,6 @@ Before starting, Ana adds the runtime configuration to the `devcontainer.json` s
     "COLORTERM": "${localEnv:COLORTERM}"
   },
   "mounts": [
-    "source=snackbar-poetry-cache,target=/home/ana/.cache/pypoetry,type=volume",
     "source=${localEnv:HOME}/.gitconfig,target=/home/ana/.gitconfig,type=bind,readonly",
     "source=${localEnv:HOME}/.config/gh,target=/home/ana/.config/gh,type=bind",
     "source=${localEnv:HOME}/.config/glab-cli,target=/home/ana/.config/glab-cli,type=bind",
@@ -314,10 +310,8 @@ But Dockerfiles are only half the problem. Ana also has to maintain three separa
 
 ```bash
 # snackbar-api: Python project
-docker volume create snackbar-poetry-cache
 docker run -d --name snackbar-api-dev \
   -v "$HOME/projects/snackbar-api:/workspaces/snackbar-api" \
-  -v "snackbar-poetry-cache:/home/ana/.cache/pypoetry" \
   -v "$HOME/.gitconfig:/home/ana/.gitconfig:ro" \
   -v "$HOME/.config/gh:/home/ana/.config/gh" \
   # ... same 6 shared mounts ... same env vars ...
@@ -325,27 +319,24 @@ docker run -d --name snackbar-api-dev \
 docker exec -it snackbar-api-dev bash -lc "pre-commit install"
 
 # widget-api: another Python project — nearly identical command
-docker volume create widget-poetry-cache
 docker run -d --name widget-api-dev \
   -v "$HOME/projects/widget-api:/workspaces/widget-api" \
-  -v "widget-poetry-cache:/home/ana/.cache/pypoetry" \
   # ... same 6 shared mounts ... same env vars ...
   widget-api-dev:latest bash -lc "sleep infinity"
 docker exec -it widget-api-dev bash -lc "pre-commit install"
 
 # order-engine: Rust project — same base mounts, different caches and hooks
-docker volume create engine-rustup && docker volume create engine-cargo-registry && docker volume create engine-cargo-git
 docker run -d --name order-engine-dev \
   -v "$HOME/projects/order-engine:/workspaces/order-engine" \
-  -v "engine-rustup:/home/ana/.rustup" \
-  -v "engine-cargo-registry:/home/ana/.cargo/registry" \
-  -v "engine-cargo-git:/home/ana/.cargo/git" \
+  -v "engine-rustup-ana:/home/ana/.rustup" \
+  -v "engine-cargo-registry-ana:/home/ana/.cargo/registry" \
+  -v "engine-cargo-git-ana:/home/ana/.cargo/git" \
   # ... same 6 shared mounts ... same env vars ...
   order-engine-dev:latest bash -lc "sleep infinity"
 docker exec -it order-engine-dev bash -lc "cargo build && pre-commit install"
 ```
 
-Each command repeats the same shared mounts and env vars. Each project needs its own volume creation step. Each project needs its own manual post-create `docker exec` for setup hooks — and Ana must remember the correct hooks for each project type (Python gets `pre-commit install`, Rust gets `cargo build && pre-commit install`).
+Each command repeats the same shared mounts and env vars. Each project needs its own manual post-create `docker exec` for setup hooks — and Ana must remember the correct hooks for each project type (Python gets `pre-commit install`, Rust gets `cargo build && pre-commit install`).
 
 Pain points:
 
@@ -404,7 +395,7 @@ Each `devcontainer.json` repeats the same ~25-line base block from Step 2. Here 
 }
 ```
 
-Then each project adds its language-specific section on top of this shared block. The two Python projects both add a Poetry cache volume and `"pre-commit": "pre-commit install"`. The Rust project swaps those for three cache volumes (`rustup-toolchains`, `cargo-registry`, `cargo-git`) and adds `"rust": "cargo build"` plus `"pre-commit": "pre-commit install"` to `postCreateCommand`.
+Then each project adds its language-specific section on top of this shared block. The two Python projects both add `"pre-commit": "pre-commit install"`. The Rust project adds user-scoped cache volumes (`rustup-toolchains-<user>`, `cargo-registry-<user>`, `cargo-git-<user>`) and `"rust": "cargo build"` plus `"pre-commit": "pre-commit install"` to `postCreateCommand`.
 
 The Python `devcontainer.json` files for `snackbar-api` and `widget-api` are almost identical — the only differences are the `"name"` field and the `"workspaceFolder"` path. Everything else is a copy.
 
@@ -448,8 +439,8 @@ The layers:
 2. **Optional `_NN-*` user layers** add personal config. For example, the [`examples/_01-dotfiles/devcontainer.json`](../examples/_01-dotfiles/devcontainer.json) shows editor mounts, dotfiles, and Kitty terminal vars. Ana copies it to `~/.config/dctl/devcontainer/_01-dotfiles/` once, and it applies to every project automatically.
 
 3. **Template layers** add project-type specifics on top of the base:
-   - `python/devcontainer.json` adds `image: "devimg/python-dev:latest"`, the Poetry cache volume, and `postCreateCommand` with `pre-commit install`.
-   - `rust/devcontainer.json` adds `image: "devimg/rust-dev:latest"`, three cache volumes (`rustup-toolchains`, `cargo-registry`, `cargo-git`), and `postCreateCommand` with `cargo build` plus `pre-commit install`.
+   - `python/devcontainer.json` adds `image: "devimg/python-dev:latest"` and `postCreateCommand` with `pre-commit install`. Poetry cache is ephemeral (no volume).
+   - `rust/devcontainer.json` adds `image: "devimg/rust-dev:latest"`, three user-scoped cache volumes (`rustup-toolchains-<user>`, `cargo-registry-<user>`, `cargo-git-<user>`), and `postCreateCommand` with `cargo build` plus `pre-commit install`.
 
 4. **Image hierarchy:** `devimg/agents:latest` is the shared foundation. `devimg/python-dev:latest` and `devimg/rust-dev:latest` both build on top of it — so the image fleet mirrors the config layering.
 
@@ -664,7 +655,6 @@ docker run -d \
   --hostname snackbar-api-dev \
   --workdir /workspaces/snackbar-api \
   -v "$HOME/projects/snackbar-api:/workspaces/snackbar-api" \
-  -v "snackbar-poetry-cache:/home/ana/.cache/pypoetry" \
   -v "$HOME/.gitconfig:/home/ana/.gitconfig:ro" \
   -v "$HOME/.config/gh:/home/ana/.config/gh" \
   -v "$HOME/.config/glab-cli:/home/ana/.config/glab-cli" \
@@ -818,7 +808,6 @@ Benefits:
 docker stop snackbar-api-dev && docker rm snackbar-api-dev
 
 # Optional cleanup if she wants to reclaim space
-docker volume rm snackbar-poetry-cache
 docker image prune -f
 ```
 
