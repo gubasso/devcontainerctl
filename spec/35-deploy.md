@@ -90,6 +90,18 @@ devcontainer.json.bak.2026-04-07T12-34-56Z
 
 ## Managed Manifest Invariant
 
+A manifest declares layers in order; the **last** layer is the **leaf**
+(user-protected), all preceding layers are **shared** (managed infrastructure).
+Example:
+
+```yaml
+# rust.yaml
+name: rust
+layers:
+  - base    # shared — reconciled on every deploy
+  - rust    # leaf — created once, then skip-if-exists
+```
+
 Any installed devcontainer manifest (`*.yaml`) is selectable and always managed.
 For each selected manifest:
 

@@ -7,16 +7,42 @@
 This document describes the implemented template system used by `dctl deploy`
 and `dctl init`.
 
+## Manifest Format
+
+Each selectable config is defined by a YAML manifest declaring an ordered list
+of layers. Example (`python.yaml`):
+
+```yaml
+name: python
+layers:
+  - base
+  - python
+```
+
+Manifests are validated against `schemas/compose.schema.yaml` (JSON Schema
+Draft 2020-12). Required field: `layers` (non-empty array of strings).
+Optional field: `name`. No additional properties allowed.
+
 ## Template Catalog
 
-Built-in templates in the repository:
+Built-in layer directories and manifests in the repository:
 
-- `base` — shared config layer
-- `general` — minimal general-purpose sandbox on `devimg/agents:latest`
-- `coordinator` — coordinator workflow with parent-area visibility
-- `python` — Python project template on `devimg/python-dev:latest`
-- `rust` — Rust project template on `devimg/rust-dev:latest`
-- `zig` — Zig project template on `devimg/zig-dev:latest`
+**Layer directories** (each contains a `devcontainer.json`):
+
+- `base/` — shared infrastructure layer (remote user, auth mounts, terminal env)
+- `general/` — minimal general-purpose sandbox on `devimg/agents:latest`
+- `coordinator/` — coordinator workflow with parent-area visibility
+- `python/` — Python project config on `devimg/python-dev:latest`
+- `rust/` — Rust project config on `devimg/rust-dev:latest`
+- `zig/` — Zig project config on `devimg/zig-dev:latest`
+
+**Manifests** (each declares a composition):
+
+- `general.yaml` — layers: `[base, general]`
+- `coordinator.yaml` — layers: `[base, coordinator]`
+- `python.yaml` — layers: `[base, python]`
+- `rust.yaml` — layers: `[base, rust]`
+- `zig.yaml` — layers: `[base, zig]`
 
 These install to `~/.local/share/dctl/devcontainers/`.
 

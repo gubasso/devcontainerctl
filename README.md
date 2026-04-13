@@ -68,15 +68,30 @@ edit the user config files to customize your setup.
 
 ### Composable config
 
-The devcontainer config uses a layered merge system:
+The devcontainer config uses a manifest-driven layered merge system. Each
+selectable config is defined by a YAML manifest:
+
+```yaml
+# python.yaml — declares which layers compose this config
+name: python
+layers:
+  - base      # shared infrastructure (remote user, auth mounts, terminal env)
+  - python    # leaf layer (image tag, cache volumes, bootstrap commands)
+```
 
 - `base` owns the shared universal infrastructure (remote user, auth mounts, terminal env)
 - Optional user layers add personal config (dotfiles, editor mounts)
-- The selected manifest adds an explicit ordered layer list whose last entry is the leaf config
+- The **last layer** in the manifest is the **leaf** — it holds project-specific
+  settings and is protected from overwrites on deploy
+- All preceding layers are **shared** and reconciled automatically
 
 `dctl init` reads the selected manifest from `~/.config/dctl/devcontainer/<name>.yaml`,
-merges its listed layers in order, and writes the result under
-`~/.cache/dctl/devcontainer/` and consumed by `dctl ws up`.
+resolves each layer from its `<layer>/devcontainer.json`, merges them in order,
+and writes the result under `~/.cache/dctl/devcontainer/` for `dctl ws up`.
+
+Manifests are validated against `schemas/compose.schema.yaml` (JSON Schema
+Draft 2020-12). Required field: `layers` (non-empty array of strings).
+Optional field: `name`.
 
 ## Quick Start
 
@@ -278,7 +293,7 @@ Runs the workspace smoke test: prerequisite checks, managed image build if neede
 ## Image Architecture
 
 ```text
-Debian bookworm-slim
+Debian trixie-slim
         │
         ▼
 devimg/agents:latest

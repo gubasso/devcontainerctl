@@ -20,6 +20,16 @@ set, terminology, and rationale for the current codebase.
   registry lookups
 - **config source**: Any source that can provide a `devcontainer.json`
 - **resolution chain**: The ordered precedence list that `dctl` evaluates
+- **manifest**: A YAML file (e.g. `python.yaml`) declaring an ordered list of
+  layers to compose into a single `devcontainer.json`. Validated by
+  `schemas/compose.schema.yaml`
+- **layer**: A directory containing a `devcontainer.json` that is referenced by
+  a manifest's `layers` array (e.g. `base/`, `python/`)
+- **leaf layer**: The last layer in a manifest — holds project-specific settings
+  and is protected from overwrites on deploy (skip-if-exists semantics)
+- **shared layer**: Any non-leaf layer in a manifest — provides common
+  infrastructure and is always reconciled (overwritten) from installed sources
+  on deploy
 
 ## Spec Set
 

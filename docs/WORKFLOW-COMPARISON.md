@@ -45,7 +45,7 @@ snackbar-api/
 
 ```mermaid
 flowchart TD
-    A["FROM debian:bookworm-slim"] --> B["apt: bash, build-essential, curl, git, jq, pipx, sudo …"]
+    A["FROM debian:trixie-slim"] --> B["apt: bash, build-essential, curl, git, jq, pipx, sudo …"]
     B --> C["gh CLI via apt repository"]
     C --> D["non-root user: ana · uid 1000"]
     D --> E["mise → python 3.12, node LTS"]
@@ -461,7 +461,21 @@ cd ~/projects/widget-api   && dctl init --devcontainer python
 cd ~/projects/order-engine && dctl init --devcontainer rust
 ```
 
-`dctl init` reads the YAML manifest for the selected config (e.g., `python.yaml` lists `layers: [base, python]`) and merges those layers in order into `~/.cache/dctl/devcontainer/<config>/devcontainer.json`. Both Python projects reuse the exact same deployed config layers and image. The Rust project uses a different manifest and image, but shares the same `base` layer.
+`dctl init` reads the YAML manifest for the selected config and merges its
+declared layers in order. For example, `python.yaml`:
+
+```yaml
+name: python
+layers:
+  - base      # shared infrastructure (auth mounts, terminal env)
+  - python    # leaf layer (image tag, cache volumes, bootstrap)
+```
+
+This merges `base/devcontainer.json` then `python/devcontainer.json` into
+`~/.cache/dctl/devcontainer/python/devcontainer.json`. Both Python projects
+reuse the exact same deployed config layers and image. The Rust project uses a
+different manifest (`rust.yaml` with `layers: [base, rust]`) and image, but
+shares the same `base` layer.
 
 When the team adds a new shared mount, Ana edits `base` once, runs `dctl init` in each project to refresh the cache, and every workspace picks up the change. No files to copy, no duplication to maintain.
 
