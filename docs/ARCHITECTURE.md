@@ -107,7 +107,7 @@ are live in the current codebase:
   user-default precedence
 - per-project registry support in `~/.config/dctl/projects.yaml` for
   `devcontainer` selection and explicit `sibling_discovery: false`
-- `_00-base` plus selectable template composition with generated cache output under
+- YAML manifest-driven layer composition with generated cache output under
   `~/.cache/dctl/devcontainer/`
 - `dctl deploy` as the install-to-config seeding command for managed templates
   and managed Dockerfiles
@@ -363,7 +363,7 @@ glab api user --jq .username
 
 #### Neovim
 
-The agents image installs `neovim@latest` via mise. Container Neovim runs a minimal config — no plugins, LSP servers, or treesitter parsers are pre-baked. Full editor configuration can be added through an optional user layer such as `_01-dotfiles`.
+The agents image installs `neovim@latest` via mise. Container Neovim runs a minimal config — no plugins, LSP servers, or treesitter parsers are pre-baked. Full editor configuration can be added through an optional user layer such as `dotfiles`.
 
 ### Layer 1: Python Development (python-dev/)
 
@@ -743,9 +743,9 @@ Need to edit files and sync to host?
 
 ## Per-Project Configuration
 
-Shared auth mounts and baseline container settings come from the `_00-base`
-template (merged by `dctl init`). The examples below show only project-local
-deltas.
+Shared auth mounts and baseline container settings come from the `base`
+layer (merged by `dctl init` via the YAML manifest). The examples below show only
+project-local deltas.
 
 ### Standard Python Configuration
 
@@ -842,11 +842,11 @@ alongside it.
 }
 ```
 
-### Base Configuration Reuse via the `_00-base` Template
+### Base Configuration Reuse via the `base` Layer
 
-Shared devcontainer defaults live in the `_00-base` template at `devcontainers/_00-base/devcontainer.json` (installed to `~/.local/share/dctl/devcontainers/_00-base/`). When you run `dctl deploy devcontainer ...`, internal `_*/` layers are copied into `~/.config/dctl/devcontainer/`. When you run `dctl init`, all user config layers named `_*/devcontainer.json` are merged alphabetically and the selected project template is applied last.
+Shared devcontainer defaults live in the `base` layer at `devcontainers/base/devcontainer.json` (installed to `~/.local/share/dctl/devcontainers/base/`). When you run `dctl deploy devcontainer ...`, non-leaf layers referenced by the manifest are always copied (reconciled) into `~/.config/dctl/devcontainer/`, while the leaf layer (last in the manifest) is only created if absent and skipped if it already exists (use `--reset` to overwrite). When you run `dctl init`, layers declared in the YAML manifest are merged in the declared order.
 
-**Defaults provided by `_00-base`:**
+**Defaults provided by `base`:**
 
 | Property | Value | Notes |
 | -------- | ----- | ----- |
@@ -863,7 +863,7 @@ Shared devcontainer defaults live in the `_00-base` template at `devcontainers/_
 - `postCreateCommand` and `containerEnv` objects are merged by key (template wins)
 - scalar fields use last-wins (later layers and templates override earlier ones)
 
-After editing `_00-base`, a custom `_NN-*` layer, or a template config, regenerate and recreate:
+After editing `base`, a custom layer, or a manifest, regenerate and recreate:
 
 ```bash
 dctl init
@@ -1117,8 +1117,8 @@ to keep in mind is:
 
 - `dctl deploy devcontainer ...` and `dctl deploy image ...` copy installed
   managed assets into `~/.config/dctl/`
-- `dctl init` selects a deployed template from `~/.config/dctl/devcontainer/`,
-  then writes the merged config to
+- `dctl init` selects a deployed manifest from `~/.config/dctl/devcontainer/`,
+  merges the declared layers, and writes the result to
   `~/.cache/dctl/devcontainer/<name>/devcontainer.json`
 - `dctl ws up` and `dctl ws reup` resolve config through the six-level
   precedence chain before invoking the Dev Container CLI
@@ -1196,7 +1196,7 @@ USER $USERNAME
 ### Docker Compose for Multi-Container
 
 **Note**: Docker Compose mode does not get any extra `dctl` wrapper behavior by
-itself. If you bypass the normal `_00-base` plus template flow, set the required
+itself. If you bypass the normal manifest-driven layer composition flow, set the required
 shared mounts, env, lifecycle hooks, and user settings explicitly in the
 compose-based config.
 
@@ -1460,10 +1460,10 @@ dctl image build --all
 | `mounts` | Additional bind mounts and volumes |
 | `containerEnv` | Environment variables |
 | `postCreateCommand` | Run once after container creation |
-| `remoteUser` | User to run as (from `_00-base` template) |
-| `updateRemoteUserUID` | Map container UID to host UID (from `_00-base` template) |
-| `init` | Use proper init process (from `_00-base` template) |
-| `shutdownAction` | What to do when closed (from `_00-base` template) |
+| `remoteUser` | User to run as (from `base` layer) |
+| `updateRemoteUserUID` | Map container UID to host UID (from `base` layer) |
+| `init` | Use proper init process (from `base` layer) |
+| `shutdownAction` | What to do when closed (from `base` layer) |
 
 ### Volume Reference
 
@@ -1508,7 +1508,7 @@ components = ["rustfmt", "clippy", "rust-analyzer"]
 
 Complete `devcontainer.json` examples demonstrating multi-directory workspaces.
 Each project uses the default automatic workspace mount for the main repository.
-These rely on the shared defaults from the `_00-base` template. For base image
+These rely on the shared defaults from the `base` layer. For base image
 Dockerfiles, see [`images/`](../images/).
 
 ### Example 1: API Project with Docs and SDK

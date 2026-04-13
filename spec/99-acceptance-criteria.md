@@ -105,7 +105,7 @@ Expected result:
 - The cached config at
   `~/.cache/dctl/devcontainer/coordinator/devcontainer.json` contains the
   parent-area read-only mount from the `coordinator` template and the shared
-  mounts from `_00-base`
+  mounts from `base`
 
 ### 8. Resolution logging
 
@@ -207,7 +207,7 @@ Expected result:
 - `dctl` reports a schema validation error
 - The command does not proceed with invalid config
 
-### 15. Template merge generates complete cached config
+### 15. Manifest merge generates complete cached config
 
 Scenario:
 
@@ -215,10 +215,10 @@ Scenario:
 
 Expected result:
 
-- The cached config contains all shared settings from `_00-base`
-- The cached config contains Python-specific settings from the selected template
+- The cached config contains all shared settings from `base`
+- The cached config contains Python-specific settings from the selected leaf layer
 
-### 16. General template merge
+### 16. General manifest merge
 
 Scenario:
 
@@ -226,8 +226,8 @@ Scenario:
 
 Expected result:
 
-- The cached config contains all shared settings from `_00-base`
-- The cached config contains the general template's `name`, `image`, and
+- The cached config contains all shared settings from `base`
+- The cached config contains the general leaf layer's `name`, `image`, and
   pre-commit bootstrap
 
 ### 17. Cache invalidation on config change
@@ -235,7 +235,7 @@ Expected result:
 Scenario:
 
 - User runs `dctl init --devcontainer python`
-- User edits `~/.config/dctl/devcontainer/_00-base/devcontainer.json`
+- User edits `~/.config/dctl/devcontainer/base/devcontainer.json`
 - User runs `dctl init` again
 
 Expected result:
@@ -254,12 +254,12 @@ Expected result:
 - Config files are re-seeded from installed templates
 - The cached config is regenerated regardless of mtime freshness
 
-### 19. User edits `_00-base` config
+### 19. User edits `base` layer config
 
 Scenario:
 
 - User runs `dctl init --devcontainer python`
-- User edits `~/.config/dctl/devcontainer/_00-base/devcontainer.json`
+- User edits `~/.config/dctl/devcontainer/base/devcontainer.json`
 - User runs `dctl init --force --devcontainer python`
 
 Expected result:
@@ -279,7 +279,7 @@ Expected result:
 
 - The user's edited template config is preserved
 - The cached config reflects the user's custom template settings merged with
-  `_00-base`
+  `base`
 
 ### 21. Cache deletion is safe
 
@@ -304,17 +304,18 @@ Expected result:
 - Shared devcontainer config lives in templates, not in the Dockerfile
 - The Dockerfile focuses on image construction only
 
-### 23. `_00-base` excluded from template discovery
+### 23. Shared layers are excluded from config discovery
 
 Scenario:
 
-- `~/.local/share/dctl/devcontainers/_00-base/devcontainer.json` exists
+- `~/.local/share/dctl/devcontainers/base/devcontainer.json` exists
 - User runs `dctl deploy --list-devcontainers`
 
 Expected result:
 
-- `_00-base` does not appear in the template list
-- Only user-selectable templates are listed
+- `base` does not appear in the selectable config list unless a `base.yaml`
+  manifest exists
+- Only manifest-backed configs are listed
 
 ### 24. `make install` scope
 
@@ -337,7 +338,7 @@ Expected result:
 
 - Output is grouped into devcontainers and images
 - Each listed entry is marked as `installed`, `deployed`, or `user-only`
-- Internal `_*/` devcontainer entries are excluded
+- Shared layers without manifests are excluded
 
 ### 26. `deploy devcontainer` seeds user config
 
@@ -348,7 +349,8 @@ Scenario:
 Expected result:
 
 - `~/.config/dctl/devcontainer/python/` is created
-- all installed internal `_*/` devcontainer dirs are also deployed
+- `~/.config/dctl/devcontainer/python.yaml` is deployed
+- all non-leaf layers referenced by the installed manifest are also deployed
 - the project registry is unchanged
 
 ### 27. `deploy --reset` backs up and overwrites shipped files

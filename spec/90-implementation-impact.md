@@ -23,7 +23,7 @@ This document records how the approved design work landed in the repository.
 ### Templates and Dockerfiles
 
 - `devcontainers/general/` and `devcontainers/coordinator/` are shipped and installed
-- `_00-base` plus multi-layer template merge is implemented
+- `base` plus manifest-driven multi-layer merge is implemented
 - `lib/dctl/image.sh` resolves user-overridden versus installed Dockerfiles
 
 ### Project Registry
@@ -38,7 +38,7 @@ The bats suite now covers:
 
 - config precedence
 - registry parsing and validation
-- template merge and cache invalidation
+- manifest-driven merge and cache invalidation
 - Dockerfile hierarchy behavior
 - install/systemd integration paths
 

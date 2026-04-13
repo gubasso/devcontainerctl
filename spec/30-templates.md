@@ -11,7 +11,7 @@ and `dctl init`.
 
 Built-in templates in the repository:
 
-- `_00-base` — internal shared config
+- `base` — shared config layer
 - `general` — minimal general-purpose sandbox on `devimg/agents:latest`
 - `coordinator` — coordinator workflow with parent-area visibility
 - `python` — Python project template on `devimg/python-dev:latest`
@@ -35,14 +35,15 @@ Managed images are a parallel category:
 | `~/.config/dctl/devcontainer/` | Seeded config, then user-edited | `dctl deploy` + user |
 | `~/.cache/dctl/devcontainer/` | Generated merged config | `dctl` |
 
-`_00-base` owns the shared infrastructure settings. Selectable templates add the
-project-specific image, cache mounts, and lifecycle hooks.
+`base` owns the shared infrastructure settings. Selectable manifests add the
+full ordered layer list whose last entry provides the project-specific image,
+cache mounts, and lifecycle hooks.
 
 ## Merge Semantics
 
-`dctl init` discovers user config layers from `~/.config/dctl/devcontainer/_*/`,
-sorts them alphabetically, merges them two-by-two with `jq`, then merges the
-selected template last.
+`dctl init` reads a deployed manifest from `~/.config/dctl/devcontainer/*.yaml`,
+resolves each listed layer from user config, and merges them two-by-two with
+`jq` in manifest order.
 
 - scalar fields use last-wins behavior
 - `mounts` are concatenated
@@ -52,21 +53,20 @@ selected template last.
 
 ## Discovery Rules
 
-- `dctl deploy` reads installed templates from `~/.local/share/dctl/devcontainers/`
-- `dctl init` reads deployed templates from `~/.config/dctl/devcontainer/`
-- directories beginning with `_` are internal
-- internal entries are excluded from picker and list output
+- `dctl deploy` reads installed manifests (`*.yaml`) from `~/.local/share/dctl/devcontainers/`
+- `dctl init` reads deployed manifests (`*.yaml`) from `~/.config/dctl/devcontainer/`
+- selectable entries are determined by manifest presence, not directory naming
+- non-leaf layers (all except the last in a manifest) are managed shared infrastructure
 - merge-time layer discovery reads user config only
 
 ## `dctl init` Behavior
 
 `dctl init`:
 
-1. selects a deployed devcontainer from `~/.config/dctl/devcontainer/`
-2. discovers all `_*/devcontainer.json` files from user config and merges them
-   with the selected devcontainer into
-   `~/.cache/dctl/devcontainer/<name>/devcontainer.json`
-3. reads the selected devcontainer's `.image`
+1. selects a deployed manifest (`<name>.yaml`) from `~/.config/dctl/devcontainer/`
+2. reads the selected manifest and merges all referenced user-config layers
+   into `~/.cache/dctl/devcontainer/<name>/devcontainer.json`
+3. reads the `.image` field from the merged cached config
 4. for managed `devimg/<name>:latest` images, validates that the corresponding
    Dockerfile exists in `~/.config/dctl/images/<name>/Dockerfile`
 5. for managed images, auto-builds the local image when missing
@@ -83,14 +83,15 @@ deploy`.
 
 ## `dctl deploy` Invariant
 
-`dctl deploy` owns copying installed templates into user config.
+`dctl deploy` owns copying installed manifests and their referenced layers into user config.
 
-- internal `_*/` devcontainer directories are always reconciled on every
+- manifest files are always reconciled on every `deploy devcontainer ...` and
+  `deploy --all*` invocation
+- non-leaf manifest layers are always reconciled on every
   `deploy devcontainer ...` and `deploy --all*` invocation
-- internal entries are never listed or user-selectable
-- non-internal entries are protected in default mode and only overwritten with
-  `--reset`
-- internal entries are treated as managed shared infrastructure and are brought
+- non-leaf layers are treated as managed shared infrastructure and are brought
   back into sync even in default mode when they drift
+- leaf layers (the last layer in a manifest) are protected in default mode and
+  only overwritten with `--reset`
 
 See [`35-deploy.md`](./35-deploy.md) for the full deploy contract.

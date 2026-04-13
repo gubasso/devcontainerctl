@@ -6,7 +6,8 @@ SYSTEMD_DIR ?= $(HOME)/.local/share/systemd/user
 INSTALL := install
 
 IMAGE_NAMES := agents python-dev rust-dev zig-dev
-DEVCONTAINER_DIRS := python rust zig general coordinator _00-base
+DEVCONTAINER_DIRS := python rust zig general coordinator base
+DEVCONTAINER_MANIFESTS := general coordinator python rust zig
 LIB_FILES := common.sh ws.sh image.sh deploy.sh init.sh test.sh auth.sh config.sh
 
 .PHONY: install uninstall install-systemd uninstall-systemd test test-unit test-integration lint check
@@ -30,8 +31,12 @@ install:
 		$(INSTALL) -d "$(DATA_DIR)/devcontainers/$$template"; \
 		$(INSTALL) -m 644 "devcontainers/$$template/devcontainer.json" "$(DATA_DIR)/devcontainers/$$template/devcontainer.json"; \
 	done
+	for manifest in $(DEVCONTAINER_MANIFESTS); do \
+		$(INSTALL) -m 644 "devcontainers/$${manifest}.yaml" "$(DATA_DIR)/devcontainers/$${manifest}.yaml"; \
+	done
 	$(INSTALL) -m 644 devcontainers/README.md "$(DATA_DIR)/devcontainers/README.md"
 	$(INSTALL) -d "$(DATA_DIR)/schemas"
+	$(INSTALL) -m 644 schemas/compose.schema.yaml "$(DATA_DIR)/schemas/compose.schema.yaml"
 	$(INSTALL) -m 644 schemas/projects.schema.yaml "$(DATA_DIR)/schemas/projects.schema.yaml"
 	@printf '\n'
 	@case ":$$PATH:" in *:"$(BIN_DIR)":*) ;; *) \
@@ -56,8 +61,12 @@ uninstall:
 		rm -f "$(DATA_DIR)/devcontainers/$$template/devcontainer.json"; \
 		rmdir "$(DATA_DIR)/devcontainers/$$template" 2>/dev/null || true; \
 	done
+	for manifest in $(DEVCONTAINER_MANIFESTS); do \
+		rm -f "$(DATA_DIR)/devcontainers/$${manifest}.yaml"; \
+	done
 	rm -f "$(DATA_DIR)/devcontainers/README.md"
 	rmdir "$(DATA_DIR)/devcontainers" 2>/dev/null || true
+	rm -f "$(DATA_DIR)/schemas/compose.schema.yaml"
 	rm -f "$(DATA_DIR)/schemas/projects.schema.yaml"
 	rmdir "$(DATA_DIR)/schemas" 2>/dev/null || true
 	rmdir "$(DATA_DIR)" 2>/dev/null || true

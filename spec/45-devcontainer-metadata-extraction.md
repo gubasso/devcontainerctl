@@ -17,14 +17,14 @@ settings that belonged in templates instead.
 
 The implemented system now uses:
 
-- `devcontainers/_00-base/devcontainer.json` for shared infrastructure settings
+- `devcontainers/base/devcontainer.json` for shared infrastructure settings
 - selectable templates for project-specific deltas
 - `~/.config/dctl/devcontainer/` for user-editable config
 - `~/.cache/dctl/devcontainer/` for merged generated output
 
 ## Landed Changes
 
-- `_base` was added as the internal shared template
+- `base` is the shared layer used by shipped manifests
 - `general` became the user-facing generic template name
 - `dctl init` now seeds config into XDG config, merges into XDG cache, and
   registers the generated path
@@ -41,7 +41,7 @@ config flow.
 
 The current test suite covers:
 
-- `_base` exclusion from discovery
+- shared-layer exclusion from manifest discovery
 - merged cache generation
 - cache invalidation on config edits
 - registry path updates

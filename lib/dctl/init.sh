@@ -35,17 +35,15 @@ EOF
 }
 
 _discover_deployed_selectable_devcontainers() {
-  local templates=()
+  local manifests=()
   shopt -s nullglob
-  local dir name
-  for dir in "$DCTL_DEVCONTAINER_DIR"/*/; do
-    [[ -f "${dir}devcontainer.json" ]] || continue
-    name="$(basename "$dir")"
-    [[ "$name" == _* ]] && continue
-    templates+=("$name")
+  local f name
+  for f in "$DCTL_DEVCONTAINER_DIR"/*.yaml; do
+    name="$(basename "$f" .yaml)"
+    manifests+=("$name")
   done
   shopt -u nullglob
-  [[ ${#templates[@]} -gt 0 ]] && printf '%s\n' "${templates[@]}"
+  [[ ${#manifests[@]} -gt 0 ]] && printf '%s\n' "${manifests[@]}"
 }
 
 _select_deployed_devcontainer_interactive() {
@@ -93,16 +91,24 @@ merge_two_configs() {
 }
 
 discover_config_layers() {
-  local layers=()
-  shopt -s nullglob
-  local dir
-  for dir in "$DCTL_DEVCONTAINER_DIR"/_*/; do
-    if [[ -f "${dir}devcontainer.json" ]]; then
-      layers+=("${dir}devcontainer.json")
-    fi
-  done
-  shopt -u nullglob
-  [[ ${#layers[@]} -gt 0 ]] && printf '%s\n' "${layers[@]}"
+  local config_name="$1"
+  local manifest
+  manifest="$(config_compose_manifest_path "$config_name")"
+
+  [[ -f "$manifest" ]] || err "No manifest found for '$config_name' at $manifest"
+  _validate_compose_manifest "$manifest"
+
+  local -a layers=()
+  local layer_name layer_path
+  while IFS= read -r layer_name; do
+    [[ -n "$layer_name" ]] || continue
+    layer_path="${DCTL_DEVCONTAINER_DIR}/${layer_name}/devcontainer.json"
+    [[ -f "$layer_path" ]] || err "Layer '$layer_name' referenced in manifest '$config_name' not found: $layer_path"
+    layers+=("$layer_path")
+  done < <(_read_manifest_layers "$manifest")
+
+  [[ ${#layers[@]} -gt 0 ]] || err "No layers found in manifest for '$config_name'"
+  printf '%s\n' "${layers[@]}"
 }
 
 cache_is_fresh() {
@@ -117,9 +123,9 @@ cache_is_fresh() {
 
 _validate_deployed_devcontainer() {
   local template="$1"
-  local config_tmpl
-  config_tmpl="$(config_devcontainer_path "$template")"
-  [[ -f "$config_tmpl" ]] || err "Unknown deployed devcontainer: $template"
+  local manifest
+  manifest="$(config_compose_manifest_path "$template")"
+  [[ -f "$manifest" ]] || err "Unknown deployed devcontainer: $template (no manifest at $manifest)"
 }
 
 _infer_image_from_devcontainer_json() {
@@ -152,17 +158,17 @@ generate_cached_devcontainer() {
   require_cmd jq
   _validate_deployed_devcontainer "$template"
 
-  local config_tmpl cached_path
-  config_tmpl="$(config_devcontainer_path "$template")"
+  local manifest cached_path
+  manifest="$(config_compose_manifest_path "$template")"
   cached_path="$(deployed_devcontainer_path "$template")"
 
   local -a config_layers=()
-  mapfile -t config_layers < <(discover_config_layers)
+  mapfile -t config_layers < <(discover_config_layers "$template")
   if [[ ${#config_layers[@]} -eq 0 ]]; then
-    err "No composable config layers found in ${DCTL_DEVCONTAINER_DIR}. Run: dctl deploy devcontainer ${template}"
+    err "No composable config layers found for ${template}. Run: dctl deploy devcontainer ${template}"
   fi
 
-  if [[ "$force" != true ]] && cache_is_fresh "$cached_path" "${config_layers[@]}" "$config_tmpl"; then
+  if [[ "$force" != true ]] && cache_is_fresh "$cached_path" "$manifest" "${config_layers[@]}"; then
     printf '%s\n' "$cached_path"
     printf 'cached\n'
     return 0
@@ -179,18 +185,13 @@ generate_cached_devcontainer() {
     tmp_next="$(mktemp "${cached_path}.layers.XXXXXX")"
     if ! merge_two_configs "$tmp_acc" "$layer_path" > "$tmp_next"; then
       rm -f "$tmp_path" "$tmp_acc" "$tmp_next"
-      err "Failed to merge composable layer '$layer_path' for '$template'"
+      err "Failed to merge layer '$layer_path' for '$template'"
     fi
     rm -f "$tmp_acc"
     tmp_acc="$tmp_next"
   done
 
-  if ! merge_two_configs "$tmp_acc" "$config_tmpl" > "$tmp_path"; then
-    rm -f "$tmp_path" "$tmp_acc"
-    err "Failed to merge config layers and template for '$template'"
-  fi
-  rm -f "$tmp_acc"
-
+  mv "$tmp_acc" "$tmp_path"
   mv "$tmp_path" "$cached_path"
   printf '%s\n' "$cached_path"
   printf 'generated\n'
