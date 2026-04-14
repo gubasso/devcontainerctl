@@ -1,4 +1,5 @@
 name: python
 layers:
   - base
+  - agents
   - python

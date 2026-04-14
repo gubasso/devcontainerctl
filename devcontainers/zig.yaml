@@ -1,4 +1,5 @@
 name: zig
 layers:
   - base
+  - agents
   - zig

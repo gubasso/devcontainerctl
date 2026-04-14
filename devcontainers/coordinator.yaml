@@ -1,4 +1,5 @@
 name: coordinator
 layers:
   - base
+  - agents
   - coordinator

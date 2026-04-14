@@ -25,16 +25,6 @@
       "type": "bind"
     },
     {
-      "source": "${localEnv:HOME}/.claude",
-      "target": "${localEnv:HOME}/.claude",
-      "type": "bind"
-    },
-    {
-      "source": "${localEnv:HOME}/.claude.json",
-      "target": "${localEnv:HOME}/.claude.json",
-      "type": "bind"
-    },
-    {
       "source": "/tmp",
       "target": "/tmp",
       "type": "bind"
