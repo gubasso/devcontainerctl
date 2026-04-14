@@ -1,0 +1,139 @@
+// =============================================================================
+// AGENTS LAYER — generic configuration for AI coding agents
+// =============================================================================
+//
+// This layer adds what is needed to run agent CLIs (Claude Code, Codex CLI,
+// Gemini CLI) inside a dctl-managed container:
+//
+//   1. Mounts for each agent's config directory (so auth + history persist
+//      across container recreations).
+//   2. `runArgs` that relax Docker's default security profile enough for
+//      agents that internally use bubblewrap (`bwrap`) to sandbox shell
+//      tool calls — primarily OpenAI Codex CLI.
+//
+// -----------------------------------------------------------------------------
+// Why the runArgs below exist
+// -----------------------------------------------------------------------------
+//
+// THE PROBLEM
+// -----------
+// Some agents — most notably OpenAI Codex CLI — wrap every shell command they
+// execute in bubblewrap (`bwrap`). bwrap is a sandboxing tool that gives the
+// executed command a restricted filesystem view, so a rogue command cannot
+// read or write paths outside an explicit allowlist.
+//
+// To create its sandbox, bwrap calls the Linux kernel primitive
+//
+//     unshare(CLONE_NEWUSER)
+//
+// which creates a new "user namespace" — an isolated view of UIDs/GIDs. This
+// is called an *unprivileged* user namespace because it works without real
+// root: the process gets fake-root inside the namespace, mapped back to an
+// unprivileged UID on the host.
+//
+// Without the runArgs below, running Codex (or any bwrap-based agent) inside
+// a dctl container fails with:
+//
+//     bwrap: No permissions to create a new namespace, likely because the
+//     kernel does not allow non-privileged user namespaces.
+//
+// WHY IT FAILS (NESTED CONTAINER / NESTED NAMESPACE)
+// --------------------------------------------------
+// dctl starts your workspace as a Docker container — which is itself an
+// isolated environment. Codex then tries to create ANOTHER namespace INSIDE
+// that container. Docker blocks this by default via two independent security
+// mechanisms:
+//
+//   1. SECCOMP (syscall filter)
+//      Docker's default seccomp profile blocks unshare(CLONE_NEWUSER) from
+//      unprivileged processes. Rationale: creating user namespaces from
+//      inside a container has historically been an attack surface for
+//      container escape, so Docker errs on the side of caution.
+//
+//   2. APPARMOR (Linux Security Module)
+//      On Ubuntu 23.10+ and 24.04+, the `docker-default` AppArmor profile
+//      independently denies `unshare` of user namespaces. Even if seccomp
+//      were bypassed, AppArmor would still say no.
+//
+// Either one alone is enough for bwrap's unshare call to return EPERM.
+//
+// WHAT EACH runArg DOES
+// ---------------------
+//   --security-opt seccomp=unconfined
+//       Do not apply the syscall filter to this container.
+//       unshare(CLONE_NEWUSER) becomes reachable by unprivileged processes
+//       inside the container.
+//
+//   --security-opt apparmor=unconfined
+//       Do not load the AppArmor profile for this container. Required on
+//       Ubuntu 23.10/24.04+ where AppArmor is the second, independent block
+//       on `unshare`.
+//
+//   --security-opt systempaths=unconfined
+//       Do not mask /proc/sys and similar paths. bwrap reads some of those
+//       paths to probe kernel support for user namespaces; with them masked
+//       it may see empty paths and bail out before even trying.
+//
+// WHY THIS IS SAFE ENOUGH FOR A DEV WORKFLOW
+// ------------------------------------------
+// These flags do NOT grant extra privileges. We are NOT adding `--privileged`,
+// NOT granting extra Linux capabilities (e.g. CAP_SYS_ADMIN), NOT changing
+// the user the container runs as. The container still runs as the same
+// non-root user, with the same cgroups, same network scope, same everything.
+//
+// Only Docker's DEFENSIVE policies are relaxed: processes inside the
+// container can now create nested namespaces — something the unprivileged
+// user inside already *could* do as themselves if those defensive policies
+// were not there. Since dctl is already the isolation boundary between your
+// workspace and your host, this is an acceptable tradeoff on a developer
+// machine.
+//
+// ALTERNATIVE (not applied here)
+// ------------------------------
+// Instead of making bwrap work, you can tell Codex to skip its internal
+// sandbox entirely by setting in ~/.codex/config.toml:
+//
+//     sandbox_mode = "danger-full-access"
+//
+// That avoids the nested namespace collision by never invoking bwrap at all.
+// This layer deliberately keeps bwrap functional so agents' defense-in-depth
+// still works if they invoke it — you can layer the Codex config opt-out on
+// top if desired.
+//
+// REFERENCES
+// ----------
+//   https://developers.openai.com/codex/concepts/sandboxing
+//   https://github.com/openai/codex/issues/16018
+//   https://github.com/openai/codex/issues/16076
+//   https://github.com/containers/bubblewrap
+//
+// =============================================================================
+{
+  "runArgs": [
+    "--security-opt", "seccomp=unconfined",
+    "--security-opt", "apparmor=unconfined",
+    "--security-opt", "systempaths=unconfined"
+  ],
+  "mounts": [
+    {
+      "source": "${localEnv:HOME}/.claude",
+      "target": "${localEnv:HOME}/.claude",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}/.claude.json",
+      "target": "${localEnv:HOME}/.claude.json",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}/.codex",
+      "target": "${localEnv:HOME}/.codex",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}/.gemini",
+      "target": "${localEnv:HOME}/.gemini",
+      "type": "bind"
+    }
+  ]
+}
