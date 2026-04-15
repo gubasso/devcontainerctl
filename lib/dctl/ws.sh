@@ -10,6 +10,8 @@ readonly _DCTL_WS_LOADED=1
 source "${DCTL_LIB_DIR}/common.sh"
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/auth.sh"
+# shellcheck source=/dev/null
+source "${DCTL_LIB_DIR}/init.sh"
 
 usage_ws() {
   cat <<'EOF'
@@ -152,6 +154,26 @@ cmd_ws_reup() {
   local config_path
   if ! config_path="$(resolve_devcontainer_config)"; then
     return 1
+  fi
+
+  # If the resolved config is a dctl-managed cached config, regenerate it
+  # when any manifest input is newer than the cached file. Configs outside
+  # the cache dir (explicit --config, DCTL_CONFIG, local .devcontainer,
+  # sibling, or user-global default) are used as-is. Canonicalize the
+  # cache-dir prefix so symlinks in XDG_CACHE_HOME don't cause the check
+  # to miss managed configs (resolve_devcontainer_config always returns a
+  # realpath).
+  local cache_root_canonical="$DCTL_DEVCONTAINER_CACHE_DIR"
+  if [[ -d "$DCTL_DEVCONTAINER_CACHE_DIR" ]]; then
+    cache_root_canonical="$(realpath "$DCTL_DEVCONTAINER_CACHE_DIR")"
+  fi
+  if [[ "$config_path" == "${cache_root_canonical}/"* ]]; then
+    local template_name cache_output config_status
+    template_name="$(basename "$(dirname "$config_path")")"
+    cache_output="$(generate_cached_devcontainer "$template_name")" || return $?
+    config_path="$(head -1 <<< "$cache_output")"
+    config_status="$(tail -1 <<< "$cache_output")"
+    log "Config cache status: $config_status"
   fi
 
   local -a git_wt_mounts=()

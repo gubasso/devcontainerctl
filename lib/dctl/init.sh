@@ -155,7 +155,6 @@ generate_cached_devcontainer() {
   local template="$1"
   local force="${2:-false}"
 
-  require_cmd jq
   _validate_deployed_devcontainer "$template"
 
   local manifest cached_path
@@ -173,6 +172,11 @@ generate_cached_devcontainer() {
     printf 'cached\n'
     return 0
   fi
+
+  # jq is only needed for the merge path; a fresh cache short-circuits
+  # above so callers (e.g. `dctl ws reup`) can reuse a cached config
+  # without requiring jq to be installed.
+  require_cmd jq
 
   mkdir -p "$(dirname "$cached_path")"
   local tmp_path tmp_acc

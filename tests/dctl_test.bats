@@ -299,6 +299,57 @@ teardown() {
   assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config $(workspace_devcontainer_file) --remove-existing-container"
 }
 
+@test "cmd_ws_reup regenerates cached config when a layer mtime is newer" {
+  create_user_base_layer_fixture
+  create_user_devcontainer_fixture python "devimg/python-dev:latest"
+
+  run generate_cached_devcontainer python
+  [ "$status" -eq 0 ]
+  local cached="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
+  [ -f "$cached" ]
+
+  sleep 1
+  touch "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
+
+  enable_mocks
+  create_mock devcontainer 0 ""
+
+  DCTL_CLI_CONFIG="$cached" run cmd_ws_reup
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Config cache status: generated"* ]]
+  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config ${cached} --remove-existing-container"
+}
+
+@test "cmd_ws_reup reuses cached config when all inputs are older" {
+  create_user_base_layer_fixture
+  create_user_devcontainer_fixture python "devimg/python-dev:latest"
+
+  run generate_cached_devcontainer python
+  [ "$status" -eq 0 ]
+  local cached="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
+  [ -f "$cached" ]
+
+  enable_mocks
+  create_mock devcontainer 0 ""
+
+  DCTL_CLI_CONFIG="$cached" run cmd_ws_reup
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Config cache status: cached"* ]]
+  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config ${cached} --remove-existing-container"
+}
+
+@test "cmd_ws_reup does not regenerate when resolved config is outside cache dir" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
+  enable_mocks
+  create_mock devcontainer 0 ""
+
+  run cmd_ws_reup
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"Config cache status:"* ]]
+  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config $(workspace_devcontainer_file) --remove-existing-container"
+}
+
 @test "collect_term_env includes remote env flags for set vars" {
   local -a args
   # shellcheck disable=SC2034
