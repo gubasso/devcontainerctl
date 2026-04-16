@@ -23,7 +23,6 @@ Each selectable config is defined by a YAML **manifest** that declares an
 ordered list of layers to compose. For example, `python.yaml`:
 
 ```yaml
-name: python
 layers:
   - base      # shared infrastructure (auth mounts, terminal env, remote user)
   - python    # leaf layer (image tag, cache volumes, bootstrap commands)
@@ -39,8 +38,8 @@ project-specific settings and is protected from overwrites on deploy. All
 preceding layers are **shared** and reconciled automatically.
 
 Manifests are validated against `schemas/compose.schema.yaml` (JSON Schema
-Draft 2020-12). Required field: `layers` (non-empty array of strings).
-Optional field: `name`.
+Draft 2020-12). The only field is `layers` (non-empty array of strings);
+the filename stem is the manifest name.
 
 ## Available Configs
 

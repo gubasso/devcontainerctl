@@ -749,7 +749,6 @@ defined by a manifest that declares its layer composition:
 
 ```yaml
 # python.yaml — shipped manifest
-name: python
 layers:
   - base      # shared layer: remote user, auth mounts, terminal env
   - python    # leaf layer: image tag, cache volumes, bootstrap commands

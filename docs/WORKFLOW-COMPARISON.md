@@ -465,7 +465,6 @@ cd ~/projects/order-engine && dctl init --devcontainer rust
 declared layers in order. For example, `python.yaml`:
 
 ```yaml
-name: python
 layers:
   - base      # shared infrastructure (auth mounts, terminal env)
   - python    # leaf layer (image tag, cache volumes, bootstrap)

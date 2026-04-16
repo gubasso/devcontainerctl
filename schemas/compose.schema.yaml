@@ -3,9 +3,6 @@ title: dctl devcontainer composition manifest
 description: Declares an ordered list of layers to compose into a devcontainer config
 type: object
 properties:
-  name:
-    type: string
-    description: Human-readable name for this composition
   layers:
     type: array
     items:

@@ -73,7 +73,6 @@ selectable config is defined by a YAML manifest:
 
 ```yaml
 # python.yaml — declares which layers compose this config
-name: python
 layers:
   - base      # shared infrastructure (remote user, auth mounts, terminal env)
   - python    # leaf layer (image tag, cache volumes, bootstrap commands)
@@ -90,8 +89,8 @@ resolves each layer from its `<layer>/devcontainer.json`, merges them in order,
 and writes the result under `~/.cache/dctl/devcontainer/` for `dctl ws up`.
 
 Manifests are validated against `schemas/compose.schema.yaml` (JSON Schema
-Draft 2020-12). Required field: `layers` (non-empty array of strings).
-Optional field: `name`.
+Draft 2020-12). The only field is `layers` (non-empty array of strings);
+the filename stem is the manifest name.
 
 ## Quick Start
 

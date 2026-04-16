@@ -96,7 +96,6 @@ Example:
 
 ```yaml
 # rust.yaml
-name: rust
 layers:
   - base    # shared — reconciled on every deploy
   - rust    # leaf — created once, then skip-if-exists
