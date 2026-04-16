@@ -13,15 +13,14 @@ Each selectable config is defined by a YAML manifest declaring an ordered list
 of layers. Example (`python.yaml`):
 
 ```yaml
-name: python
 layers:
   - base
   - python
 ```
 
 Manifests are validated against `schemas/compose.schema.yaml` (JSON Schema
-Draft 2020-12). Required field: `layers` (non-empty array of strings).
-Optional field: `name`. No additional properties allowed.
+Draft 2020-12). The only field is `layers` (non-empty array of strings).
+No additional properties allowed.
 
 ## Template Catalog
 

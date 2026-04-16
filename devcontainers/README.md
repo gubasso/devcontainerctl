@@ -38,7 +38,6 @@ ordered list of layers to compose into a single `devcontainer.json`:
 
 ```yaml
 # python.yaml
-name: python
 layers:
   - base      # shared layer — reconciled (overwritten) on every deploy
   - python    # leaf layer — created on first deploy, then user-protected
@@ -49,9 +48,8 @@ layers:
 | Field | Required | Description |
 | --- | --- | --- |
 | `layers` | yes | Non-empty array of layer directory names, merged in order |
-| `name` | no | Human-readable label for the composition |
 
-No additional properties are allowed.
+No additional properties are allowed. The filename stem is the manifest name.
 
 **Leaf vs shared layers:**
 

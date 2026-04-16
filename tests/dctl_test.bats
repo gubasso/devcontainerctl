@@ -52,7 +52,6 @@ create_installed_manifest_fixture() {
   shift
   mkdir -p "${XDG_DATA_HOME}/dctl/devcontainers"
   {
-    printf 'name: %s\n' "$name"
     printf 'layers:\n'
     local layer
     for layer in "$@"; do
@@ -66,7 +65,6 @@ create_user_manifest_fixture() {
   shift
   mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer"
   {
-    printf 'name: %s\n' "$name"
     printf 'layers:\n'
     local layer
     for layer in "$@"; do
@@ -922,7 +920,7 @@ MOCK
   [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml" ]
 
   # Drift the deployed manifest
-  printf 'name: python\nlayers:\n  - base\n  - python\n  - extra\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml"
+  printf 'layers:\n  - base\n  - python\n  - extra\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml"
 
   run cmd_deploy devcontainer python
   [ "$status" -eq 0 ]
@@ -944,7 +942,7 @@ MOCK
   [ "$status" -eq 0 ]
 
   # Drift the deployed manifest
-  printf 'name: python\nlayers:\n  - base\n  - python\n  - extra\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml"
+  printf 'layers:\n  - base\n  - python\n  - extra\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml"
 
   run cmd_deploy devcontainer python --reset
   [ "$status" -eq 0 ]
@@ -1101,7 +1099,7 @@ MOCK
 @test "_validate_compose_manifest rejects invalid YAML" {
   local manifest="${XDG_CONFIG_HOME}/dctl/devcontainer/broken.yaml"
   mkdir -p "$(dirname "$manifest")"
-  printf 'name: [\n' >"$manifest"
+  printf 'layers: [\n' >"$manifest"
 
   run _validate_compose_manifest "$manifest"
   [ "$status" -ne 0 ]
@@ -1111,7 +1109,7 @@ MOCK
 @test "_validate_compose_manifest rejects missing layers key" {
   local manifest="${XDG_CONFIG_HOME}/dctl/devcontainer/broken.yaml"
   mkdir -p "$(dirname "$manifest")"
-  printf 'name: broken\n' >"$manifest"
+  printf 'other: value\n' >"$manifest"
 
   run _validate_compose_manifest "$manifest"
   [ "$status" -ne 0 ]
@@ -1122,7 +1120,6 @@ MOCK
   local manifest="${XDG_CONFIG_HOME}/dctl/devcontainer/broken.yaml"
   mkdir -p "$(dirname "$manifest")"
   cat >"$manifest" <<'YAML'
-name: broken
 layers: []
 YAML
 
@@ -1197,7 +1194,6 @@ YAML
   local layer="${TEST_TMPDIR}/layer.json"
 
   cat >"$manifest" <<'YAML'
-name: python
 layers:
   - base
   - python
