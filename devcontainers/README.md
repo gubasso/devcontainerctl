@@ -92,7 +92,7 @@ using `jq`:
 
 - `mounts` arrays are concatenated in layer order
 - `postCreateCommand` objects are merged by key (later layers win)
-- `containerEnv` objects are merged by key (later layers win)
+- `containerEnv` and `remoteEnv` objects are merged by key (later layers win)
 - scalar fields use last-wins behavior (the leaf layer overrides earlier values)
 
 ## Discovery Rules

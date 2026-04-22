@@ -86,7 +86,8 @@ merge_two_configs() {
     $base * $tmpl |
     .mounts = (($base.mounts // []) + ($tmpl.mounts // [])) |
     .postCreateCommand = (($base.postCreateCommand // {}) * ($tmpl.postCreateCommand // {})) |
-    .containerEnv = (($base.containerEnv // {}) * ($tmpl.containerEnv // {}))
+    .containerEnv = (($base.containerEnv // {}) * ($tmpl.containerEnv // {})) |
+    .remoteEnv = (($base.remoteEnv // {}) * ($tmpl.remoteEnv // {}))
   ' <(echo "$base_json") <(echo "$tmpl_json")
 }
 

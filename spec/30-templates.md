@@ -73,7 +73,7 @@ resolves each listed layer from user config, and merges them two-by-two with
 - scalar fields use last-wins behavior
 - `mounts` are concatenated
 - `postCreateCommand` is merged by key
-- `containerEnv` is merged by key
+- `containerEnv` and `remoteEnv` are merged by key
 - JSONC comments are stripped before merge
 
 ## Discovery Rules
