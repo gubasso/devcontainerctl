@@ -873,7 +873,7 @@ Shared devcontainer defaults live in the `base` layer at `devcontainers/base/dev
 **Merge rules** (applied by `dctl init`):
 
 - `mounts` arrays are concatenated in layer order
-- `postCreateCommand` and `containerEnv` objects are merged by key (template wins)
+- `postCreateCommand`, `containerEnv`, and `remoteEnv` objects are merged by key (template wins)
 - scalar fields use last-wins (later layers and templates override earlier ones)
 
 ### Creating a Custom Manifest
