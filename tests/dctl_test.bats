@@ -2,6 +2,8 @@
 
 # bats file_tags=unit
 
+bats_require_minimum_version 1.5.0
+
 load test_helper
 
 source_dctl_functions() {
@@ -508,7 +510,9 @@ teardown() {
   printf '{\n  "image": "devimg/python-dev:latest"\n}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
   create_mock docker 0 "container123"
-  PATH="${TEST_TMPDIR}/bin:/usr/bin:/bin" run cmd_test
+  local sanitized
+  sanitized="$(sanitized_bin_excluding devcontainer)"
+  PATH="${TEST_TMPDIR}/bin:${sanitized}" run cmd_test
   [ "$status" -ne 0 ]
   [[ "$output" == *"Missing required command: devcontainer"* ]]
 }
