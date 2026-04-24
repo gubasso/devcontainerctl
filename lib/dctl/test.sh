@@ -82,6 +82,89 @@ cleanup_test_workspace_containers() {
   list_ws_containers | xargs -r docker rm -f
 }
 
+_resolve_local_env() {
+  local str="$1"
+  while [[ "$str" =~ \$\{localEnv:([A-Za-z_][A-Za-z0-9_]*)\} ]]; do
+    local var_name="${BASH_REMATCH[1]}"
+    local value="${!var_name-}"
+    local match="${BASH_REMATCH[0]}"
+    str="${str//"$match"/$value}"
+  done
+  printf '%s' "$str"
+}
+
+_extract_bind_mount_sources() {
+  local config_path="$1"
+  local stripped
+
+  stripped="$(_strip_jsonc_comments "$config_path")" || return 1
+
+  jq -r '
+    (.mounts // [])[]
+    | if type == "object" then
+        if (.type // "") == "bind" then ((.source // .src) // empty) else empty end
+      elif type == "string" then
+        if test("(^|,)type=bind(,|$)") then
+          (split(",")[] | select(test("^(source|src)=")) | sub("^(source|src)="; ""))
+        else empty end
+      else empty end
+  ' <<< "$stripped"
+}
+
+check_bind_mount_sources() {
+  local config_path="$1"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    warn "jq not found; skipping bind mount source check"
+    return 0
+  fi
+
+  local sources
+  if ! sources="$(_extract_bind_mount_sources "$config_path")"; then
+    check_fail "Failed to parse bind mounts from $config_path"
+    return 1
+  fi
+
+  local -a missing_paths=()
+  local -a unresolved=()
+  local raw resolved
+  while IFS= read -r raw; do
+    [[ -n "$raw" ]] || continue
+    resolved="$(_resolve_local_env "$raw")"
+    if [[ -z "$resolved" ]]; then
+      unresolved+=("$raw")
+      continue
+    fi
+    [[ -e "$resolved" ]] || missing_paths+=("$resolved")
+  done <<< "$sources"
+
+  if [[ ${#missing_paths[@]} -eq 0 && ${#unresolved[@]} -eq 0 ]]; then
+    check_pass "Bind mount sources exist on host"
+    return 0
+  fi
+
+  check_fail "Missing bind mount source(s) on host"
+  local path
+  for path in "${missing_paths[@]}"; do
+    printf '    - %s\n' "$path" >&2
+  done
+  for path in "${unresolved[@]}"; do
+    printf '    - (unresolved) %s\n' "$path" >&2
+  done
+  if [[ ${#missing_paths[@]} -gt 0 ]]; then
+    printf '  Create the missing path(s) on the host before running devcontainer up, e.g.:\n' >&2
+    printf '    mkdir -p' >&2
+    for path in "${missing_paths[@]}"; do
+      printf ' %q' "$path"
+    done >&2
+    printf '\n' >&2
+  fi
+  if [[ ${#unresolved[@]} -gt 0 ]]; then
+    printf '  Set the referenced localEnv variable(s) on the host before running devcontainer up.\n' >&2
+  fi
+  return 1
+}
+
 build_workspace_image_if_managed() {
   local cfg="${1:-$(workspace_devcontainer_file)}"
   local image
@@ -160,12 +243,20 @@ cmd_test() {
       failures=$((failures + 1))
     fi
 
-    if devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path"; then
-      check_pass "devcontainer up succeeded"
-      container_started=true
-    else
-      check_fail "devcontainer up failed"
+    local bind_sources_ok=true
+    if ! check_bind_mount_sources "$config_path"; then
       failures=$((failures + 1))
+      bind_sources_ok=false
+    fi
+
+    if [[ "$bind_sources_ok" == true ]]; then
+      if devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path"; then
+        check_pass "devcontainer up succeeded"
+        container_started=true
+      else
+        check_fail "devcontainer up failed"
+        failures=$((failures + 1))
+      fi
     fi
 
     if [[ "$container_started" == true ]]; then
