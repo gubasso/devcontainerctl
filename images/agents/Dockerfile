@@ -3,7 +3,7 @@
 #
 # Supply chain note: Bun, Claude Code, OpenCode, and the mise
 # refresh are installed via curl-pipe. Codex is installed via Bun (npm-style).
-# gh is installed via the official GitHub APT repo. Node.js LTS, Neovim,
+# gh is installed via the official GitHub RPM repo. Node.js LTS, Neovim,
 # Python, fzf, pre-commit, glab, bats, and yq are installed via mise. eza, mise, zoxide,
 # and starship are installed via cargo-binstall.
 # trash-cli via pipx. Rust toolchain via rustup. Neovim runs a minimal
@@ -11,49 +11,53 @@
 # guarantees, pin versions and validate checksums. Current approach favors
 # simplicity for personal devcontainers with weekly rebuilds.
 
-FROM debian:trixie-slim
+FROM opensuse/leap:16.0
 
-ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # System dependencies + build tools for native extensions
-# Package names follow Debian conventions. Verify availability with:
-#   docker run --rm debian:trixie-slim bash -c "apt-get update && apt-cache policy <pkg>"
-# Or check: https://packages.debian.org/trixie/
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    git \
-    unzip \
-    ripgrep \
-    fd-find \
-    bat \
-    fish \
-    jq \
-    tree \
-    htop \
-    sudo \
-    openssh-client \
-    rsync \
-    stow \
-    # Kitty terminal: terminfo for xterm-kitty (enables keyboard protocol inside containers)
-    kitty-terminfo \
-    # Build dependencies (for Python wheels, Rust crates, etc.)
-    build-essential \
-    libffi-dev \
-    libssl-dev \
-    pkg-config \
-    libclang-dev \
-    libdbus-1-dev \
-    # X11 build dependencies (suckless: dwm, st, dmenu, etc.)
-    libx11-dev \
-    libxft-dev \
-    libxinerama-dev \
-    && rm -rf /var/lib/apt/lists/* \
-    # Create fd symlink (Debian names binary fdfind to avoid conflict)
-    && if [ -x /usr/bin/fdfind ]; then ln -sf /usr/bin/fdfind /usr/local/bin/fd; fi \
-    && if [ -x /usr/bin/batcat ]; then ln -sf /usr/bin/batcat /usr/local/bin/bat; fi
+# Package names follow openSUSE conventions. Verify availability with:
+#   docker run --rm opensuse/leap:16.0 bash -c "zypper --non-interactive refresh && zypper info <pkg>"
+# Or check: https://software.opensuse.org/package/<pkg>
+# hadolint ignore=DL3037
+RUN zypper --non-interactive --gpg-auto-import-keys refresh \
+    && zypper --non-interactive install --no-recommends \
+        ca-certificates \
+        ca-certificates-mozilla \
+        curl \
+        git-core \
+        unzip \
+        ripgrep \
+        fd \
+        bat \
+        fish \
+        jq \
+        tree \
+        htop \
+        sudo \
+        openssh-clients \
+        rsync \
+        stow \
+        # Kitty terminal: terminfo for xterm-kitty (enables keyboard protocol inside containers)
+        kitty-terminfo \
+        # Build dependencies (for Python wheels, Rust crates, etc.)
+        gcc \
+        gcc-c++ \
+        make \
+        binutils \
+        glibc-devel \
+        libffi-devel \
+        libopenssl-3-devel \
+        pkgconf-pkg-config \
+        clang-devel \
+        llvm-devel \
+        dbus-1-devel \
+        # X11 build dependencies (suckless: dwm, st, dmenu, etc.)
+        libX11-devel \
+        libXft-devel \
+        libXinerama-devel \
+    && zypper clean --all
 
 # Non-root user with passwordless sudo
 # USERNAME must match host $USER for config file consistency
@@ -71,22 +75,18 @@ RUN test -n "$USERNAME" || { echo "USERNAME build arg is required"; exit 1; } \
 # Pre-create directories for mounts
 RUN install -d -m 0700 -o $USERNAME -g $USERNAME /home/$USERNAME/.ssh
 
-# fzf-tab-completion: bash Tab completion via fzf (no Debian package available)
+# fzf-tab-completion: bash Tab completion via fzf (installed from upstream repo)
 # Checked first by bash/.config/bash/rc.d/10-fzf.bash
 RUN git clone --depth=1 https://github.com/lincheney/fzf-tab-completion /usr/share/fzf-tab-completion \
     && rm -rf /usr/share/fzf-tab-completion/.git \
     && test -r /usr/share/fzf-tab-completion/bash/fzf-bash-completion.sh
 
-# GitHub CLI (gh): official APT repo tracks latest releases for Debian
-RUN mkdir -p -m 755 /etc/apt/keyrings \
-    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-        -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-    && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-        > /etc/apt/sources.list.d/github-cli.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends gh \
-    && rm -rf /var/lib/apt/lists/*
+# GitHub CLI (gh): official RPM repo tracks latest releases for openSUSE/Fedora/RHEL
+# hadolint ignore=DL3037
+RUN zypper --non-interactive addrepo https://cli.github.com/packages/rpm/gh-cli.repo \
+    && zypper --non-interactive --gpg-auto-import-keys refresh \
+    && zypper --non-interactive install --no-recommends gh \
+    && zypper clean --all
 
 USER $USERNAME
 WORKDIR /home/$USERNAME
