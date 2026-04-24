@@ -1468,3 +1468,149 @@ YAML
   [[ "$output" == *"Image status: external"* ]]
   assert_mock_not_called "CMD_IMAGE_BUILD_CALLED"
 }
+
+# --- Bind mount source preflight ---
+
+@test "_resolve_local_env substitutes localEnv vars and leaves literals alone" {
+  # shellcheck disable=SC2030
+  export HOME=/tmp/fixture-home
+  # shellcheck disable=SC2030
+  export USER=fixtureuser
+  # shellcheck disable=SC2016
+  [ "$(_resolve_local_env '${localEnv:HOME}/.config/x')" = "/tmp/fixture-home/.config/x" ]
+  # shellcheck disable=SC2016
+  [ "$(_resolve_local_env 'prefix-${localEnv:USER}-${localEnv:USER}')" = "prefix-fixtureuser-fixtureuser" ]
+  [ "$(_resolve_local_env '/plain/path')" = "/plain/path" ]
+}
+
+@test "check_bind_mount_sources passes when all bind sources exist" {
+  local cfg="${TEST_TMPDIR}/devcontainer.json"
+  local existing="${TEST_TMPDIR}/exists"
+  mkdir -p "$existing"
+  cat >"$cfg" <<EOF
+{
+  "mounts": [
+    {"source": "${existing}", "target": "/a", "type": "bind"},
+    {"source": "vol-x", "target": "/b", "type": "volume"}
+  ]
+}
+EOF
+  _check_names=()
+  _check_results=()
+  run check_bind_mount_sources "$cfg"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Bind mount sources exist on host"* ]]
+}
+
+@test "check_bind_mount_sources reports missing paths with mkdir hint" {
+  local cfg="${TEST_TMPDIR}/devcontainer.json"
+  local missing_dir="${TEST_TMPDIR}/missing-dir"
+  local missing_string="${TEST_TMPDIR}/missing-string"
+  cat >"$cfg" <<EOF
+{
+  "mounts": [
+    {"source": "${missing_dir}", "target": "/a", "type": "bind"},
+    "type=bind,source=${missing_string},target=/b"
+  ]
+}
+EOF
+  _check_names=()
+  _check_results=()
+  run check_bind_mount_sources "$cfg"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Missing bind mount source(s) on host"* ]]
+  [[ "$output" == *"$missing_dir"* ]]
+  [[ "$output" == *"$missing_string"* ]]
+  [[ "$output" == *"mkdir -p"* ]]
+}
+
+@test "check_bind_mount_sources resolves localEnv and tolerates JSONC comments" {
+  # shellcheck disable=SC2030,SC2031
+  export HOME="${TEST_TMPDIR}/home"
+  mkdir -p "${HOME}/present"
+  local cfg="${TEST_TMPDIR}/devcontainer.json"
+  cat >"$cfg" <<'EOF'
+{
+  // leading JSONC comment
+  "mounts": [
+    {"source": "${localEnv:HOME}/present", "target": "/a", "type": "bind"},
+    {"source": "${localEnv:HOME}/absent", "target": "/b", "type": "bind"}
+  ]
+}
+EOF
+  _check_names=()
+  _check_results=()
+  run check_bind_mount_sources "$cfg"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"${HOME}/absent"* ]]
+  [[ "$output" != *"${HOME}/present"$'\n'* ]]
+}
+
+@test "check_bind_mount_sources recognizes src= alias in string mounts" {
+  local cfg="${TEST_TMPDIR}/devcontainer.json"
+  local missing_src="${TEST_TMPDIR}/missing-src"
+  cat >"$cfg" <<EOF
+{
+  "mounts": [
+    "type=bind,src=${missing_src},target=/a"
+  ]
+}
+EOF
+  _check_names=()
+  _check_results=()
+  run check_bind_mount_sources "$cfg"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"$missing_src"* ]]
+}
+
+@test "check_bind_mount_sources flags unresolved localEnv placeholders" {
+  unset DCTL_BIND_MISSING_VAR || true
+  local cfg="${TEST_TMPDIR}/devcontainer.json"
+  cat >"$cfg" <<'EOF'
+{
+  "mounts": [
+    {"source": "${localEnv:DCTL_BIND_MISSING_VAR}", "target": "/a", "type": "bind"}
+  ]
+}
+EOF
+  _check_names=()
+  _check_results=()
+  run check_bind_mount_sources "$cfg"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"(unresolved)"* ]]
+  # shellcheck disable=SC2016
+  [[ "$output" == *'${localEnv:DCTL_BIND_MISSING_VAR}'* ]]
+}
+
+@test "check_bind_mount_sources fails on malformed JSON instead of silently passing" {
+  local cfg="${TEST_TMPDIR}/devcontainer.json"
+  printf '{ not valid json\n' >"$cfg"
+  _check_names=()
+  _check_results=()
+  run check_bind_mount_sources "$cfg"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Failed to parse bind mounts"* ]]
+}
+
+@test "cmd_test skips devcontainer up when a bind mount source is missing" {
+  create_user_image_fixture python-dev
+  mkdir -p "$(workspace_devcontainer_dir)"
+  local missing="${TEST_TMPDIR}/never-created"
+  cat >"$(workspace_devcontainer_file)" <<EOF
+{
+  "image": "devimg/python-dev:latest",
+  "mounts": [
+    {"source": "${missing}", "target": "/mnt/x", "type": "bind"}
+  ]
+}
+EOF
+  enable_mocks
+  create_mock docker 0 "container123"
+  create_mock devcontainer 0 ""
+
+  run cmd_test
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Missing bind mount source(s) on host"* ]]
+  [[ "$output" == *"$missing"* ]]
+  assert_mock_not_called "devcontainer up"
+}
