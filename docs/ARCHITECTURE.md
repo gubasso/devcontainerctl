@@ -170,7 +170,7 @@ The spec set remains useful as a design record and glossary:
 Separate agent tools from language tooling for better caching:
 
 ```text
-devimg/agents:latest    (Debian bookworm + bun + node LTS + agent CLIs + mise + build deps)
+devimg/agents:latest    (openSUSE Leap 16.0 + bun + node LTS + agent CLIs + mise + build deps)
        │
        ├── devimg/python-dev:latest   (poetry via mise; inherits base python, overridden by project pin)
        ├── devimg/rust-dev:latest     (rustup with no default toolchain)
@@ -247,12 +247,12 @@ The container user is created with the same name as your host `$USER`, and UID/G
 
 ### Layer 0: Agent Tools Base (agents/)
 
-Foundation layer using Debian trixie-slim for broad compatibility and package availability.
+Foundation layer using openSUSE Leap 16.0 for broad compatibility and package availability.
 
 **Includes**:
 
-- System packages: git, ripgrep, fd-find (symlinked as fd), fzf, jq, build tools (build-essential, pkg-config)
-- [Bun](https://bun.com/) as JavaScript runtime for agent CLIs (curl install - no apt package)
+- System packages: git, ripgrep, fd, jq, build tools (gcc/g++/make/binutils toolchain, pkg-config)
+- [Bun](https://bun.com/) as JavaScript runtime for agent CLIs (curl install - no distro package)
 - [Node.js](https://nodejs.org/) LTS via mise (required for bun-installed package shebangs)
 - [mise](https://mise.jdx.dev/) for runtime version management
 - [GitHub CLI (gh)](https://github.com/cli/cli) for GitHub workflows
@@ -279,7 +279,7 @@ Native installers are preferred over Homebrew in containers (Homebrew adds ~500M
 
 | Tool | Method | Command |
 | ---- | ------ | ------- |
-| gh (GitHub CLI) | Official APT repo | Keyring + `sources.list.d` entry in `images/agents/Dockerfile` |
+| gh (GitHub CLI) | Official RPM repo | `zypper addrepo` of `https://cli.github.com/packages/rpm/gh-cli.repo` in `images/agents/Dockerfile` |
 | glab (GitLab CLI) | mise (GitLab releases) | `mise use --global gitlab:gitlab-org/cli@latest` |
 
 **Notes**:
@@ -1218,9 +1218,9 @@ systemctl --user enable --now dctl-image-build.timer
 FROM devimg/python-dev:latest
 
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 \
-    && rm -rf /var/lib/apt/lists/*
+RUN zypper --non-interactive install --no-recommends \
+        Mesa-libGL1 \
+    && zypper clean --all
 USER $USERNAME
 ```
 
@@ -1624,6 +1624,6 @@ monorepo packages alongside it.
 - JSON Reference: <https://containers.dev/implementors/json_reference/>
 - Devcontainer CLI: <https://github.com/devcontainers/cli>
 - Features Registry: <https://containers.dev/features>
-- Debian Packages: <https://packages.debian.org/bookworm/>
+- openSUSE Packages: <https://software.opensuse.org/>
 - mise Documentation: <https://mise.jdx.dev/>
 - rustup Documentation: <https://rust-lang.github.io/rustup/>

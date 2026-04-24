@@ -12,10 +12,11 @@ USER $USERNAME
 
 # System deps for native Python extensions (M2Crypto needs swig + OpenSSL headers)
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    swig \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+# hadolint ignore=DL3037
+RUN zypper --non-interactive install --no-recommends \
+        swig \
+        libopenssl-3-devel \
+    && zypper clean --all
 USER $USERNAME
 
 # Poetry + yq (provides tomlq for pyproject parsing) via mise pipx backend

@@ -292,7 +292,7 @@ Runs the workspace smoke test: prerequisite checks, managed image build if neede
 ## Image Architecture
 
 ```text
-Debian trixie-slim
+openSUSE Leap 16.0
         │
         ▼
 devimg/agents:latest
