@@ -10,7 +10,7 @@ DEVCONTAINER_DIRS := python rust zig general coordinator base
 DEVCONTAINER_MANIFESTS := general coordinator python rust zig
 LIB_FILES := common.sh ws.sh image.sh deploy.sh init.sh test.sh auth.sh config.sh
 
-.PHONY: install uninstall install-systemd uninstall-systemd test test-unit test-integration lint check
+.PHONY: install uninstall install-systemd uninstall-systemd test test-unit test-integration lint check gate-no-eval gate-no-raw-ansi gate-one-public-fn-per-file
 
 install:
 	$(INSTALL) -d "$(BIN_DIR)"
@@ -102,3 +102,29 @@ lint:
 
 check:
 	pre-commit run --all-files
+	bash -O globstar -c 'shellcheck -x bin/* lib/**/*.sh'
+	shfmt -d -i 2 -ci -bn -s bin/ lib/ hooks/ tests/
+	bats -r tests/
+
+gate-no-eval:
+	! grep -rn --include='*.sh' -E '^[[:space:]]*eval\b' bin lib hooks | grep -v '# allow-eval'
+
+gate-no-raw-ansi:
+ifdef DCTL_ENFORCE_ANSI_GATE
+	! grep -rn --include='*.sh' -F "\\033[" bin lib | grep -v 'lib/dctl/common.sh'
+else
+	@printf '%s\n' "gate-no-raw-ansi deferred until Phase 2 (set DCTL_ENFORCE_ANSI_GATE=1 to enable)"
+endif
+
+gate-one-public-fn-per-file:
+ifdef DCTL_ENFORCE_ONEFN_GATE
+	@find lib/dctl/commands lib/dctl/functions -type f -name '*.sh' 2>/dev/null | while read -r file; do \
+		count=$$(grep -E -c '^dctl::(cmd|fn)::[A-Za-z0-9_]+[[:space:]]*\(\)' "$$file"); \
+		if [ "$$count" -gt 1 ]; then \
+			printf '%s\n' "$$file: $$count public functions"; \
+			exit 1; \
+		fi; \
+	done
+else
+	@printf '%s\n' "gate-one-public-fn-per-file deferred until Phase 4 (set DCTL_ENFORCE_ONEFN_GATE=1 to enable)"
+endif

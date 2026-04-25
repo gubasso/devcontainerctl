@@ -32,7 +32,7 @@ repos:
     rev: v3.12.0-2
     hooks:
       - id: shfmt
-        args: ["-i", "2", "-ci"]
+        args: ["-i", "2", "-ci", "-bn", "-s"]
 
   # shellharden – auto-quote variables and command substitutions
   - repo: local

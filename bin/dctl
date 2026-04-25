@@ -11,19 +11,12 @@ if [[ ! -d "$DCTL_LIB_DIR" ]]; then
   exit 1
 fi
 
-# shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/common.sh"
-# shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/ws.sh"
-# shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/image.sh"
-# shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/deploy.sh"
-# shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/init.sh"
-# shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/test.sh"
-# shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/config.sh"
 
 usage() {
