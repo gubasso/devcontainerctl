@@ -59,7 +59,7 @@ Cache (generated, not edited)
         ──dctl init──>
 
 Project registry
-  ~/.config/dctl/projects.yaml                             ← points at merged cache for this project
+  ~/.config/dctl/projects.yaml                             ← stores the selected manifest name for this project
 ```
 
 All runtime operations (`dctl image build`, `dctl ws up`, `dctl test`) use only
@@ -153,7 +153,7 @@ Personal configuration is now opt-in. To add dotfiles, editor mounts, or extra t
 
 1. `--config` CLI flag
 2. `DCTL_CONFIG` environment variable
-3. Per-project registry in `~/.config/dctl/projects.yaml`
+3. Per-project registry in `~/.config/dctl/projects.yaml` (`devcontainer-manifest: <name>`)
 4. Local `.devcontainer/devcontainer.json`
 5. Work-clone sibling discovery
 6. User global default at `~/.config/dctl/default/devcontainer.json`

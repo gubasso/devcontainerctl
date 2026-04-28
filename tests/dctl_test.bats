@@ -320,6 +320,33 @@ teardown() {
   assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config ${cached} --remove-existing-container"
 }
 
+@test "cmd_ws_reup regenerates manifest-backed cache via registry" {
+  create_user_base_layer_fixture
+  create_user_devcontainer_fixture python "devimg/python-dev:latest"
+  create_user_image_fixture python-dev
+  git -C "$WORKSPACE_FOLDER" init -q
+  git -C "$WORKSPACE_FOLDER" remote add origin "https://github.com/org/myproj.git"
+  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<'YAML'
+org-myproj:
+  devcontainer-manifest: python
+YAML
+
+  run generate_cached_devcontainer python
+  [ "$status" -eq 0 ]
+  local cached="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
+
+  sleep 1
+  touch "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
+
+  enable_mocks
+  create_mock devcontainer 0 ""
+
+  run cmd_ws_reup
+  [ "$status" -eq 0 ]
+  [[ $output == *"Config cache status: generated"* ]]
+  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config ${cached} --remove-existing-container"
+}
+
 @test "cmd_ws_reup reuses cached config when all inputs are older" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
@@ -1357,7 +1384,7 @@ JSON
   assert_mock_not_called "CMD_IMAGE_BUILD_CALLED python-dev"
 }
 
-@test "cmd_init writes merged cache and registers the cache path" {
+@test "cmd_init registers manifest name and produces cache file" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
   create_user_image_fixture python-dev
@@ -1376,10 +1403,72 @@ JSON
 
   [ -f "$deployed" ]
   [ -f "$registry" ]
-  [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "$deployed" ]
+  [ "$(yq -r ".\"${canonical}\"[\"devcontainer-manifest\"]" "$registry")" = "python" ]
   [ "$(yq -r ".\"${canonical}\".dockerfile // \"\"" "$registry")" = "" ]
   [ "$(yq -r ".\"${canonical}\".image // \"\"" "$registry")" = "" ]
   [ "$(yq -r ".\"${canonical}\" | has(\"sibling_discovery\")" "$registry")" = "false" ]
+}
+
+@test "cmd_init --force migrates the registry even when unrelated entries are legacy" {
+  create_user_base_layer_fixture
+  create_user_devcontainer_fixture python "devimg/python-dev:latest"
+  create_user_image_fixture python-dev
+  enable_mocks
+  create_mock docker 0 ""
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  # Active project has a legacy entry; an unrelated project also still has
+  # one. The forced write must auto-migrate the unrelated entry's legacy
+  # `devcontainer:` path to a `devcontainer-manifest` stem (preserving the
+  # user's project-selection intent) instead of silently dropping it.
+  cat >"$registry" <<YAML
+${canonical}:
+  devcontainer: \$HOME/active/legacy/devcontainer.json
+other-project:
+  devcontainer: \$HOME/other/cache/general/devcontainer.json
+  sibling_discovery: false
+YAML
+  # shellcheck disable=SC2329
+  cmd_test() { :; }
+
+  run cmd_init --force --devcontainer python
+  [ "$status" -eq 0 ]
+  [ "$(yq -r ".\"${canonical}\"[\"devcontainer-manifest\"]" "$registry")" = "python" ]
+  [ "$(yq -r ".\"${canonical}\" | has(\"devcontainer\")" "$registry")" = "false" ]
+  # Unrelated project's manifest stem is preserved by deriving from
+  # basename(dirname(legacy path)), not silently unregistered.
+  [ "$(yq -r '.["other-project"]["devcontainer-manifest"]' "$registry")" = "general" ]
+  [ "$(yq -r '.["other-project"] | has("devcontainer")' "$registry")" = "false" ]
+  [ "$(yq -r '.["other-project"].sibling_discovery' "$registry")" = "false" ]
+}
+
+@test "cmd_init --force scrubs legacy devcontainer key for the active project" {
+  create_user_base_layer_fixture
+  create_user_devcontainer_fixture python "devimg/python-dev:latest"
+  create_user_image_fixture python-dev
+  enable_mocks
+  create_mock docker 0 ""
+  local canonical
+  canonical="$(resolve_canonical_project_name)"
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  # Seed a registry that still uses the legacy `devcontainer:` key for the
+  # current project. Without --force this would (correctly) fail strict
+  # validation; with --force the lookup must be skipped so register_project_defaults
+  # can scrub the legacy key.
+  cat >"$registry" <<YAML
+${canonical}:
+  devcontainer: \$HOME/cache/path/devcontainer.json
+  sibling_discovery: false
+YAML
+  # shellcheck disable=SC2329
+  cmd_test() { :; }
+
+  run cmd_init --force --devcontainer python
+  [ "$status" -eq 0 ]
+  [ "$(yq -r ".\"${canonical}\"[\"devcontainer-manifest\"]" "$registry")" = "python" ]
+  [ "$(yq -r ".\"${canonical}\" | has(\"devcontainer\")" "$registry")" = "false" ]
+  [ "$(yq -r ".\"${canonical}\".sibling_discovery" "$registry")" = "false" ]
 }
 
 @test "cmd_init --force preserves explicit sibling_discovery: false" {
@@ -1393,7 +1482,7 @@ JSON
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
   cat >"$registry" <<YAML
 ${canonical}:
-  devcontainer: /tmp/existing.json
+  devcontainer-manifest: rust
   sibling_discovery: false
 YAML
   # shellcheck disable=SC2329
@@ -1401,14 +1490,13 @@ YAML
 
   run cmd_init --force --devcontainer python
   [ "$status" -eq 0 ]
-  local deployed="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
-  [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "$deployed" ]
+  [ "$(yq -r ".\"${canonical}\"[\"devcontainer-manifest\"]" "$registry")" = "python" ]
   [ "$(yq -r ".\"${canonical}\".dockerfile // \"\"" "$registry")" = "" ]
   [ "$(yq -r ".\"${canonical}\".image // \"\"" "$registry")" = "" ]
   [ "$(yq -r ".\"${canonical}\".sibling_discovery" "$registry")" = "false" ]
 }
 
-@test "cmd_init switches registry path when a different deployed devcontainer is selected" {
+@test "cmd_init switches registered manifest when a different deployed devcontainer is selected" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
   create_user_devcontainer_fixture rust "devimg/rust-dev:latest"
@@ -1429,7 +1517,7 @@ YAML
   run cmd_init --devcontainer rust
   [ "$status" -eq 0 ]
   [[ $output == *"Switching project"* ]]
-  [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "${XDG_CACHE_HOME}/dctl/devcontainer/rust/devcontainer.json" ]
+  [ "$(yq -r ".\"${canonical}\"[\"devcontainer-manifest\"]" "$registry")" = "rust" ]
 }
 
 @test "cmd_init invokes cmd_test and reports the result in the summary" {

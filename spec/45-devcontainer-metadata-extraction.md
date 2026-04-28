@@ -44,5 +44,5 @@ The current test suite covers:
 - shared-layer exclusion from manifest discovery
 - merged cache generation
 - cache invalidation on config edits
-- registry path updates
+- registry manifest updates
 - install behavior that leaves config/cache alone

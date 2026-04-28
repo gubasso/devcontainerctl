@@ -23,7 +23,8 @@ Dockerfile resolution used by `dctl image build`.
 
 1. `dctl --config <path>`
 2. `DCTL_CONFIG`
-3. `devcontainer` field in `~/.config/dctl/projects.yaml`
+3. `devcontainer-manifest` field in `~/.config/dctl/projects.yaml`
+   (resolves to `~/.cache/dctl/devcontainer/<name>/devcontainer.json`)
 4. `.devcontainer/devcontainer.json` in the current workspace
 5. Work-clone sibling discovery
 6. `~/.config/dctl/default/devcontainer.json`
@@ -62,15 +63,16 @@ templates.
 ## Path Normalization
 
 Filesystem paths participating in selection are normalized with `realpath`
-before use. That includes CLI overrides, environment overrides, registry paths,
-workspace-derived sibling paths, and the workspace folder itself.
+before use. That includes CLI overrides, environment overrides, cache paths
+derived from registry manifests, workspace-derived sibling paths, and the
+workspace folder itself.
 
 ## Resolution Logging
 
 `dctl` logs the winning source only. Typical messages include:
 
 - `Using devcontainer config from CLI flag: ...`
-- `Using devcontainer config from project registry: ...`
+- `Using devcontainer config from project registry: <project> (manifest: <name>) -> ...`
 - `Using devcontainer config from sibling repo: ...`
 - `Using Dockerfile override from ...`
 
@@ -109,6 +111,7 @@ sources only and must be copied into user config by `dctl deploy image ...` or
 ## Error Handling
 
 - Missing CLI or env override paths fail immediately
-- Missing registry `devcontainer` paths fail immediately and name the registry
+- Missing or unbuilt registry manifests fail immediately, name the registry,
+  and point at `dctl init --devcontainer <name>`
 - Missing user default is a silent miss in the chain
 - Exhausting the chain fails with guidance to run `dctl init` or pass `--config`

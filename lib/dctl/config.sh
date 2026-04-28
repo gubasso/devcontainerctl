@@ -109,7 +109,7 @@ _validate_registry() {
   local bad_keys
   bad_keys="$(yq eval '
     to_entries | .[].value | to_entries | .[] |
-    select(.key != "devcontainer" and .key != "sibling_discovery") |
+    select(.key != "devcontainer-manifest" and .key != "sibling_discovery") |
     .key
   ' "$registry" 2>/dev/null || true)"
   if [[ -n $bad_keys ]]; then
@@ -120,12 +120,25 @@ _validate_registry() {
   local bad_str
   bad_str="$(yq eval '
     to_entries | .[].value |
-    select(has("devcontainer")) |
-    select(.devcontainer | type != "!!str") |
+    select(has("devcontainer-manifest")) |
+    select(.["devcontainer-manifest"] | type != "!!str") |
     parent | to_entries | .[0].key
   ' "$registry" 2>/dev/null || true)"
   if [[ -n $bad_str ]]; then
-    err "Invalid type for devcontainer in $registry: expected string"
+    err "Invalid type for devcontainer-manifest in $registry: expected string"
+  fi
+
+  # Check devcontainer-manifest values match the schema pattern
+  # (mirrors the JSON schema's ^[A-Za-z0-9._-]+$ when check-jsonschema is unavailable)
+  local bad_pattern
+  bad_pattern="$(yq eval '
+    to_entries | .[] |
+    select(.value["devcontainer-manifest"]) |
+    select(.value["devcontainer-manifest"] | test("^[A-Za-z0-9._-]+$") | not) |
+    .key
+  ' "$registry" 2>/dev/null || true)"
+  if [[ -n $bad_pattern ]]; then
+    err "Invalid devcontainer-manifest value in $registry for project '$bad_pattern': must match ^[A-Za-z0-9._-]+\$"
   fi
 
   # Check sibling_discovery is boolean if present
@@ -156,17 +169,15 @@ _registry_read_field() {
   _validate_registry "$registry"
 
   local value
-  value="$(yq -r ".\"${canonical_name}\".${field} // \"\"" "$registry" 2>/dev/null || true)"
-  # Expand $HOME in registry values for portability
-  value="${value/\$HOME/$HOME}"
+  value="$(yq -r "(.\"${canonical_name}\"[\"${field}\"]) // \"\"" "$registry" 2>/dev/null || true)"
   [[ -n $value ]] && printf '%s\n' "$value"
   return 0
 }
 
 # Override the stubs from common.sh
-_registry_lookup_devcontainer() {
+_registry_lookup_devcontainer_manifest() {
   local canonical_name="$1"
-  _registry_read_field "$canonical_name" "devcontainer"
+  _registry_read_field "$canonical_name" "devcontainer-manifest"
 }
 
 _registry_lookup_sibling_discovery() {
@@ -195,24 +206,6 @@ _registry_lookup_sibling_discovery() {
   fi
 }
 
-_registry_update_devcontainer() {
-  local canonical_name="$1"
-  local new_path="$2"
-
-  require_cmd yq
-  local registry
-  registry="$(_registry_file)"
-  [[ -s $registry ]] || return 1
-
-  # Store with $HOME for portability
-  new_path="${new_path/#$HOME/\$HOME}"
-
-  local tmp_registry="${registry}.tmp.$$"
-  YQ_KEY="$canonical_name" YQ_VAL="$new_path" \
-    yq eval '.[env(YQ_KEY)].devcontainer = env(YQ_VAL)' "$registry" >"$tmp_registry"
-  mv "$tmp_registry" "$registry"
-}
-
 _registry_ensure_file() {
   local registry
   registry="$(_registry_file)"
@@ -232,11 +225,8 @@ _registry_has_project() {
 
 register_project_defaults() {
   local canonical_name="$1"
-  local devcontainer_path="$2"
+  local manifest_name="$2"
   local force="${3:-false}"
-
-  # Store paths with $HOME for portability across machines
-  devcontainer_path="${devcontainer_path/#$HOME/\$HOME}"
 
   require_cmd yq
   _registry_ensure_file
@@ -245,7 +235,13 @@ register_project_defaults() {
   registry="$(_registry_file)"
 
   if [[ -s $registry ]]; then
-    _validate_registry "$registry"
+    if [[ $force == true ]]; then
+      if ! yq eval '.' "$registry" >/dev/null 2>&1; then
+        err "Invalid YAML in $registry"
+      fi
+    else
+      _validate_registry "$registry"
+    fi
   fi
 
   local project_exists=false
@@ -260,33 +256,54 @@ register_project_defaults() {
   # Use env vars to pass values safely to yq (avoids injection via special chars)
   local existing_sibling="true"
   if [[ $force == true && $project_exists == true ]]; then
-    existing_sibling="$(_registry_lookup_sibling_discovery "$canonical_name")"
+    local has_sibling_key
+    has_sibling_key="$(YQ_KEY="$canonical_name" yq -r '.[env(YQ_KEY)] | has("sibling_discovery")' "$registry" 2>/dev/null || true)"
+    if [[ $has_sibling_key == "true" ]]; then
+      existing_sibling="$(YQ_KEY="$canonical_name" yq -r '.[env(YQ_KEY)].sibling_discovery' "$registry" 2>/dev/null || printf 'true\n')"
+    fi
   fi
 
   local yq_expr
-  yq_expr='.[env(YQ_KEY)].devcontainer = strenv(YQ_DEVCONTAINER)'
+  yq_expr='.[env(YQ_KEY)]["devcontainer-manifest"] = strenv(YQ_MANIFEST)'
   if [[ $existing_sibling == "false" ]]; then
     yq_expr+=' | .[env(YQ_KEY)].sibling_discovery = false'
   else
     yq_expr+=' | del(.[env(YQ_KEY)].sibling_discovery)'
   fi
-  if [[ $force == true && $project_exists == true ]]; then
-    yq_expr+=' | del(.[env(YQ_KEY)].dockerfile) | del(.[env(YQ_KEY)].image)'
+  if [[ $force == true ]]; then
+    # Migrate legacy keys registry-wide so a forced write is also a one-shot
+    # migration path. For each entry that still has a legacy `devcontainer:`
+    # path of the form `<...>/<manifest>/devcontainer.json` (the only shape
+    # the prior contract emitted), derive `devcontainer-manifest` from
+    # basename(dirname(path)) when the manifest field is not already set.
+    # Then drop the legacy `devcontainer`, `dockerfile`, and `image` keys.
+    # Entries that have neither key are left untouched. Any derived manifest
+    # name that does not match the schema pattern is caught by the post-write
+    # _validate_registry call below.
+    yq_expr+=' | with_entries(.value |= ('
+    yq_expr+='(.["devcontainer-manifest"] = ('
+    yq_expr+='(.["devcontainer-manifest"] // (.["devcontainer"] | sub("/devcontainer\.json$"; "") | sub("^.*/"; "")))'
+    yq_expr+=')) | ('
+    yq_expr+='select(.["devcontainer-manifest"] == null or .["devcontainer-manifest"] == "") '
+    yq_expr+='| del(.["devcontainer-manifest"])'
+    yq_expr+=') // . '
+    yq_expr+='| del(.["devcontainer"]) | del(.dockerfile) | del(.image)'
+    yq_expr+='))'
   fi
 
   local tmp_registry="${registry}.tmp.$$"
-  export YQ_KEY="$canonical_name" YQ_DEVCONTAINER="$devcontainer_path"
+  export YQ_KEY="$canonical_name" YQ_MANIFEST="$manifest_name"
   if [[ -s $registry ]]; then
     yq eval "$yq_expr" "$registry" >"$tmp_registry"
   else
     yq -n "$yq_expr" >"$tmp_registry"
   fi
-  unset YQ_KEY YQ_DEVCONTAINER
+  unset YQ_KEY YQ_MANIFEST
 
   mv "$tmp_registry" "$registry"
   _validate_registry "$registry"
 
-  log "Registered project '$canonical_name' in $registry"
+  log "Registered project '$canonical_name' (devcontainer-manifest: $manifest_name) in $registry"
 }
 
 usage_config() {

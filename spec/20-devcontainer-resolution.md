@@ -13,7 +13,7 @@ for `dctl`.
 resolve_devcontainer_config():
     if --config flag provided:                          return flag value
     if DCTL_CONFIG env var set:                         return env var value
-    if projects.yaml has devcontainer for project:      return registry value
+    if projects.yaml has devcontainer-manifest:         return cache path derived from manifest
     if local .devcontainer/devcontainer.json exists:    return it
     if work-clone sibling has config:                   return sibling config
     if ~/.config/dctl/default/devcontainer.json exists: return it
@@ -38,9 +38,11 @@ All path comparisons use normalized `realpath` values.
 
 ### Project Registry
 
-- source: `devcontainer` field in `~/.config/dctl/projects.yaml`
+- source: `devcontainer-manifest` field in `~/.config/dctl/projects.yaml`
+- derives `~/.cache/dctl/devcontainer/<name>/devcontainer.json`
 - participates only when present for the canonical project
-- missing registry target path is an error
+- missing or unbuilt registry cache is an error with guidance to run
+  `dctl init --devcontainer <name>`
 
 ### Local Project File
 
@@ -95,7 +97,7 @@ config lives elsewhere.
 - for managed images, runs `docker image inspect` and automatically calls
   `dctl image build <name>` when the image is missing locally
 - writes merged output to `~/.cache/dctl/devcontainer/<name>/devcontainer.json`
-- registers the generated cache path in `~/.config/dctl/projects.yaml`
+- registers the manifest name in `~/.config/dctl/projects.yaml`
 - runs `dctl test` against the resolved cache and prints a final summary
   (project, devcontainer, image status, cache path, registry path, smoke-test
   result); exits non-zero if the smoke test fails
@@ -112,7 +114,7 @@ config lives elsewhere.
 
 - no config found: fail with guidance to run `dctl init` or pass `--config`
 - explicit override path missing: fail immediately
-- registry path missing: fail immediately
+- registry manifest unbuilt: fail with guidance to run `dctl init --devcontainer <name>`
 - invalid JSON: let the Dev Container CLI report it
 
 ## Logging Requirements

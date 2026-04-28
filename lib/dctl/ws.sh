@@ -156,20 +156,34 @@ cmd_ws_reup() {
     return 1
   fi
 
-  # If the resolved config is a dctl-managed cached config, regenerate it
-  # when any manifest input is newer than the cached file. Configs outside
-  # the cache dir (explicit --config, DCTL_CONFIG, local .devcontainer,
-  # sibling, or user-global default) are used as-is. Canonicalize the
-  # cache-dir prefix so symlinks in XDG_CACHE_HOME don't cause the check
-  # to miss managed configs (resolve_devcontainer_config always returns a
-  # realpath).
-  local cache_root_canonical="$DCTL_DEVCONTAINER_CACHE_DIR"
-  if [[ -d $DCTL_DEVCONTAINER_CACHE_DIR ]]; then
-    cache_root_canonical="$(realpath "$DCTL_DEVCONTAINER_CACHE_DIR")"
+  # Decide whether to regenerate the merged cache before re-up. Two paths:
+  #   (a) The current project has a manifest registered — use it directly.
+  #   (b) No registry entry, but the resolved config still lives inside the
+  #       cache dir (likely came from --config/DCTL_CONFIG pointing at a
+  #       cached file). Recover the manifest name from the parent dir.
+  local template_name=""
+  local canonical_name registry_manifest
+  canonical_name="$(resolve_canonical_project_name)"
+  if command -v yq >/dev/null 2>&1; then
+    registry_manifest="$(_registry_lookup_devcontainer_manifest "$canonical_name" || true)"
+  else
+    registry_manifest=""
   fi
-  if [[ $config_path == "${cache_root_canonical}/"* ]]; then
-    local template_name cache_output config_status
-    template_name="$(basename "$(dirname "$config_path")")"
+
+  if [[ -n $registry_manifest ]]; then
+    template_name="$registry_manifest"
+  else
+    local cache_root_canonical="$DCTL_DEVCONTAINER_CACHE_DIR"
+    if [[ -d $DCTL_DEVCONTAINER_CACHE_DIR ]]; then
+      cache_root_canonical="$(realpath "$DCTL_DEVCONTAINER_CACHE_DIR")"
+    fi
+    if [[ $config_path == "${cache_root_canonical}/"* ]]; then
+      template_name="$(basename "$(dirname "$config_path")")"
+    fi
+  fi
+
+  if [[ -n $template_name ]]; then
+    local cache_output config_status
     cache_output="$(generate_cached_devcontainer "$template_name")" || return $?
     config_path="$(head -1 <<<"$cache_output")"
     config_status="$(tail -1 <<<"$cache_output")"

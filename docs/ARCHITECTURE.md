@@ -106,7 +106,7 @@ are live in the current codebase:
 - config resolution with CLI, env, registry, local-file, sibling-discovery, and
   user-default precedence
 - per-project registry support in `~/.config/dctl/projects.yaml` for
-  `devcontainer` selection and explicit `sibling_discovery: false`
+  `devcontainer-manifest` selection and explicit `sibling_discovery: false`
 - YAML manifest-driven layer composition with generated cache output under
   `~/.cache/dctl/devcontainer/`
 - `dctl deploy` as the install-to-config seeding command for managed templates
