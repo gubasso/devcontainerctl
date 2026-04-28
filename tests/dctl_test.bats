@@ -34,7 +34,7 @@ create_template_fixture() {
   local image="$2"
   mkdir -p "${XDG_DATA_HOME}/dctl/devcontainers/${name}"
   printf '{\n  "image": "%s"\n}\n' "$image" >"${XDG_DATA_HOME}/dctl/devcontainers/${name}/devcontainer.json"
-  if [[ "$name" != "base" ]]; then
+  if [[ $name != "base" ]]; then
     create_installed_manifest_fixture "$name" base "$name"
   fi
 }
@@ -44,7 +44,7 @@ create_user_devcontainer_fixture() {
   local image="$2"
   mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/${name}"
   printf '{\n  "image": "%s"\n}\n' "$image" >"${XDG_CONFIG_HOME}/dctl/devcontainer/${name}/devcontainer.json"
-  if [[ "$name" != "base" ]]; then
+  if [[ $name != "base" ]]; then
     create_user_manifest_fixture "$name" base "$name"
   fi
 }
@@ -243,7 +243,7 @@ teardown() {
 
   run cmd_ws_run
   [ "$status" -ne 0 ]
-  [[ "$output" == *"run requires a command"* ]]
+  [[ $output == *"run requires a command"* ]]
 }
 
 @test "cmd_ws_run wraps commands with bash -lc" {
@@ -274,7 +274,7 @@ teardown() {
 
   run cmd_ws_down
   [ "$status" -eq 0 ]
-  [[ "$output" == *"No devcontainer to remove"* ]]
+  [[ $output == *"No devcontainer to remove"* ]]
 }
 
 @test "cmd_ws_up passes args to devcontainer up" {
@@ -316,7 +316,7 @@ teardown() {
 
   DCTL_CLI_CONFIG="$cached" run cmd_ws_reup
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Config cache status: generated"* ]]
+  [[ $output == *"Config cache status: generated"* ]]
   assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config ${cached} --remove-existing-container"
 }
 
@@ -334,7 +334,7 @@ teardown() {
 
   DCTL_CLI_CONFIG="$cached" run cmd_ws_reup
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Config cache status: cached"* ]]
+  [[ $output == *"Config cache status: cached"* ]]
   assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config ${cached} --remove-existing-container"
 }
 
@@ -346,7 +346,7 @@ teardown() {
 
   run cmd_ws_reup
   [ "$status" -eq 0 ]
-  [[ "$output" != *"Config cache status:"* ]]
+  [[ $output != *"Config cache status:"* ]]
   assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config $(workspace_devcontainer_file) --remove-existing-container"
 }
 
@@ -362,10 +362,10 @@ teardown() {
   KITTY_LISTEN_ON=unix:/tmp/kitty-test
   collect_term_env args
   [ "${#args[@]}" -eq 8 ]
-  [[ "${args[*]}" == *"--remote-env TERM=xterm-kitty"* ]]
-  [[ "${args[*]}" == *"--remote-env COLORTERM=truecolor"* ]]
-  [[ "${args[*]}" == *"--remote-env KITTY_WINDOW_ID=42"* ]]
-  [[ "${args[*]}" == *"--remote-env KITTY_LISTEN_ON=unix:/tmp/kitty-test"* ]]
+  [[ ${args[*]} == *"--remote-env TERM=xterm-kitty"* ]]
+  [[ ${args[*]} == *"--remote-env COLORTERM=truecolor"* ]]
+  [[ ${args[*]} == *"--remote-env KITTY_WINDOW_ID=42"* ]]
+  [[ ${args[*]} == *"--remote-env KITTY_LISTEN_ON=unix:/tmp/kitty-test"* ]]
 }
 
 @test "cmd_ws_run forwards terminal env" {
@@ -387,8 +387,8 @@ teardown() {
 
   run cmd_image_list
   [ "$status" -eq 0 ]
-  [[ "$output" == *"agents"* ]]
-  [[ "$output" == *"python-dev"* ]]
+  [[ $output == *"agents"* ]]
+  [[ $output == *"python-dev"* ]]
 }
 
 @test "cmd_image_build dry-run uses user config dir" {
@@ -396,7 +396,7 @@ teardown() {
 
   run cmd_image_build --dry-run agents
   [ "$status" -eq 0 ]
-  [[ "$output" == *"[dry-run] Would build: devimg/agents:latest"* ]]
+  [[ $output == *"[dry-run] Would build: devimg/agents:latest"* ]]
 }
 
 @test "cmd_image_build rejects unknown image targets" {
@@ -404,7 +404,7 @@ teardown() {
 
   run cmd_image_build --dry-run unknown
   [ "$status" -ne 0 ]
-  [[ "$output" == *"Unknown image: unknown"* ]]
+  [[ $output == *"Unknown image: unknown"* ]]
 }
 
 @test "cmd_image_build with no args invokes picker over deployed images" {
@@ -414,30 +414,37 @@ teardown() {
 
   run script -qec "env PATH='${PATH}' XDG_DATA_HOME='${XDG_DATA_HOME}' XDG_CONFIG_HOME='${XDG_CONFIG_HOME}' XDG_CACHE_HOME='${XDG_CACHE_HOME}' WORKSPACE_FOLDER='${WORKSPACE_FOLDER}' DCTL_LIB_DIR='${DCTL_LIB_DIR}' bash -lc 'set -euo pipefail; source \"${DCTL_LIB_DIR}/common.sh\"; source \"${DCTL_LIB_DIR}/auth.sh\"; source \"${DCTL_LIB_DIR}/image.sh\"; cmd_image_build --dry-run'" /dev/null
   [ "$status" -eq 0 ]
-  [[ "$output" == *"[dry-run] Would build: devimg/python-dev:latest"* ]]
+  [[ $output == *"[dry-run] Would build: devimg/python-dev:latest"* ]]
 }
 
 @test "cmd_image_build with no args errors when fzf missing" {
   create_user_image_fixture agents
   # shellcheck disable=SC2329
   command() {
-    if [[ "$1" == "-v" && "$2" == "fzf" ]]; then return 1; fi
+    if [[ $1 == "-v" && $2 == "fzf" ]]; then return 1; fi
     builtin command "$@"
   }
 
   run cmd_image_build --dry-run
   [ "$status" -ne 0 ]
-  [[ "$output" == *"fzf not found"* ]]
+  [[ $output == *"fzf not found"* ]]
 
   unset -f command
 }
 
 @test "cmd_image_build with no args errors when stdin is not a TTY" {
   create_user_image_fixture agents
+  # shellcheck disable=SC2329
+  command() {
+    if [[ $1 == "-v" && $2 == "fzf" ]]; then return 0; fi
+    builtin command "$@"
+  }
 
   run cmd_image_build --dry-run
   [ "$status" -ne 0 ]
-  [[ "$output" == *"requires a terminal"* ]]
+  [[ $output == *"requires a terminal"* ]]
+
+  unset -f command
 }
 
 @test "cmd_image_build with explicit name builds managed image" {
@@ -445,7 +452,7 @@ teardown() {
 
   run cmd_image_build --dry-run agents
   [ "$status" -eq 0 ]
-  [[ "$output" == *"devimg/agents:latest"* ]]
+  [[ $output == *"devimg/agents:latest"* ]]
 }
 
 # bats test_tags=integration
@@ -475,19 +482,19 @@ teardown() {
 @test "cmd_init errors when no devcontainers are deployed" {
   run cmd_init
   [ "$status" -ne 0 ]
-  [[ "$output" == *"No devcontainers deployed"* ]]
-  [[ "$output" == *"dctl deploy"* ]]
+  [[ $output == *"No devcontainers deployed"* ]]
+  [[ $output == *"dctl deploy"* ]]
 }
 
 @test "cmd_init --help only documents slim flags" {
   run cmd_init --help
   [ "$status" -eq 0 ]
-  [[ "$output" == *"--devcontainer"* ]]
-  [[ "$output" == *"--force"* ]]
-  [[ "$output" != *"--image"* ]]
-  [[ "$output" != *"--deploy-only"* ]]
-  [[ "$output" != *"--pick-only"* ]]
-  [[ "$output" != *"--reset"* ]]
+  [[ $output == *"--devcontainer"* ]]
+  [[ $output == *"--force"* ]]
+  [[ $output != *"--image"* ]]
+  [[ $output != *"--deploy-only"* ]]
+  [[ $output != *"--pick-only"* ]]
+  [[ $output != *"--reset"* ]]
 }
 
 @test "cmd_init rejects unknown deployed devcontainers" {
@@ -496,13 +503,13 @@ teardown() {
 
   run cmd_init --devcontainer missing
   [ "$status" -ne 0 ]
-  [[ "$output" == *"Unknown deployed devcontainer: missing"* ]]
+  [[ $output == *"Unknown deployed devcontainer: missing"* ]]
 }
 
 @test "cmd_test fails with init guidance when config is missing" {
   run cmd_test
   [ "$status" -ne 0 ]
-  [[ "$output" == *"Run 'dctl init' or pass --config"* ]]
+  [[ $output == *"Run 'dctl init' or pass --config"* ]]
 }
 
 @test "cmd_test fails when devcontainer command is missing" {
@@ -514,7 +521,7 @@ teardown() {
   sanitized="$(sanitized_bin_excluding devcontainer)"
   PATH="${TEST_TMPDIR}/bin:${sanitized}" run cmd_test
   [ "$status" -ne 0 ]
-  [[ "$output" == *"Missing required command: devcontainer"* ]]
+  [[ $output == *"Missing required command: devcontainer"* ]]
 }
 
 @test "cmd_test builds managed images before starting the devcontainer" {
@@ -551,9 +558,9 @@ teardown() {
   run env XDG_DATA_HOME="$XDG_DATA_HOME" HOME="${TEST_TMPDIR}/home" \
     bash "${BATS_TEST_DIRNAME}/../bin/dctl" help
   [ "$status" -eq 0 ]
-  [[ "$output" == *"deploy"* ]]
-  [[ "$output" == *"init"* ]]
-  [[ "$output" == *"test"* ]]
+  [[ $output == *"deploy"* ]]
+  [[ $output == *"init"* ]]
+  [[ $output == *"test"* ]]
 }
 
 # bats test_tags=integration
@@ -590,7 +597,7 @@ teardown() {
   local main_repo="${TEST_TMPDIR}/main-repo"
   mkdir -p "$main_repo"
   git -C "$main_repo" init -q
-  git -C "$main_repo" commit --allow-empty -m "init"
+  git -C "$main_repo" -c user.email=test@example.com -c user.name=Test commit --allow-empty -m "init"
   # Create the linked worktree at $WORKSPACE_FOLDER (which is already set and readonly)
   rm -rf "$WORKSPACE_FOLDER"
   git -C "$main_repo" worktree add "$WORKSPACE_FOLDER" -b test-branch
@@ -599,7 +606,7 @@ teardown() {
   collect_git_worktree_mounts mounts
   [ "${#mounts[@]}" -eq 2 ]
   [ "${mounts[0]}" = "--mount" ]
-  [[ "${mounts[1]}" == "type=bind,source=${main_repo}/.git,target=${main_repo}/.git" ]]
+  [[ ${mounts[1]} == "type=bind,source=${main_repo}/.git,target=${main_repo}/.git" ]]
 }
 
 # bats test_tags=integration
@@ -607,7 +614,7 @@ teardown() {
   local main_repo="${TEST_TMPDIR}/main-repo"
   mkdir -p "$main_repo"
   git -C "$main_repo" init -q
-  git -C "$main_repo" commit --allow-empty -m "init"
+  git -C "$main_repo" -c user.email=test@example.com -c user.name=Test commit --allow-empty -m "init"
   git -C "$main_repo" worktree add "$WORKSPACE_FOLDER" -b test-branch
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
@@ -695,7 +702,7 @@ MOCK
 
   run resolve_devcontainer_config
   [ "$status" -eq 0 ]
-  [[ "$output" == *"devcontainer.json" ]]
+  [[ $output == *"devcontainer.json" ]]
 }
 
 @test "resolve_devcontainer_config CLI flag wins over local file" {
@@ -706,7 +713,7 @@ MOCK
 
   DCTL_CLI_CONFIG="$cli_config" run resolve_devcontainer_config
   [ "$status" -eq 0 ]
-  [[ "$output" == *"cli-config.json" ]]
+  [[ $output == *"cli-config.json" ]]
 }
 
 @test "resolve_devcontainer_config env var wins over local file" {
@@ -717,7 +724,7 @@ MOCK
 
   DCTL_CONFIG="$env_config" run resolve_devcontainer_config
   [ "$status" -eq 0 ]
-  [[ "$output" == *"env-config.json" ]]
+  [[ $output == *"env-config.json" ]]
 }
 
 @test "resolve_devcontainer_config CLI flag wins over env var" {
@@ -728,25 +735,25 @@ MOCK
 
   DCTL_CLI_CONFIG="$cli_config" DCTL_CONFIG="$env_config" run resolve_devcontainer_config
   [ "$status" -eq 0 ]
-  [[ "$output" == *"cli-config.json" ]]
+  [[ $output == *"cli-config.json" ]]
 }
 
 @test "resolve_devcontainer_config errors on missing CLI flag path" {
   DCTL_CLI_CONFIG="/nonexistent/path.json" run resolve_devcontainer_config
   [ "$status" -ne 0 ]
-  [[ "$output" == *"does not exist"* ]]
+  [[ $output == *"does not exist"* ]]
 }
 
 @test "resolve_devcontainer_config errors on missing env var path" {
   DCTL_CONFIG="/nonexistent/path.json" run resolve_devcontainer_config
   [ "$status" -ne 0 ]
-  [[ "$output" == *"does not exist"* ]]
+  [[ $output == *"does not exist"* ]]
 }
 
 @test "resolve_devcontainer_config errors when no config found" {
   run resolve_devcontainer_config
   [ "$status" -ne 0 ]
-  [[ "$output" == *"No devcontainer config found"* ]]
+  [[ $output == *"No devcontainer config found"* ]]
 }
 
 @test "resolve_devcontainer_config user global default fallback" {
@@ -755,7 +762,7 @@ MOCK
 
   run resolve_devcontainer_config
   [ "$status" -eq 0 ]
-  [[ "$output" == *"default/devcontainer.json" ]]
+  [[ $output == *"default/devcontainer.json" ]]
 }
 
 # bats test_tags=integration
@@ -771,7 +778,7 @@ MOCK
     XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
     bash -c 'source "'"$DCTL_LIB_DIR"'/common.sh"; source "'"$DCTL_LIB_DIR"'/config.sh"; resolve_devcontainer_config'
   [ "$status" -eq 0 ]
-  [[ "$output" == *"repo/.devcontainer/devcontainer.json" ]]
+  [[ $output == *"repo/.devcontainer/devcontainer.json" ]]
 }
 
 # bats test_tags=integration
@@ -787,7 +794,7 @@ MOCK
     XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
     bash -c 'source "'"$DCTL_LIB_DIR"'/common.sh"; source "'"$DCTL_LIB_DIR"'/config.sh"; resolve_devcontainer_config'
   [ "$status" -ne 0 ]
-  [[ "$output" == *"No devcontainer config found"* ]]
+  [[ $output == *"No devcontainer config found"* ]]
 }
 
 # --- Deploy / init / Dockerfile resolution ---
@@ -795,13 +802,13 @@ MOCK
 @test "cmd_deploy --help lists new subcommands and flags" {
   run cmd_deploy --help
   [ "$status" -eq 0 ]
-  [[ "$output" == *"devcontainer <name>"* ]]
-  [[ "$output" == *"image <name>"* ]]
-  [[ "$output" == *"--all"* ]]
-  [[ "$output" == *"--all-devcontainers"* ]]
-  [[ "$output" == *"--all-images"* ]]
-  [[ "$output" == *"--dry-run"* ]]
-  [[ "$output" == *"--reset"* ]]
+  [[ $output == *"devcontainer <name>"* ]]
+  [[ $output == *"image <name>"* ]]
+  [[ $output == *"--all"* ]]
+  [[ $output == *"--all-devcontainers"* ]]
+  [[ $output == *"--all-images"* ]]
+  [[ $output == *"--dry-run"* ]]
+  [[ $output == *"--reset"* ]]
 }
 
 @test "cmd_deploy --list shows manifest-backed devcontainer statuses" {
@@ -813,13 +820,13 @@ MOCK
 
   run cmd_deploy --list
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Devcontainers:"* ]]
-  [[ "$output" == *"Images:"* ]]
-  [[ "$output" == *"deployed  python"* ]]
-  [[ "$output" == *"user-only  custom"* ]]
-  [[ "$output" == *"deployed  agents"* ]]
-  [[ "$output" == *"user-only  custom-img"* ]]
-  [[ "$output" != *$'\n  installed  base'* ]]
+  [[ $output == *"Devcontainers:"* ]]
+  [[ $output == *"Images:"* ]]
+  [[ $output == *"deployed  python"* ]]
+  [[ $output == *"user-only  custom"* ]]
+  [[ $output == *"deployed  agents"* ]]
+  [[ $output == *"user-only  custom-img"* ]]
+  [[ $output != *$'\n  installed  base'* ]]
 }
 
 @test "cmd_deploy --list-devcontainers only lists devcontainers" {
@@ -827,15 +834,15 @@ MOCK
 
   run cmd_deploy --list-devcontainers
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Devcontainers:"* ]]
-  [[ "$output" != *"Images:"* ]]
+  [[ $output == *"Devcontainers:"* ]]
+  [[ $output != *"Images:"* ]]
 }
 
 @test "cmd_deploy --list-images only lists images" {
   run cmd_deploy --list-images
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Images:"* ]]
-  [[ "$output" != *"Devcontainers:"* ]]
+  [[ $output == *"Images:"* ]]
+  [[ $output != *"Devcontainers:"* ]]
 }
 
 @test "cmd_deploy devcontainer copies selected manifest and managed base layer" {
@@ -870,7 +877,7 @@ MOCK
   run cmd_deploy devcontainer python
   [ "$status" -eq 0 ]
   [ "$(jq -r '.image' "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json")" = "custom" ]
-  [[ "$output" == *"skipped devcontainer 'python'"* ]]
+  [[ $output == *"skipped devcontainer 'python'"* ]]
 }
 
 @test "cmd_deploy --reset backs up and overwrites shipped files but preserves user-only siblings" {
@@ -893,7 +900,7 @@ MOCK
   [ "$(cat "${backups[0]}")" = "FROM custom" ]
   # Backup timestamp suffix must match `date -u '+%Y-%m-%dT%H-%M-%SZ'` exactly.
   local suffix="${backups[0]##*Dockerfile.bak.}"
-  [[ "$suffix" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z$ ]]
+  [[ $suffix =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z$ ]]
   # No stray backups in unrelated directories.
   run ! compgen -G "${XDG_CONFIG_HOME}/dctl/images/agents/notes.txt.bak.*"
 }
@@ -913,7 +920,7 @@ MOCK
   [ -f "${internal_backups[0]}" ]
   [ "$(jq -r '.remoteUser' "${internal_backups[0]}")" = "drifted" ]
   local suffix="${internal_backups[0]##*devcontainer.json.bak.}"
-  [[ "$suffix" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z$ ]]
+  [[ $suffix =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z$ ]]
 }
 
 @test "cmd_deploy reconciles drifted manifest file without reset" {
@@ -933,7 +940,7 @@ MOCK
   deployed_layers="$(yq eval '.layers | length' "${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml")"
   installed_layers="$(yq eval '.layers | length' "${XDG_DATA_HOME}/dctl/devcontainers/python.yaml")"
   [ "$deployed_layers" -eq "$installed_layers" ]
-  [[ "$output" == *"reconciled"* ]]
+  [[ $output == *"reconciled"* ]]
   # No backup created without --reset
   run bash -lc "compgen -G '${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml.bak.*' >/dev/null"
   [ "$status" -ne 0 ]
@@ -982,7 +989,7 @@ MOCK
 
   run cmd_deploy devcontainer python --dry-run
   [ "$status" -eq 0 ]
-  [[ "$output" == *"CREATE"* ]]
+  [[ $output == *"CREATE"* ]]
   # Zero filesystem mutations: no target file, no parent dir, no managed shared-layer deploy,
   # no backups, no temp artifacts anywhere under the user config dir.
   [ ! -e "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json" ]
@@ -1010,7 +1017,7 @@ MOCK
 @test "cmd_deploy rejects --dry-run with --reset" {
   run cmd_deploy image agents --dry-run --reset
   [ "$status" -ne 0 ]
-  [[ "$output" == *"Cannot use --dry-run with --reset"* ]]
+  [[ $output == *"Cannot use --dry-run with --reset"* ]]
 }
 
 @test "cmd_deploy --all deploys both categories and managed shared layers" {
@@ -1058,7 +1065,7 @@ MOCK
 
   run resolve_dockerfile agents
   [ "$status" -eq 0 ]
-  [[ "$output" == *"xdg-config"* ]]
+  [[ $output == *"xdg-config"* ]]
 }
 
 @test "resolve_dockerfile fails for unknown target" {
@@ -1072,8 +1079,8 @@ MOCK
 
   run discover_image_targets
   [ "$status" -eq 0 ]
-  [[ "$output" == *"custom-img"* ]]
-  [[ "$output" != *"agents"* ]]
+  [[ $output == *"custom-img"* ]]
+  [[ $output != *"agents"* ]]
 }
 
 @test "discover_image_targets ignores installed-only targets" {
@@ -1081,16 +1088,16 @@ MOCK
 
   run discover_image_targets
   [ "$status" -eq 0 ]
-  [[ "$output" != *"agents"* ]]
+  [[ $output != *"agents"* ]]
 }
 
 @test "discover_config_layers returns layers in manifest order" {
   mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/base"
-  printf '{"name":"base"}\n' > "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json"
+  printf '{"name":"base"}\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json"
   mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/middle"
-  printf '{"name":"middle"}\n' > "${XDG_CONFIG_HOME}/dctl/devcontainer/middle/devcontainer.json"
+  printf '{"name":"middle"}\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/middle/devcontainer.json"
   mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/top"
-  printf '{"name":"top"}\n' > "${XDG_CONFIG_HOME}/dctl/devcontainer/top/devcontainer.json"
+  printf '{"name":"top"}\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/top/devcontainer.json"
   create_user_manifest_fixture stack base middle top
 
   run discover_config_layers stack
@@ -1107,7 +1114,7 @@ MOCK
 
   run _validate_compose_manifest "$manifest"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"Invalid YAML in manifest"* ]]
+  [[ $output == *"Invalid YAML in manifest"* ]]
 }
 
 @test "_validate_compose_manifest rejects missing layers key" {
@@ -1117,7 +1124,7 @@ MOCK
 
   run _validate_compose_manifest "$manifest"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"'layers' must be an array"* ]]
+  [[ $output == *"'layers' must be an array"* ]]
 }
 
 @test "_validate_compose_manifest rejects empty layers array" {
@@ -1129,17 +1136,17 @@ YAML
 
   run _validate_compose_manifest "$manifest"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"'layers' must not be empty"* ]]
+  [[ $output == *"'layers' must not be empty"* ]]
 }
 
 @test "discover_config_layers errors when manifest references a missing layer" {
   mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/base"
-  printf '{"name":"base"}\n' > "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json"
+  printf '{"name":"base"}\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json"
   create_user_manifest_fixture broken base missing
 
   run discover_config_layers broken
   [ "$status" -ne 0 ]
-  [[ "$output" == *"Layer 'missing' referenced in manifest 'broken' not found"* ]]
+  [[ $output == *"Layer 'missing' referenced in manifest 'broken' not found"* ]]
 }
 
 @test "cmd_deploy errors when manifest references layer with missing devcontainer.json" {
@@ -1151,8 +1158,8 @@ YAML
 
   run cmd_deploy devcontainer broken
   [ "$status" -ne 0 ]
-  [[ "$output" == *"devcontainer.json not found"* ]]
-  [[ "$output" == *"empty-layer"* ]]
+  [[ $output == *"devcontainer.json not found"* ]]
+  [[ $output == *"empty-layer"* ]]
 }
 
 @test "cmd_deploy errors when manifest references nonexistent layer directory" {
@@ -1161,14 +1168,14 @@ YAML
 
   run cmd_deploy devcontainer broken
   [ "$status" -ne 0 ]
-  [[ "$output" == *"installed directory not found"* ]]
-  [[ "$output" == *"nonexistent"* ]]
+  [[ $output == *"installed directory not found"* ]]
+  [[ $output == *"nonexistent"* ]]
 }
 
 @test "discover_config_layers errors when manifest is missing" {
   run discover_config_layers missing
   [ "$status" -ne 0 ]
-  [[ "$output" == *"No manifest found for 'missing'"* ]]
+  [[ $output == *"No manifest found for 'missing'"* ]]
 }
 
 @test "cache_is_fresh checks all layer files" {
@@ -1177,11 +1184,11 @@ YAML
   local layer_b="${TEST_TMPDIR}/layer-b.json"
   local template="${TEST_TMPDIR}/template.json"
 
-  printf '{}\n' > "$layer_a"
-  printf '{}\n' > "$layer_b"
-  printf '{}\n' > "$template"
+  printf '{}\n' >"$layer_a"
+  printf '{}\n' >"$layer_b"
+  printf '{}\n' >"$template"
   sleep 1
-  printf '{}\n' > "$cached"
+  printf '{}\n' >"$cached"
 
   run cache_is_fresh "$cached" "$layer_a" "$layer_b" "$template"
   [ "$status" -eq 0 ]
@@ -1202,9 +1209,9 @@ layers:
   - base
   - python
 YAML
-  printf '{}\n' > "$layer"
+  printf '{}\n' >"$layer"
   sleep 1
-  printf '{}\n' > "$cached"
+  printf '{}\n' >"$cached"
 
   run cache_is_fresh "$cached" "$manifest" "$layer"
   [ "$status" -eq 0 ]
@@ -1313,7 +1320,7 @@ JSON
 
   run cmd_init --devcontainer python
   [ "$status" -ne 0 ]
-  [[ "$output" == *"Image 'python-dev' is not deployed"* ]]
+  [[ $output == *"Image 'python-dev' is not deployed"* ]]
 }
 
 @test "cmd_init calls cmd_image_build when managed image is missing locally" {
@@ -1421,7 +1428,7 @@ YAML
 
   run cmd_init --devcontainer rust
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Switching project"* ]]
+  [[ $output == *"Switching project"* ]]
   [ "$(yq -r ".\"${canonical}\".devcontainer" "$registry")" = "${XDG_CACHE_HOME}/dctl/devcontainer/rust/devcontainer.json" ]
 }
 
@@ -1437,8 +1444,8 @@ YAML
   run cmd_init --devcontainer python
   [ "$status" -eq 0 ]
   assert_mock_called "CMD_TEST_CALLED"
-  [[ "$output" == *"=== dctl init summary ==="* ]]
-  [[ "$output" == *"Smoke test: passed"* ]]
+  [[ $output == *"=== dctl init summary ==="* ]]
+  [[ $output == *"Smoke test: passed"* ]]
 }
 
 @test "cmd_init reports failed smoke test and exits non-zero" {
@@ -1452,7 +1459,7 @@ YAML
 
   run cmd_init --devcontainer python
   [ "$status" -ne 0 ]
-  [[ "$output" == *"Smoke test: failed"* ]]
+  [[ $output == *"Smoke test: failed"* ]]
 }
 
 @test "cmd_init accepts external images without trying to build" {
@@ -1465,7 +1472,7 @@ YAML
 
   run cmd_init --devcontainer python
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Image status: external"* ]]
+  [[ $output == *"Image status: external"* ]]
   assert_mock_not_called "CMD_IMAGE_BUILD_CALLED"
 }
 
@@ -1499,7 +1506,7 @@ EOF
   _check_results=()
   run check_bind_mount_sources "$cfg"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Bind mount sources exist on host"* ]]
+  [[ $output == *"Bind mount sources exist on host"* ]]
 }
 
 @test "check_bind_mount_sources reports missing paths with mkdir hint" {
@@ -1518,10 +1525,10 @@ EOF
   _check_results=()
   run check_bind_mount_sources "$cfg"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"Missing bind mount source(s) on host"* ]]
-  [[ "$output" == *"$missing_dir"* ]]
-  [[ "$output" == *"$missing_string"* ]]
-  [[ "$output" == *"mkdir -p"* ]]
+  [[ $output == *"Missing bind mount source(s) on host"* ]]
+  [[ $output == *"$missing_dir"* ]]
+  [[ $output == *"$missing_string"* ]]
+  [[ $output == *"mkdir -p"* ]]
 }
 
 @test "check_bind_mount_sources resolves localEnv and tolerates JSONC comments" {
@@ -1542,8 +1549,8 @@ EOF
   _check_results=()
   run check_bind_mount_sources "$cfg"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"${HOME}/absent"* ]]
-  [[ "$output" != *"${HOME}/present"$'\n'* ]]
+  [[ $output == *"${HOME}/absent"* ]]
+  [[ $output != *"${HOME}/present"$'\n'* ]]
 }
 
 @test "check_bind_mount_sources recognizes src= alias in string mounts" {
@@ -1560,7 +1567,7 @@ EOF
   _check_results=()
   run check_bind_mount_sources "$cfg"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"$missing_src"* ]]
+  [[ $output == *"$missing_src"* ]]
 }
 
 @test "check_bind_mount_sources flags unresolved localEnv placeholders" {
@@ -1577,9 +1584,9 @@ EOF
   _check_results=()
   run check_bind_mount_sources "$cfg"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"(unresolved)"* ]]
+  [[ $output == *"(unresolved)"* ]]
   # shellcheck disable=SC2016
-  [[ "$output" == *'${localEnv:DCTL_BIND_MISSING_VAR}'* ]]
+  [[ $output == *'${localEnv:DCTL_BIND_MISSING_VAR}'* ]]
 }
 
 @test "check_bind_mount_sources fails on malformed JSON instead of silently passing" {
@@ -1589,7 +1596,7 @@ EOF
   _check_results=()
   run check_bind_mount_sources "$cfg"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"Failed to parse bind mounts"* ]]
+  [[ $output == *"Failed to parse bind mounts"* ]]
 }
 
 @test "cmd_test skips devcontainer up when a bind mount source is missing" {
@@ -1610,7 +1617,7 @@ EOF
 
   run cmd_test
   [ "$status" -ne 0 ]
-  [[ "$output" == *"Missing bind mount source(s) on host"* ]]
-  [[ "$output" == *"$missing"* ]]
+  [[ $output == *"Missing bind mount source(s) on host"* ]]
+  [[ $output == *"$missing"* ]]
   assert_mock_not_called "devcontainer up"
 }

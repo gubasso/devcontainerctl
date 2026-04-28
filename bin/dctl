@@ -6,7 +6,7 @@ set -euo pipefail
 DCTL_LIB_DIR="$(dirname "$(readlink -f "$0")")/../lib/dctl"
 readonly DCTL_LIB_DIR
 
-if [[ ! -d "$DCTL_LIB_DIR" ]]; then
+if [[ ! -d $DCTL_LIB_DIR ]]; then
   printf '\033[1;31mERROR:\033[0m dctl library not found at %s\n' "$DCTL_LIB_DIR" >&2
   exit 1
 fi
@@ -54,7 +54,7 @@ main() {
     case "$1" in
       --config)
         [[ $# -ge 2 ]] || err "--config requires a value"
-        [[ -n "$2" ]] || err "--config requires a non-empty path"
+        [[ -n $2 ]] || err "--config requires a non-empty path"
         export DCTL_CLI_CONFIG="$2"
         shift 2
         ;;
@@ -109,6 +109,6 @@ main() {
   esac
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
   main "$@"
 fi

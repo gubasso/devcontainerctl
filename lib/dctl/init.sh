@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # Init command for dctl (sourced, not executed directly)
 
-[[ -n "${_DCTL_INIT_LOADED:-}" ]] && return 0
+[[ -n ${_DCTL_INIT_LOADED:-} ]] && return 0
 readonly _DCTL_INIT_LOADED=1
 
 : "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)}"
@@ -72,11 +72,11 @@ merge_two_configs() {
   base_json="$(_strip_jsonc_comments "$base_path")" || return 1
   tmpl_json="$(_strip_jsonc_comments "$template_path")" || return 1
 
-  if ! jq_err="$(jq empty <<< "$base_json" 2>&1)"; then
+  if ! jq_err="$(jq empty <<<"$base_json" 2>&1)"; then
     printf 'JSON syntax error in %s:\n  %s\n' "$base_path" "$jq_err" >&2
     return 1
   fi
-  if ! jq_err="$(jq empty <<< "$tmpl_json" 2>&1)"; then
+  if ! jq_err="$(jq empty <<<"$tmpl_json" 2>&1)"; then
     printf 'JSON syntax error in %s:\n  %s\n' "$template_path" "$jq_err" >&2
     return 1
   fi
@@ -96,15 +96,15 @@ discover_config_layers() {
   local manifest
   manifest="$(config_compose_manifest_path "$config_name")"
 
-  [[ -f "$manifest" ]] || err "No manifest found for '$config_name' at $manifest"
+  [[ -f $manifest ]] || err "No manifest found for '$config_name' at $manifest"
   _validate_compose_manifest "$manifest"
 
   local -a layers=()
   local layer_name layer_path
   while IFS= read -r layer_name; do
-    [[ -n "$layer_name" ]] || continue
+    [[ -n $layer_name ]] || continue
     layer_path="${DCTL_DEVCONTAINER_DIR}/${layer_name}/devcontainer.json"
-    [[ -f "$layer_path" ]] || err "Layer '$layer_name' referenced in manifest '$config_name' not found: $layer_path"
+    [[ -f $layer_path ]] || err "Layer '$layer_name' referenced in manifest '$config_name' not found: $layer_path"
     layers+=("$layer_path")
   done < <(_read_manifest_layers "$manifest")
 
@@ -115,10 +115,10 @@ discover_config_layers() {
 cache_is_fresh() {
   local cached_path="$1"
   shift
-  [[ -f "$cached_path" ]] || return 1
+  [[ -f $cached_path ]] || return 1
   local source_path
   for source_path in "$@"; do
-    [[ "$cached_path" -nt "$source_path" ]] || return 1
+    [[ $cached_path -nt $source_path ]] || return 1
   done
 }
 
@@ -126,7 +126,7 @@ _validate_deployed_devcontainer() {
   local template="$1"
   local manifest
   manifest="$(config_compose_manifest_path "$template")"
-  [[ -f "$manifest" ]] || err "Unknown deployed devcontainer: $template (no manifest at $manifest)"
+  [[ -f $manifest ]] || err "Unknown deployed devcontainer: $template (no manifest at $manifest)"
 }
 
 _infer_image_from_devcontainer_json() {
@@ -135,17 +135,17 @@ _infer_image_from_devcontainer_json() {
 
   require_cmd jq
   json="$(_strip_jsonc_comments "$path")" || return 1
-  if ! jq_err="$(jq empty <<< "$json" 2>&1)"; then
+  if ! jq_err="$(jq empty <<<"$json" 2>&1)"; then
     printf 'JSON syntax error in %s:\n  %s\n' "$path" "$jq_err" >&2
     return 1
   fi
 
-  jq -r '.image // empty' <<< "$json"
+  jq -r '.image // empty' <<<"$json"
 }
 
 _image_ref_to_name() {
   local image_ref="$1"
-  if [[ "$image_ref" =~ ^devimg/([[:alnum:]._-]+):latest$ ]]; then
+  if [[ $image_ref =~ ^devimg/([[:alnum:]._-]+):latest$ ]]; then
     printf '%s\n' "${BASH_REMATCH[1]}"
     return 0
   fi
@@ -168,7 +168,7 @@ generate_cached_devcontainer() {
     err "No composable config layers found for ${template}. Run: dctl deploy devcontainer ${template}"
   fi
 
-  if [[ "$force" != true ]] && cache_is_fresh "$cached_path" "$manifest" "${config_layers[@]}"; then
+  if [[ $force != true ]] && cache_is_fresh "$cached_path" "$manifest" "${config_layers[@]}"; then
     printf '%s\n' "$cached_path"
     printf 'cached\n'
     return 0
@@ -188,7 +188,7 @@ generate_cached_devcontainer() {
   local layer_path tmp_next
   for layer_path in "${config_layers[@]:1}"; do
     tmp_next="$(mktemp "${cached_path}.layers.XXXXXX")"
-    if ! merge_two_configs "$tmp_acc" "$layer_path" > "$tmp_next"; then
+    if ! merge_two_configs "$tmp_acc" "$layer_path" >"$tmp_next"; then
       rm -f "$tmp_path" "$tmp_acc" "$tmp_next"
       err "Failed to merge layer '$layer_path' for '$template'"
     fi
@@ -211,14 +211,14 @@ ensure_image_available_for_devcontainer() {
 
   cached_path="$(deployed_devcontainer_path "$devcontainer_name")"
   config_path="$(config_devcontainer_path "$devcontainer_name")"
-  if [[ -f "$cached_path" ]]; then
+  if [[ -f $cached_path ]]; then
     image_ref="$(_infer_image_from_devcontainer_json "$cached_path" || true)"
   else
     image_ref="$(_infer_image_from_devcontainer_json "$config_path" || true)"
   fi
 
   DCTL_INIT_IMAGE_REF="$image_ref"
-  if [[ -z "$image_ref" ]]; then
+  if [[ -z $image_ref ]]; then
     DCTL_INIT_IMAGE_STATUS="no-image"
     return 0
   fi
@@ -258,7 +258,7 @@ cmd_init() {
         force=true
         shift
         ;;
-      --help|-h)
+      --help | -h)
         usage_init
         return 0
         ;;
@@ -272,7 +272,7 @@ cmd_init() {
   mapfile -t available < <(_discover_deployed_selectable_devcontainers)
   [[ ${#available[@]} -gt 0 ]] || err "No devcontainers deployed. Run: dctl deploy (or dctl deploy devcontainer <name>)"
 
-  if [[ -z "$devcontainer" ]]; then
+  if [[ -z $devcontainer ]]; then
     devcontainer="$(_select_deployed_devcontainer_interactive)" || return $?
   fi
 
@@ -287,16 +287,16 @@ cmd_init() {
     existing_registry_path=""
   fi
 
-  if [[ "$force" == true ]]; then
+  if [[ $force == true ]]; then
     registry_force=true
-  elif [[ -n "$existing_registry_path" ]]; then
-    if [[ ! -f "$existing_registry_path" ]]; then
+  elif [[ -n $existing_registry_path ]]; then
+    if [[ ! -f $existing_registry_path ]]; then
       warn "Registered config path no longer exists: $existing_registry_path; re-registering"
       registry_force=true
-    elif [[ "$existing_registry_path" == "${DCTL_DEVCONTAINER_CACHE_DIR}/"* ]]; then
+    elif [[ $existing_registry_path == "${DCTL_DEVCONTAINER_CACHE_DIR}/"* ]]; then
       local registered_template_name
       registered_template_name="$(basename "$(dirname "$existing_registry_path")")"
-      if [[ -n "$registered_template_name" && "$registered_template_name" != "$devcontainer" ]]; then
+      if [[ -n $registered_template_name && $registered_template_name != "$devcontainer" ]]; then
         warn "Switching project '$canonical_name' from template '$registered_template_name' to '$devcontainer'"
         registry_force=true
       fi
@@ -305,8 +305,8 @@ cmd_init() {
 
   local cache_output deployed_config config_status
   cache_output="$(generate_cached_devcontainer "$devcontainer" "$force")" || return $?
-  deployed_config="$(head -1 <<< "$cache_output")"
-  config_status="$(tail -1 <<< "$cache_output")"
+  deployed_config="$(head -1 <<<"$cache_output")"
+  config_status="$(tail -1 <<<"$cache_output")"
 
   ensure_image_available_for_devcontainer "$devcontainer"
 
@@ -340,7 +340,7 @@ cmd_init() {
   log "Registry path: ${DCTL_CONFIG_DIR}/projects.yaml"
   log "Smoke test: $test_status"
 
-  [[ "$test_status" == "passed" ]] || return 1
+  [[ $test_status == "passed" ]] || return 1
 }
 
 main_init() {
