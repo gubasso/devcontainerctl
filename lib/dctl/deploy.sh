@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # Deploy command for dctl (sourced, not executed directly)
 
-[[ -n "${_DCTL_DEPLOY_LOADED:-}" ]] && return 0
+[[ -n ${_DCTL_DEPLOY_LOADED:-} ]] && return 0
 readonly _DCTL_DEPLOY_LOADED=1
 
 : "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)}"
@@ -142,21 +142,21 @@ _collect_dir_plan_entries() {
   src_dir="${src_root}/${name}"
   dest_dir="${dest_root}/${name}"
 
-  [[ -d "$src_dir" ]] || return 0
+  [[ -d $src_dir ]] || return 0
 
   local source rel dest action
   while IFS= read -r source; do
-    [[ -n "$source" ]] || continue
+    [[ -n $source ]] || continue
     rel="${source#"${src_dir}"/}"
     dest="${dest_dir}/${rel}"
 
-    if [[ ! -f "$dest" ]]; then
+    if [[ ! -f $dest ]]; then
       action="CREATE"
     elif cmp -s "$source" "$dest"; then
       action="NOOP-IDENTICAL"
-    elif [[ "$mode" == "reset" ]]; then
+    elif [[ $mode == "reset" ]]; then
       action="OVERWRITE-WITH-BACKUP"
-    elif [[ "$category" == "devcontainer" && "$internal" == true ]]; then
+    elif [[ $category == "devcontainer" && $internal == true ]]; then
       action="OVERWRITE"
     else
       action="SKIP-EXISTS"
@@ -176,7 +176,7 @@ _collect_deploy_plan() {
     devcontainer)
       local manifest
       manifest="$(installed_compose_manifest_path "$name")"
-      [[ -f "$manifest" ]] || return 0
+      [[ -f $manifest ]] || return 0
       _validate_compose_manifest "$manifest"
 
       local -a layers=()
@@ -186,26 +186,26 @@ _collect_deploy_plan() {
       local layer_name is_leaf src_layer_dir
       for layer_name in "${layers[@]}"; do
         src_layer_dir="${DEVCONTAINERS_DIR}/${layer_name}"
-        [[ -d "$src_layer_dir" ]] || err "Manifest '${name}' references layer '${layer_name}' but installed directory not found: ${src_layer_dir}"
+        [[ -d $src_layer_dir ]] || err "Manifest '${name}' references layer '${layer_name}' but installed directory not found: ${src_layer_dir}"
         [[ -f "${src_layer_dir}/devcontainer.json" ]] || err "Manifest '${name}' references layer '${layer_name}' but devcontainer.json not found in: ${src_layer_dir}"
         i=$((i + 1))
-        if [[ "$i" -eq "$layer_count" ]]; then
+        if [[ $i -eq $layer_count ]]; then
           is_leaf=true
         else
           is_leaf=false
         fi
-        _collect_dir_plan_entries "$category" "$layer_name" "$mode" "$([[ "$is_leaf" == false ]] && printf true || printf false)"
+        _collect_dir_plan_entries "$category" "$layer_name" "$mode" "$([[ $is_leaf == false ]] && printf true || printf false)"
       done
 
       local src_manifest dest_manifest action
       src_manifest="$(installed_compose_manifest_path "$name")"
       dest_manifest="$(config_compose_manifest_path "$name")"
-      if [[ -f "$src_manifest" ]]; then
-        if [[ ! -f "$dest_manifest" ]]; then
+      if [[ -f $src_manifest ]]; then
+        if [[ ! -f $dest_manifest ]]; then
           action="CREATE"
         elif cmp -s "$src_manifest" "$dest_manifest"; then
           action="NOOP-IDENTICAL"
-        elif [[ "$mode" == "reset" ]]; then
+        elif [[ $mode == "reset" ]]; then
           action="OVERWRITE-WITH-BACKUP"
         else
           action="OVERWRITE"
@@ -228,13 +228,13 @@ _dedupe_plan() {
   local line dest
   local -A seen=()
   while IFS= read -r line; do
-    [[ -n "$line" ]] || continue
+    [[ -n $line ]] || continue
     dest="$(printf '%s\n' "$line" | awk -F '\t' '{print $6}')"
-    [[ -n "$dest" ]] || continue
-    [[ -n "${seen[$dest]:-}" ]] && continue
+    [[ -n $dest ]] || continue
+    [[ -n ${seen[$dest]:-} ]] && continue
     seen["$dest"]=1
     printf '%s\n' "$line"
-  done <<< "$plan"
+  done <<<"$plan"
 }
 
 _backup_target_file() {
@@ -247,7 +247,7 @@ _backup_target_file() {
 }
 
 _install_mode_for_source() {
-  if [[ -x "$1" ]]; then
+  if [[ -x $1 ]]; then
     printf '755\n'
   else
     printf '644\n'
@@ -258,10 +258,10 @@ _print_deploy_plan() {
   local plan="$1"
   local line action category name source dest
   while IFS=$'\t' read -r action category name _internal source dest; do
-    [[ -n "$action" ]] || continue
+    [[ -n $action ]] || continue
     printf '%-22s %-12s %-18s %s -> %s\n' \
       "$action" "$category" "$name" "$source" "$dest"
-  done <<< "$plan"
+  done <<<"$plan"
 }
 
 _apply_deploy_plan() {
@@ -269,7 +269,7 @@ _apply_deploy_plan() {
   local line action category name source dest backup_path mode
 
   while IFS=$'\t' read -r action category name _internal source dest; do
-    [[ -n "$action" ]] || continue
+    [[ -n $action ]] || continue
     case "$action" in
       CREATE)
         mkdir -p "$(dirname "$dest")"
@@ -300,7 +300,7 @@ _apply_deploy_plan() {
         err "Unknown deploy action: $action"
         ;;
     esac
-  done <<< "$plan"
+  done <<<"$plan"
 }
 
 list_deploy_entries() {
@@ -311,23 +311,23 @@ list_deploy_entries() {
   local name status
 
   case "$scope" in
-    devcontainer|both)
+    devcontainer | both)
       installed=()
       deployed=()
       while IFS= read -r name; do
-        [[ -n "$name" ]] || continue
+        [[ -n $name ]] || continue
         installed["$name"]=1
       done < <(_discover_installed_selectable_devcontainers)
       while IFS= read -r name; do
-        [[ -n "$name" ]] || continue
+        [[ -n $name ]] || continue
         deployed["$name"]=1
       done < <(_discover_deployed_selectable_devcontainers)
       lines=()
       for name in "${!installed[@]}" "${!deployed[@]}"; do
-        [[ -n "$name" ]] || continue
-        if [[ -n "${installed[$name]:-}" && -n "${deployed[$name]:-}" ]]; then
+        [[ -n $name ]] || continue
+        if [[ -n ${installed[$name]:-} && -n ${deployed[$name]:-} ]]; then
           status="deployed"
-        elif [[ -n "${installed[$name]:-}" ]]; then
+        elif [[ -n ${installed[$name]:-} ]]; then
           status="installed"
         else
           status="user-only"
@@ -340,23 +340,23 @@ list_deploy_entries() {
   esac
 
   case "$scope" in
-    image|both)
+    image | both)
       installed=()
       deployed=()
       while IFS= read -r name; do
-        [[ -n "$name" ]] || continue
+        [[ -n $name ]] || continue
         installed["$name"]=1
       done < <(_discover_installed_images)
       while IFS= read -r name; do
-        [[ -n "$name" ]] || continue
+        [[ -n $name ]] || continue
         deployed["$name"]=1
       done < <(_discover_deployed_images)
       lines=()
       for name in "${!installed[@]}" "${!deployed[@]}"; do
-        [[ -n "$name" ]] || continue
-        if [[ -n "${installed[$name]:-}" && -n "${deployed[$name]:-}" ]]; then
+        [[ -n $name ]] || continue
+        if [[ -n ${installed[$name]:-} && -n ${deployed[$name]:-} ]]; then
           status="deployed"
-        elif [[ -n "${installed[$name]:-}" ]]; then
+        elif [[ -n ${installed[$name]:-} ]]; then
           status="installed"
         else
           status="user-only"
@@ -432,7 +432,7 @@ _confirm_deploy_plan_interactive() {
   _print_deploy_plan "$plan"
   printf 'Apply this plan? [y/N] ' >/dev/tty
   read -r reply </dev/tty || return 1
-  [[ "$reply" == "y" || "$reply" == "Y" ]]
+  [[ $reply == "y" || $reply == "Y" ]]
 }
 
 _installed_entry_exists() {
@@ -501,7 +501,7 @@ cmd_deploy() {
         all_images=true
         shift
         ;;
-      --help|-h)
+      --help | -h)
         usage_deploy
         return 0
         ;;
@@ -512,19 +512,19 @@ cmd_deploy() {
     esac
   done
 
-  if [[ "$dry_run" == true && "$reset" == true ]]; then
+  if [[ $dry_run == true && $reset == true ]]; then
     err "Cannot use --dry-run with --reset"
   fi
 
-  [[ -n "$list_scope" ]] && selection_count=$((selection_count + 1))
-  [[ "$all" == true ]] && selection_count=$((selection_count + 1))
-  [[ "$all_devcontainers" == true ]] && selection_count=$((selection_count + 1))
-  [[ "$all_images" == true ]] && selection_count=$((selection_count + 1))
+  [[ -n $list_scope ]] && selection_count=$((selection_count + 1))
+  [[ $all == true ]] && selection_count=$((selection_count + 1))
+  [[ $all_devcontainers == true ]] && selection_count=$((selection_count + 1))
+  [[ $all_images == true ]] && selection_count=$((selection_count + 1))
   [[ ${#positional[@]} -gt 0 ]] && selection_count=$((selection_count + 1))
 
-  [[ "$selection_count" -le 1 ]] || err "Choose exactly one deploy selector or list mode"
+  [[ $selection_count -le 1 ]] || err "Choose exactly one deploy selector or list mode"
 
-  if [[ -n "$list_scope" ]]; then
+  if [[ -n $list_scope ]]; then
     list_deploy_entries "$list_scope"
     return 0
   fi
@@ -534,54 +534,54 @@ cmd_deploy() {
     category="${positional[0]}"
     name="${positional[1]}"
     case "$category" in
-      devcontainer|image) ;;
+      devcontainer | image) ;;
       *) err "Unknown deploy selector: $category" ;;
     esac
-  elif [[ "$all" != true && "$all_devcontainers" != true && "$all_images" != true ]]; then
+  elif [[ $all != true && $all_devcontainers != true && $all_images != true ]]; then
     category="$(_select_deploy_category_interactive)" || return $?
     mapfile -t names < <(_select_deploy_targets_interactive "$category")
     [[ ${#names[@]} -gt 0 ]] || return 0
   fi
 
-  if [[ -n "$name" ]]; then
+  if [[ -n $name ]]; then
     _installed_entry_exists "$category" "$name" || err "Unknown installed ${category}: $name"
     names=("$name")
-  elif [[ "$all_devcontainers" == true ]]; then
+  elif [[ $all_devcontainers == true ]]; then
     category="devcontainer"
     mapfile -t names < <(_discover_installed_devcontainers)
-  elif [[ "$all_images" == true ]]; then
+  elif [[ $all_images == true ]]; then
     category="image"
     mapfile -t names < <(_discover_installed_images)
   fi
 
-  if [[ "$all" == true ]]; then
+  if [[ $all == true ]]; then
     local dev_name image_name plan_output
     while IFS= read -r dev_name; do
-      [[ -n "$dev_name" ]] || continue
-      plan_output="$(_collect_deploy_plan devcontainer "$dev_name" "$([[ "$reset" == true ]] && printf reset || printf normal)")" || exit $?
+      [[ -n $dev_name ]] || continue
+      plan_output="$(_collect_deploy_plan devcontainer "$dev_name" "$([[ $reset == true ]] && printf reset || printf normal)")" || exit $?
       plan+="$plan_output"$'\n'
     done < <(_discover_installed_devcontainers)
     while IFS= read -r image_name; do
-      [[ -n "$image_name" ]] || continue
-      plan_output="$(_collect_deploy_plan image "$image_name" "$([[ "$reset" == true ]] && printf reset || printf normal)")" || exit $?
+      [[ -n $image_name ]] || continue
+      plan_output="$(_collect_deploy_plan image "$image_name" "$([[ $reset == true ]] && printf reset || printf normal)")" || exit $?
       plan+="$plan_output"$'\n'
     done < <(_discover_installed_images)
   else
     for name in "${names[@]}"; do
       local plan_output
-      plan_output="$(_collect_deploy_plan "$category" "$name" "$([[ "$reset" == true ]] && printf reset || printf normal)")" || exit $?
+      plan_output="$(_collect_deploy_plan "$category" "$name" "$([[ $reset == true ]] && printf reset || printf normal)")" || exit $?
       plan+="$plan_output"$'\n'
     done
   fi
 
   deduped_plan="$(_dedupe_plan "$plan")"
-  [[ -n "$deduped_plan" ]] || err "No deploy actions available"
+  [[ -n $deduped_plan ]] || err "No deploy actions available"
 
-  if [[ ${#positional[@]} -eq 0 && "$all" != true && "$all_devcontainers" != true && "$all_images" != true ]]; then
+  if [[ ${#positional[@]} -eq 0 && $all != true && $all_devcontainers != true && $all_images != true ]]; then
     _confirm_deploy_plan_interactive "$deduped_plan" || return 0
   fi
 
-  if [[ "$dry_run" == true ]]; then
+  if [[ $dry_run == true ]]; then
     _print_deploy_plan "$deduped_plan"
     return 0
   fi

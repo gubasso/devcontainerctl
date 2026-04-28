@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # Project registry module for dctl (sourced, not executed directly)
 
-[[ -n "${_DCTL_CONFIG_LOADED:-}" ]] && return 0
+[[ -n ${_DCTL_CONFIG_LOADED:-} ]] && return 0
 readonly _DCTL_CONFIG_LOADED=1
 
 : "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)}"
@@ -16,12 +16,12 @@ _registry_file() {
 _validate_compose_manifest() {
   local manifest="$1"
 
-  [[ -f "$manifest" ]] || err "Manifest not found: $manifest"
-  [[ -s "$manifest" ]] || err "Manifest is empty: $manifest"
+  [[ -f $manifest ]] || err "Manifest not found: $manifest"
+  [[ -s $manifest ]] || err "Manifest is empty: $manifest"
 
   if command -v check-jsonschema >/dev/null 2>&1; then
     local schema="${DCTL_SCHEMAS_DIR}/compose.schema.yaml"
-    if [[ -f "$schema" ]]; then
+    if [[ -f $schema ]]; then
       local validation_output
       if ! validation_output="$(check-jsonschema --schemafile "$schema" "$manifest" 2>&1)"; then
         err "Schema validation failed for $manifest: $validation_output"
@@ -36,13 +36,13 @@ _validate_compose_manifest() {
 
   local layers_type
   layers_type="$(yq eval '.layers | type' "$manifest" 2>/dev/null || true)"
-  if [[ "$layers_type" != "!!seq" ]]; then
+  if [[ $layers_type != "!!seq" ]]; then
     err "Invalid manifest $manifest: 'layers' must be an array"
   fi
 
   local layers_len
   layers_len="$(yq eval '.layers | length' "$manifest" 2>/dev/null || true)"
-  if [[ "$layers_len" -eq 0 ]]; then
+  if [[ $layers_len -eq 0 ]]; then
     err "Invalid manifest $manifest: 'layers' must not be empty"
   fi
 }
@@ -55,28 +55,28 @@ _read_manifest_layers() {
 _registry_exists() {
   local registry
   registry="$(_registry_file)"
-  [[ -f "$registry" ]]
+  [[ -f $registry ]]
 }
 
 _validate_registry() {
   local registry="$1"
 
   # Empty file is a valid empty registry
-  if [[ ! -s "$registry" ]]; then
+  if [[ ! -s $registry ]]; then
     return 0
   fi
 
   # File with only whitespace/comments parses as null — treat as empty
   local root_tag
   root_tag="$(yq eval 'type' "$registry" 2>/dev/null || true)"
-  if [[ "$root_tag" == "!!null" ]]; then
+  if [[ $root_tag == "!!null" ]]; then
     return 0
   fi
 
   # Prefer check-jsonschema for full validation
   if command -v check-jsonschema >/dev/null 2>&1; then
     local schema="${DCTL_SCHEMAS_DIR}/projects.schema.yaml"
-    if [[ -f "$schema" ]]; then
+    if [[ -f $schema ]]; then
       local validation_output
       if ! validation_output="$(check-jsonschema --schemafile "$schema" "$registry" 2>&1)"; then
         err "Schema validation failed for $registry: $validation_output"
@@ -92,7 +92,7 @@ _validate_registry() {
   fi
 
   # Root must be a mapping (null already handled above)
-  if [[ "$root_tag" != "!!map" ]]; then
+  if [[ $root_tag != "!!map" ]]; then
     err "Invalid registry format in $registry: root must be a mapping, got $root_tag"
   fi
 
@@ -101,7 +101,7 @@ _validate_registry() {
   bad_type="$(yq eval '
     to_entries | .[] | select(.value | type != "!!map") | .key
   ' "$registry" 2>/dev/null || true)"
-  if [[ -n "$bad_type" ]]; then
+  if [[ -n $bad_type ]]; then
     err "Invalid entry in $registry: '$bad_type' must be a mapping"
   fi
 
@@ -112,7 +112,7 @@ _validate_registry() {
     select(.key != "devcontainer" and .key != "sibling_discovery") |
     .key
   ' "$registry" 2>/dev/null || true)"
-  if [[ -n "$bad_keys" ]]; then
+  if [[ -n $bad_keys ]]; then
     err "Unrecognized key in $registry: $bad_keys"
   fi
 
@@ -124,7 +124,7 @@ _validate_registry() {
     select(.devcontainer | type != "!!str") |
     parent | to_entries | .[0].key
   ' "$registry" 2>/dev/null || true)"
-  if [[ -n "$bad_str" ]]; then
+  if [[ -n $bad_str ]]; then
     err "Invalid type for devcontainer in $registry: expected string"
   fi
 
@@ -136,7 +136,7 @@ _validate_registry() {
     select(.sibling_discovery | type != "!!bool") |
     parent | to_entries | .[0].key
   ' "$registry" 2>/dev/null || true)"
-  if [[ -n "$bad_bool" ]]; then
+  if [[ -n $bad_bool ]]; then
     err "Invalid type for sibling_discovery in $registry: expected boolean"
   fi
 }
@@ -159,7 +159,7 @@ _registry_read_field() {
   value="$(yq -r ".\"${canonical_name}\".${field} // \"\"" "$registry" 2>/dev/null || true)"
   # Expand $HOME in registry values for portability
   value="${value/\$HOME/$HOME}"
-  [[ -n "$value" ]] && printf '%s\n' "$value"
+  [[ -n $value ]] && printf '%s\n' "$value"
   return 0
 }
 
@@ -188,7 +188,7 @@ _registry_lookup_sibling_discovery() {
   # Check if the key exists, then read its value directly.
   local has_key
   has_key="$(yq -r ".\"${canonical_name}\" | has(\"sibling_discovery\")" "$registry" 2>/dev/null || true)"
-  if [[ "$has_key" == "true" ]]; then
+  if [[ $has_key == "true" ]]; then
     yq -r ".\"${canonical_name}\".sibling_discovery" "$registry"
   else
     printf 'true\n'
@@ -202,14 +202,14 @@ _registry_update_devcontainer() {
   require_cmd yq
   local registry
   registry="$(_registry_file)"
-  [[ -s "$registry" ]] || return 1
+  [[ -s $registry ]] || return 1
 
   # Store with $HOME for portability
   new_path="${new_path/#$HOME/\$HOME}"
 
   local tmp_registry="${registry}.tmp.$$"
   YQ_KEY="$canonical_name" YQ_VAL="$new_path" \
-    yq eval '.[env(YQ_KEY)].devcontainer = env(YQ_VAL)' "$registry" > "$tmp_registry"
+    yq eval '.[env(YQ_KEY)].devcontainer = env(YQ_VAL)' "$registry" >"$tmp_registry"
   mv "$tmp_registry" "$registry"
 }
 
@@ -217,7 +217,7 @@ _registry_ensure_file() {
   local registry
   registry="$(_registry_file)"
   mkdir -p "$(dirname "$registry")"
-  if [[ ! -f "$registry" ]]; then
+  if [[ ! -f $registry ]]; then
     touch "$registry"
   fi
 }
@@ -226,7 +226,7 @@ _registry_has_project() {
   local canonical_name="$1"
   local registry
   registry="$(_registry_file)"
-  [[ -s "$registry" ]] || return 1
+  [[ -s $registry ]] || return 1
   YQ_KEY="$canonical_name" yq -e '.[env(YQ_KEY)]' "$registry" >/dev/null 2>&1
 }
 
@@ -244,14 +244,14 @@ register_project_defaults() {
   local registry
   registry="$(_registry_file)"
 
-  if [[ -s "$registry" ]]; then
+  if [[ -s $registry ]]; then
     _validate_registry "$registry"
   fi
 
   local project_exists=false
   if _registry_has_project "$canonical_name"; then
     project_exists=true
-    if [[ "$force" != true ]]; then
+    if [[ $force != true ]]; then
       warn "Project '$canonical_name' already registered in $registry; skipping"
       return 0
     fi
@@ -259,24 +259,24 @@ register_project_defaults() {
 
   # Use env vars to pass values safely to yq (avoids injection via special chars)
   local existing_sibling="true"
-  if [[ "$force" == true && "$project_exists" == true ]]; then
+  if [[ $force == true && $project_exists == true ]]; then
     existing_sibling="$(_registry_lookup_sibling_discovery "$canonical_name")"
   fi
 
   local yq_expr
   yq_expr='.[env(YQ_KEY)].devcontainer = strenv(YQ_DEVCONTAINER)'
-  if [[ "$existing_sibling" == "false" ]]; then
+  if [[ $existing_sibling == "false" ]]; then
     yq_expr+=' | .[env(YQ_KEY)].sibling_discovery = false'
   else
     yq_expr+=' | del(.[env(YQ_KEY)].sibling_discovery)'
   fi
-  if [[ "$force" == true && "$project_exists" == true ]]; then
+  if [[ $force == true && $project_exists == true ]]; then
     yq_expr+=' | del(.[env(YQ_KEY)].dockerfile) | del(.[env(YQ_KEY)].image)'
   fi
 
   local tmp_registry="${registry}.tmp.$$"
   export YQ_KEY="$canonical_name" YQ_DEVCONTAINER="$devcontainer_path"
-  if [[ -s "$registry" ]]; then
+  if [[ -s $registry ]]; then
     yq eval "$yq_expr" "$registry" >"$tmp_registry"
   else
     yq -n "$yq_expr" >"$tmp_registry"

@@ -34,9 +34,9 @@ sanitized_bin_excluding() {
   mkdir -p "$sanitized"
   local src dst
   for src in /usr/bin/* /bin/*; do
-    [[ -e "$src" ]] || continue
+    [[ -e $src ]] || continue
     dst="${sanitized}/$(basename "$src")"
-    [[ -e "$dst" ]] && continue
+    [[ -e $dst ]] && continue
     ln -s "$src" "$dst" 2>/dev/null || true
   done
   local name

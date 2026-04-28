@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # Workspace (ws) commands for dctl (sourced, not executed directly)
 
-[[ -n "${_DCTL_WS_LOADED:-}" ]] && return 0
+[[ -n ${_DCTL_WS_LOADED:-} ]] && return 0
 readonly _DCTL_WS_LOADED=1
 
 : "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)}"
@@ -70,7 +70,7 @@ ensure_ws_container_running() {
 
   local running_ids
   running_ids="$(list_running_ws_containers)"
-  if [[ -n "$running_ids" ]]; then
+  if [[ -n $running_ids ]]; then
     return 0
   fi
 
@@ -96,7 +96,7 @@ collect_git_worktree_mounts() {
   common_dir="$(cd -- "$WORKSPACE_FOLDER" && cd -- "$common_dir" && pwd -P)"
 
   # Not a linked worktree — git dir and common dir are identical
-  [[ "$git_dir" != "$common_dir" ]] || return 0
+  [[ $git_dir != "$common_dir" ]] || return 0
 
   # Mount the shared .git directory at the same host path inside the container
   # so the absolute gitdir reference in the worktree's .git file resolves
@@ -109,7 +109,7 @@ collect_term_env() {
 
   local var_name
   for var_name in TERM COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION KITTY_WINDOW_ID KITTY_LISTEN_ON; do
-    if [[ -n "${!var_name:-}" ]]; then
+    if [[ -n ${!var_name:-} ]]; then
       out+=(--remote-env "${var_name}=${!var_name}")
     fi
   done
@@ -164,15 +164,15 @@ cmd_ws_reup() {
   # to miss managed configs (resolve_devcontainer_config always returns a
   # realpath).
   local cache_root_canonical="$DCTL_DEVCONTAINER_CACHE_DIR"
-  if [[ -d "$DCTL_DEVCONTAINER_CACHE_DIR" ]]; then
+  if [[ -d $DCTL_DEVCONTAINER_CACHE_DIR ]]; then
     cache_root_canonical="$(realpath "$DCTL_DEVCONTAINER_CACHE_DIR")"
   fi
-  if [[ "$config_path" == "${cache_root_canonical}/"* ]]; then
+  if [[ $config_path == "${cache_root_canonical}/"* ]]; then
     local template_name cache_output config_status
     template_name="$(basename "$(dirname "$config_path")")"
     cache_output="$(generate_cached_devcontainer "$template_name")" || return $?
-    config_path="$(head -1 <<< "$cache_output")"
-    config_status="$(tail -1 <<< "$cache_output")"
+    config_path="$(head -1 <<<"$cache_output")"
+    config_status="$(tail -1 <<<"$cache_output")"
     log "Config cache status: $config_status"
   fi
 
@@ -225,7 +225,7 @@ cmd_ws_status() {
 
   local ids
   ids="$(list_ws_containers)"
-  if [[ -z "$ids" ]]; then
+  if [[ -z $ids ]]; then
     warn "No devcontainer found for workspace: $(workspace_path)"
     return 0
   fi
@@ -243,7 +243,7 @@ cmd_ws_down() {
 
   local ids
   ids="$(list_ws_containers)"
-  if [[ -z "$ids" ]]; then
+  if [[ -z $ids ]]; then
     warn "No devcontainer to remove for workspace: $(workspace_path)"
     return 0
   fi

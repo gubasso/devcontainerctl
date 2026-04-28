@@ -32,7 +32,8 @@ repos:
     rev: v3.12.0-2
     hooks:
       - id: shfmt
-        args: ["-i", "2", "-ci", "-bn", "-s"]
+        args: ["-w", "-i", "2", "-ci", "-bn", "-s"]
+        files: '\.(sh|bash|bats)$|^bin/dctl$|^hooks/post-stow$'
 
   # shellharden – auto-quote variables and command substitutions
   - repo: local

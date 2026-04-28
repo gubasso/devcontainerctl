@@ -98,7 +98,7 @@ YAML
   [ "$output" = "$config" ]
 }
 
-@test "registry lookup expands \$HOME in devcontainer path" {
+@test 'registry lookup expands $HOME in devcontainer path' {
   local config="${HOME}/some/config.json"
   cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<'YAML'
 test-project:
@@ -152,7 +152,7 @@ YAML
 
   run _registry_lookup_devcontainer "proj"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"Unrecognized key"* || "$output" == *"additional properties"* || "$output" == *"ailed"* ]]
+  [[ $output == *"Unrecognized key"* || $output == *"additional properties"* || $output == *"ailed"* ]]
 }
 
 @test "registry validation rejects image key" {
@@ -163,7 +163,7 @@ YAML
 
   run _registry_lookup_devcontainer "proj"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"Unrecognized key"* || "$output" == *"additional properties"* || "$output" == *"ailed"* ]]
+  [[ $output == *"Unrecognized key"* || $output == *"additional properties"* || $output == *"ailed"* ]]
 }
 
 # --- Schema validation ---
@@ -195,7 +195,7 @@ YAML
   run _validate_registry "${XDG_CONFIG_HOME}/dctl/projects.yaml"
   [ "$status" -ne 0 ]
   # check-jsonschema says "Failed" or "failed"; yq fallback says "Invalid YAML"
-  [[ "$output" == *"Invalid YAML"* || "$output" == *"ailed"* ]]
+  [[ $output == *"Invalid YAML"* || $output == *"ailed"* ]]
 }
 
 @test "registry validation rejects unrecognized keys" {
@@ -207,7 +207,7 @@ YAML
   run _validate_registry "${XDG_CONFIG_HOME}/dctl/projects.yaml"
   [ "$status" -ne 0 ]
   # check-jsonschema reports "Additional properties"; yq fallback says "Unrecognized key"
-  [[ "$output" == *"Unrecognized key"* || "$output" == *"additional properties"* || "$output" == *"ailed"* ]]
+  [[ $output == *"Unrecognized key"* || $output == *"additional properties"* || $output == *"ailed"* ]]
 }
 
 @test "registry validation rejects non-boolean sibling_discovery" {
@@ -218,7 +218,7 @@ YAML
 
   run _validate_registry "${XDG_CONFIG_HOME}/dctl/projects.yaml"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"sibling_discovery"* ]]
+  [[ $output == *"sibling_discovery"* ]]
 }
 
 @test "registry validation rejects non-string devcontainer" {
@@ -229,7 +229,7 @@ YAML
 
   run _validate_registry "${XDG_CONFIG_HOME}/dctl/projects.yaml"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"devcontainer"* ]]
+  [[ $output == *"devcontainer"* ]]
 }
 
 @test "registry validation accepts empty file" {
@@ -267,7 +267,7 @@ YAML
 
   run resolve_devcontainer_config
   [ "$status" -eq 0 ]
-  [[ "$output" == *"registry-config.json" ]]
+  [[ $output == *"registry-config.json" ]]
 }
 
 # --- Sibling discovery opt-out ---
@@ -303,7 +303,7 @@ YAML
   [ "$(yq -r '."proj-a" | has("sibling_discovery")' "$registry")" = "false" ]
 }
 
-@test "register_project_defaults stores \$HOME in devcontainer path" {
+@test 'register_project_defaults stores $HOME in devcontainer path' {
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
   local home_path="${HOME}/config/devcontainer.json"
 
@@ -325,7 +325,7 @@ YAML
 
   run register_project_defaults "proj-a" "/tmp/new.json"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"already registered"* ]]
+  [[ $output == *"already registered"* ]]
   [ "$(yq -r '."proj-a".devcontainer' "$registry")" = "/tmp/original.json" ]
   [ "$(yq -r '."proj-a".sibling_discovery' "$registry")" = "false" ]
 }
@@ -394,7 +394,7 @@ YAML
 
   run register_project_defaults "proj-a" "/tmp/proj-a.json"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"Invalid YAML"* || "$output" == *"ailed"* ]]
+  [[ $output == *"Invalid YAML"* || $output == *"ailed"* ]]
 }
 
 @test "register_project_defaults creates config directory when missing" {

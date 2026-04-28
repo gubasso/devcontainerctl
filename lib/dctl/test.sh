@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # Setup smoke-test command for dctl (sourced, not executed directly)
 
-[[ -n "${_DCTL_TEST_LOADED:-}" ]] && return 0
+[[ -n ${_DCTL_TEST_LOADED:-} ]] && return 0
 readonly _DCTL_TEST_LOADED=1
 
 : "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)}"
@@ -47,15 +47,15 @@ _print_summary() {
   local i
 
   printf '\n\033[1m── Summary ──────────────────────────────\033[0m\n'
-  if [[ -n "${DCTL_CONFIG_STATUS:-}" ]]; then
+  if [[ -n ${DCTL_CONFIG_STATUS:-} ]]; then
     case "$DCTL_CONFIG_STATUS" in
-      cached)    printf '  \033[1;36mℹ\033[0m Config: using cached devcontainer.json\n' ;;
+      cached) printf '  \033[1;36mℹ\033[0m Config: using cached devcontainer.json\n' ;;
       generated) printf '  \033[1;36mℹ\033[0m Config: generated new devcontainer.json\n' ;;
-      existing)  printf '  \033[1;36mℹ\033[0m Config: using existing registered config\n' ;;
+      existing) printf '  \033[1;36mℹ\033[0m Config: using existing registered config\n' ;;
     esac
   fi
   for i in "${!_check_names[@]}"; do
-    if [[ "${_check_results[$i]}" == "PASS" ]]; then
+    if [[ ${_check_results[$i]} == "PASS" ]]; then
       printf '  \033[1;32m✔\033[0m %s\n' "${_check_names[$i]}"
       passed=$((passed + 1))
     else
@@ -69,11 +69,11 @@ _print_summary() {
 extract_workspace_image() {
   local config_path="${1:-$(workspace_devcontainer_file)}"
 
-  [[ -f "$config_path" ]] || return 1
+  [[ -f $config_path ]] || return 1
 
   local image_line
   image_line="$(grep -m1 -E '^[[:space:]]*"image"[[:space:]]*:' "$config_path" || true)"
-  [[ -n "$image_line" ]] || return 1
+  [[ -n $image_line ]] || return 1
 
   sed -E 's/^[[:space:]]*"image"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' <<<"$image_line"
 }
@@ -84,7 +84,7 @@ cleanup_test_workspace_containers() {
 
 _resolve_local_env() {
   local str="$1"
-  while [[ "$str" =~ \$\{localEnv:([A-Za-z_][A-Za-z0-9_]*)\} ]]; do
+  while [[ $str =~ \$\{localEnv:([A-Za-z_][A-Za-z0-9_]*)\} ]]; do
     local var_name="${BASH_REMATCH[1]}"
     local value="${!var_name-}"
     local match="${BASH_REMATCH[0]}"
@@ -108,7 +108,7 @@ _extract_bind_mount_sources() {
           (split(",")[] | select(test("^(source|src)=")) | sub("^(source|src)="; ""))
         else empty end
       else empty end
-  ' <<< "$stripped"
+  ' <<<"$stripped"
 }
 
 check_bind_mount_sources() {
@@ -129,14 +129,14 @@ check_bind_mount_sources() {
   local -a unresolved=()
   local raw resolved
   while IFS= read -r raw; do
-    [[ -n "$raw" ]] || continue
+    [[ -n $raw ]] || continue
     resolved="$(_resolve_local_env "$raw")"
-    if [[ -z "$resolved" ]]; then
+    if [[ -z $resolved ]]; then
       unresolved+=("$raw")
       continue
     fi
-    [[ -e "$resolved" ]] || missing_paths+=("$resolved")
-  done <<< "$sources"
+    [[ -e $resolved ]] || missing_paths+=("$resolved")
+  done <<<"$sources"
 
   if [[ ${#missing_paths[@]} -eq 0 && ${#unresolved[@]} -eq 0 ]]; then
     check_pass "Bind mount sources exist on host"
@@ -170,12 +170,12 @@ build_workspace_image_if_managed() {
   local image
   image="$(extract_workspace_image "$cfg" || true)"
 
-  if [[ -z "$image" ]]; then
+  if [[ -z $image ]]; then
     warn "No image field found in $cfg; skipping image build"
     return 0
   fi
 
-  if [[ "$image" =~ ^devimg/([[:alnum:]._-]+):latest$ ]]; then
+  if [[ $image =~ ^devimg/([[:alnum:]._-]+):latest$ ]]; then
     local target="${BASH_REMATCH[1]}"
     if resolve_dockerfile "$target" >/dev/null 2>&1; then
       (cmd_image_build "$target")
@@ -235,7 +235,7 @@ cmd_test() {
     failures=$((failures + 1))
   fi
 
-  if [[ "$docker_ready" == true && "$devcontainer_ready" == true ]]; then
+  if [[ $docker_ready == true && $devcontainer_ready == true ]]; then
     if build_workspace_image_if_managed "$config_path"; then
       check_pass "Workspace image is ready"
     else
@@ -249,7 +249,7 @@ cmd_test() {
       bind_sources_ok=false
     fi
 
-    if [[ "$bind_sources_ok" == true ]]; then
+    if [[ $bind_sources_ok == true ]]; then
       if devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path"; then
         check_pass "devcontainer up succeeded"
         container_started=true
@@ -259,7 +259,7 @@ cmd_test() {
       fi
     fi
 
-    if [[ "$container_started" == true ]]; then
+    if [[ $container_started == true ]]; then
       if devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" printf 'dctl-smoke\n' >/dev/null; then
         check_pass "devcontainer exec succeeded"
       else
@@ -278,7 +278,7 @@ cmd_test() {
 
   _print_summary
 
-  if [[ "$failures" -gt 0 ]]; then
+  if [[ $failures -gt 0 ]]; then
     err "Smoke test failed with ${failures} check(s)"
   fi
 

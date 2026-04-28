@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # Image commands for dctl (sourced, not executed directly)
 
-[[ -n "${_DCTL_IMAGE_LOADED:-}" ]] && return 0
+[[ -n ${_DCTL_IMAGE_LOADED:-} ]] && return 0
 readonly _DCTL_IMAGE_LOADED=1
 
 : "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)}"
@@ -64,7 +64,7 @@ resolve_dockerfile() {
   local target="$1"
   local user_path
   user_path="$(config_image_path "$target")"
-  if [[ -f "$user_path" ]]; then
+  if [[ -f $user_path ]]; then
     printf '%s\n' "$user_path"
     return 0
   fi
@@ -76,7 +76,7 @@ get_image_tag() {
 }
 
 ensure_image_dir_exists() {
-  if [[ ! -d "$DCTL_IMAGES_DIR" ]]; then
+  if [[ ! -d $DCTL_IMAGES_DIR ]]; then
     log "No user image config found"
     log "Run: dctl deploy image <name> or dctl deploy --all-images"
     return 1
@@ -135,7 +135,7 @@ cmd_image_build() {
     esac
   done
 
-  if [[ "$full_rebuild" == true ]]; then
+  if [[ $full_rebuild == true ]]; then
     all=true
     no_cache=true
   fi
@@ -144,7 +144,7 @@ cmd_image_build() {
     err "Do not run as root (would bake UID 0 into images)"
   fi
 
-  if [[ "$dry_run" != true ]]; then
+  if [[ $dry_run != true ]]; then
     require_cmd docker
     if ! docker info >/dev/null 2>&1; then
       err "Docker daemon not running or not accessible"
@@ -154,7 +154,7 @@ cmd_image_build() {
     fi
   fi
 
-  if [[ "$all" == true ]]; then
+  if [[ $all == true ]]; then
     mapfile -t targets < <(discover_image_targets)
     if [[ ${#targets[@]} -eq 0 ]]; then
       err "No user image config found in $DCTL_IMAGES_DIR. Run: dctl deploy image <name> or dctl deploy --all-images"
@@ -199,11 +199,11 @@ cmd_image_build() {
   # GitHub token for mise installs (avoids 60 req/hr anonymous rate limit)
   local -a secret_flag=()
   local gh_token_file=""
-  if [[ "$dry_run" != true ]]; then
+  if [[ $dry_run != true ]]; then
     local gh_token
-    if gh_token=$(_extract_gh_token 2>/dev/null) && [[ -n "$gh_token" ]]; then
+    if gh_token=$(_extract_gh_token 2>/dev/null) && [[ -n $gh_token ]]; then
       gh_token_file=$(mktemp)
-      printf '%s' "$gh_token" > "$gh_token_file"
+      printf '%s' "$gh_token" >"$gh_token_file"
       secret_flag=(--secret "id=gh_token,src=${gh_token_file}")
     else
       warn "No GitHub token found — builds may hit API rate limits (see: gh auth login)"
@@ -219,13 +219,13 @@ cmd_image_build() {
 
     local -a refresh_flag
     refresh_flag=()
-    if [[ "$target" == "agents" && "$refresh_agents" == true ]]; then
+    if [[ $target == "agents" && $refresh_agents == true ]]; then
       refresh_flag=(--build-arg "CACHEBUST_AGENTS=$(date +%s)")
     fi
 
-    if [[ "$dry_run" == true ]]; then
+    if [[ $dry_run == true ]]; then
       log "[dry-run] Would build: $tag"
-      if [[ "$full_rebuild" == true ]]; then
+      if [[ $full_rebuild == true ]]; then
         log "[dry-run]   flags: --no-cache (--pull applies to agents only)"
       fi
       if [[ ${#refresh_flag[@]} -gt 0 ]]; then
@@ -242,13 +242,13 @@ cmd_image_build() {
 
     local -a pull_flag
     pull_flag=()
-    if [[ "$target" == "agents" && "$all" == true ]]; then
+    if [[ $target == "agents" && $all == true ]]; then
       pull_flag=(--pull)
     fi
 
     local -a no_cache_flag
     no_cache_flag=()
-    if [[ "$no_cache" == true ]]; then
+    if [[ $no_cache == true ]]; then
       no_cache_flag=(--no-cache)
     fi
 
@@ -265,9 +265,9 @@ cmd_image_build() {
     fi
   done
 
-  [[ -n "$gh_token_file" ]] && rm -f "$gh_token_file"
+  [[ -n $gh_token_file ]] && rm -f "$gh_token_file"
 
-  if [[ "$dry_run" == true ]]; then
+  if [[ $dry_run == true ]]; then
     log "Dry-run complete"
     return 0
   fi
