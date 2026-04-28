@@ -155,7 +155,7 @@ $EDITOR ~/.config/dctl/devcontainer/python/devcontainer.json
 
 **Where it lives:** The Dockerfile at `~/.config/dctl/images/python-dev/Dockerfile` and the config layers under `~/.config/dctl/devcontainer/`. These are user-level files, not per-project — the same Dockerfile and config are reused across every Python workspace Ana creates.
 
-**3. Registers the current project** by merging the deployed layers into `~/.cache/dctl/devcontainer/python/devcontainer.json`, auto-building the managed image if needed, and writing the cache path to `~/.config/dctl/projects.yaml`.
+**3. Registers the current project** by merging the deployed layers into `~/.cache/dctl/devcontainer/python/devcontainer.json`, auto-building the managed image if needed, and writing the manifest name (`devcontainer-manifest: python`) to `~/.config/dctl/projects.yaml`.
 
 **How the team shares it:** `dctl` ships the defaults. Every teammate runs `make install`, `dctl deploy ...`, and then `dctl init --devcontainer python` inside each project. No Dockerfile to copy between repos, no per-project config to keep in sync. When the team adds a tool to the image, they update the shared Dockerfile in one place and every project picks it up on the next `dctl deploy image ...` plus `dctl image build`.
 

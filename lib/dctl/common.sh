@@ -83,7 +83,7 @@ workspace_label_filter() {
   printf 'label=devcontainer.local_folder=%s' "$(workspace_path)"
 }
 
-deployed_devcontainer_path() {
+devcontainer_cache_path_for_manifest() {
   local name="$1"
   printf '%s/%s/devcontainer.json\n' "$DCTL_DEVCONTAINER_CACHE_DIR" "$name"
 }
@@ -148,7 +148,7 @@ resolve_canonical_project_name() {
   printf '%s\n' "$canonical_name"
 }
 
-_registry_lookup_devcontainer() {
+_registry_lookup_devcontainer_manifest() {
   # Stub — returns empty. Phase 3 replaces with real yq-based lookup.
   return 0
 }
@@ -198,6 +198,7 @@ resolve_devcontainer_config() {
 
   local config_path
   local canonical_name
+  local registry_manifest
   local registry_path
   local local_path
   local sibling_path
@@ -221,11 +222,12 @@ resolve_devcontainer_config() {
   fi
 
   canonical_name="$(resolve_canonical_project_name)"
-  registry_path="$(_registry_lookup_devcontainer "$canonical_name")"
-  if [[ -n $registry_path ]]; then
-    [[ -f $registry_path ]] || err "Configured devcontainer path from project registry does not exist for ${canonical_name} in ${DCTL_CONFIG_DIR}/projects.yaml: $registry_path"
+  registry_manifest="$(_registry_lookup_devcontainer_manifest "$canonical_name")"
+  if [[ -n $registry_manifest ]]; then
+    registry_path="$(devcontainer_cache_path_for_manifest "$registry_manifest")"
+    [[ -f $registry_path ]] || err "Registry manifest '${registry_manifest}' for project '${canonical_name}' has no generated cache at $registry_path. Run: dctl init --devcontainer ${registry_manifest}"
     config_path="$(realpath "$registry_path")"
-    log "Using devcontainer config from project registry: ${canonical_name} in ${DCTL_CONFIG_DIR}/projects.yaml -> $config_path" >&2
+    log "Using devcontainer config from project registry: ${canonical_name} (manifest: ${registry_manifest}) -> $config_path" >&2
     printf '%s\n' "$config_path"
     return 0
   fi

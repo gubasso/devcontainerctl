@@ -7,11 +7,14 @@ type:
 additionalProperties:
   type: object
   properties:
-    devcontainer:
+    devcontainer-manifest:
       type: string
+      pattern: "^[A-Za-z0-9._-]+$"
       description: >
-        Path to a devcontainer.json file. Overrides local file discovery
-        and sibling discovery.
+        Name (stem) of a deployed devcontainer manifest under
+        ~/.config/dctl/devcontainer/<name>.yaml. Runtime derives the
+        merged-cache path at ~/.cache/dctl/devcontainer/<name>/devcontainer.json.
+        Do not include the .yaml extension and do not write a path here.
     sibling_discovery:
       type: boolean
       default: true

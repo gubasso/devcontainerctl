@@ -26,10 +26,10 @@ Example:
 
 ```yaml
 org-repo:
-  devcontainer: /home/alice/.cache/dctl/devcontainer/python/devcontainer.json
+  devcontainer-manifest: python
 
 acme-docs:
-  devcontainer: /home/alice/.cache/dctl/devcontainer/docs/devcontainer.json
+  devcontainer-manifest: docs
   sibling_discovery: false
 ```
 
@@ -79,10 +79,12 @@ Examples:
 
 ## Fields
 
-### `devcontainer`
+### `devcontainer-manifest`
 
-- path to a `devcontainer.json`
-- participates in the main resolution chain
+- manifest stem only, with no `.yaml` suffix and no path
+- maps to `~/.config/dctl/devcontainer/<name>.yaml`
+- participates in the main resolution chain by deriving
+  `~/.cache/dctl/devcontainer/<name>/devcontainer.json`
 
 ### `sibling_discovery`
 
@@ -99,5 +101,5 @@ CLI flag and environment variable and before the local workspace file.
 
 - the registry is parsed as data, not sourced as shell
 - validation happens before field use
-- path fields are checked before use
+- derived cache paths are checked before use
 - the registry is only read from the XDG config path

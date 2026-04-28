@@ -74,7 +74,7 @@ Expected result:
 Scenario:
 
 - `~/.config/dctl/projects.yaml` exists
-- It contains an entry for the canonical project with `devcontainer: /path/to/config.json`
+- It contains an entry for the canonical project with `devcontainer-manifest: python`
 - User runs `dctl ws up` from a matching workspace
 
 Expected result:
@@ -378,8 +378,10 @@ Scenario:
 Expected result:
 
 - The cached config is generated from user config
-- The project registry points at the cache path
+- The project registry stores the manifest name (`devcontainer-manifest: python`)
+- The cached config is generated under `~/.cache/dctl/devcontainer/python/devcontainer.json`
 - The registry does not store image-selection duplication from `init`
+- The registry does not store paths
 
 ### 29. `init` errors when nothing is deployed
 

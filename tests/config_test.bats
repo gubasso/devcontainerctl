@@ -8,9 +8,10 @@ setup() {
   setup_test_fixtures
   export XDG_DATA_HOME="${TEST_TMPDIR}/xdg-data"
   export XDG_CONFIG_HOME="${TEST_TMPDIR}/xdg-config"
+  export XDG_CACHE_HOME="${TEST_TMPDIR}/xdg-cache"
   export WORKSPACE_FOLDER="${TEST_TMPDIR}/workspace"
   mkdir -p "${XDG_DATA_HOME}/dctl/images" "${XDG_DATA_HOME}/dctl/schemas" \
-    "${XDG_CONFIG_HOME}/dctl" "$WORKSPACE_FOLDER"
+    "${XDG_CONFIG_HOME}/dctl" "${XDG_CACHE_HOME}/dctl" "$WORKSPACE_FOLDER"
   unset DCTL_CONFIG DCTL_CLI_CONFIG 2>/dev/null || true
 
   local repo_root="${BATS_TEST_DIRNAME}/.."
@@ -85,44 +86,30 @@ run_with_workspace() {
 
 # --- Registry parsing ---
 
-@test "registry lookup returns devcontainer path for known project" {
-  local config="${TEST_TMPDIR}/custom.json"
-  printf '{"image": "custom"}\n' >"$config"
+@test "registry lookup returns manifest name for known project" {
   cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
 test-project:
-  devcontainer: ${config}
+  devcontainer-manifest: general
 YAML
 
-  run _registry_lookup_devcontainer "test-project"
+  run _registry_lookup_devcontainer_manifest "test-project"
   [ "$status" -eq 0 ]
-  [ "$output" = "$config" ]
-}
-
-@test 'registry lookup expands $HOME in devcontainer path' {
-  local config="${HOME}/some/config.json"
-  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<'YAML'
-test-project:
-  devcontainer: $HOME/some/config.json
-YAML
-
-  run _registry_lookup_devcontainer "test-project"
-  [ "$status" -eq 0 ]
-  [ "$output" = "$config" ]
+  [ "$output" = "general" ]
 }
 
 @test "registry lookup returns empty for unknown project" {
   cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
 other-project:
-  devcontainer: /some/path.json
+  devcontainer-manifest: general
 YAML
 
-  run _registry_lookup_devcontainer "unknown-project"
+  run _registry_lookup_devcontainer_manifest "unknown-project"
   [ "$status" -eq 0 ]
   [ "$output" = "" ]
 }
 
 @test "registry lookup returns empty when file does not exist" {
-  run _registry_lookup_devcontainer "any-project"
+  run _registry_lookup_devcontainer_manifest "any-project"
   [ "$status" -eq 0 ]
   [ "$output" = "" ]
 }
@@ -150,7 +137,7 @@ proj:
   dockerfile: python-dev
 YAML
 
-  run _registry_lookup_devcontainer "proj"
+  run _registry_lookup_devcontainer_manifest "proj"
   [ "$status" -ne 0 ]
   [[ $output == *"Unrecognized key"* || $output == *"additional properties"* || $output == *"ailed"* ]]
 }
@@ -161,7 +148,18 @@ proj:
   image: devimg/foo:latest
 YAML
 
-  run _registry_lookup_devcontainer "proj"
+  run _registry_lookup_devcontainer_manifest "proj"
+  [ "$status" -ne 0 ]
+  [[ $output == *"Unrecognized key"* || $output == *"additional properties"* || $output == *"ailed"* ]]
+}
+
+@test "registry validation rejects legacy devcontainer key" {
+  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<'YAML'
+proj:
+  devcontainer: /tmp/legacy.json
+YAML
+
+  run _registry_lookup_devcontainer_manifest "proj"
   [ "$status" -ne 0 ]
   [[ $output == *"Unrecognized key"* || $output == *"additional properties"* || $output == *"ailed"* ]]
 }
@@ -171,7 +169,7 @@ YAML
 @test "registry validation accepts valid file" {
   cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
 my-repo:
-  devcontainer: /path/to/config.json
+  devcontainer-manifest: general
 YAML
 
   run _validate_registry "${XDG_CONFIG_HOME}/dctl/projects.yaml"
@@ -181,7 +179,7 @@ YAML
 @test "registry validation accepts explicit sibling_discovery false" {
   cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
 my-repo:
-  devcontainer: /path/to/config.json
+  devcontainer-manifest: general
   sibling_discovery: false
 YAML
 
@@ -221,15 +219,38 @@ YAML
   [[ $output == *"sibling_discovery"* ]]
 }
 
-@test "registry validation rejects non-string devcontainer" {
+@test "registry validation rejects non-string devcontainer-manifest" {
   cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
 my-repo:
-  devcontainer: 42
+  devcontainer-manifest: 42
 YAML
 
   run _validate_registry "${XDG_CONFIG_HOME}/dctl/projects.yaml"
   [ "$status" -ne 0 ]
-  [[ $output == *"devcontainer"* ]]
+  [[ $output == *"devcontainer-manifest"* ]]
+}
+
+@test "registry validation rejects devcontainer-manifest with disallowed characters" {
+  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
+my-repo:
+  devcontainer-manifest: ../escape
+YAML
+
+  run _validate_registry "${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  [ "$status" -ne 0 ]
+  # check-jsonschema reports a pattern failure; yq fallback names the project
+  [[ $output == *"my-repo"* || $output == *"pattern"* || $output == *"ailed"* ]]
+}
+
+@test "registry validation rejects devcontainer-manifest with slash" {
+  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
+my-repo:
+  devcontainer-manifest: foo/bar
+YAML
+
+  run _validate_registry "${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  [ "$status" -ne 0 ]
+  [[ $output == *"my-repo"* || $output == *"pattern"* || $output == *"ailed"* ]]
 }
 
 @test "registry validation accepts empty file" {
@@ -248,26 +269,25 @@ YAML
 
 # --- Registry-backed resolution ---
 
-@test "registry devcontainer overrides local config" {
+@test "registry manifest overrides local config" {
   # Local config exists
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "local"}\n' >"$(workspace_devcontainer_file)"
 
-  # Registry points to a different config
-  local reg_config="${TEST_TMPDIR}/registry-config.json"
-  printf '{"image": "registry"}\n' >"$reg_config"
+  mkdir -p "${XDG_CACHE_HOME}/dctl/devcontainer/general"
+  printf '{"image": "registry"}\n' >"${XDG_CACHE_HOME}/dctl/devcontainer/general/devcontainer.json"
 
   # Need canonical name for the current workspace
   local canonical
   canonical="$(resolve_canonical_project_name)"
   cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<YAML
 ${canonical}:
-  devcontainer: ${reg_config}
+  devcontainer-manifest: general
 YAML
 
   run resolve_devcontainer_config
   [ "$status" -eq 0 ]
-  [[ $output == *"registry-config.json" ]]
+  [[ $output == *"/dctl/devcontainer/general/devcontainer.json" ]]
 }
 
 # --- Sibling discovery opt-out ---
@@ -294,39 +314,27 @@ YAML
 @test "register_project_defaults creates registry from scratch" {
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
 
-  run register_project_defaults "proj-a" "/tmp/proj-a/devcontainer.json"
+  run register_project_defaults "proj-a" "general"
   [ "$status" -eq 0 ]
   [ -f "$registry" ]
-  [ "$(yq -r '."proj-a".devcontainer' "$registry")" = "/tmp/proj-a/devcontainer.json" ]
+  [ "$(yq -r '.["proj-a"]["devcontainer-manifest"]' "$registry")" = "general" ]
   [ "$(yq -r '."proj-a" | has("dockerfile")' "$registry")" = "false" ]
   [ "$(yq -r '."proj-a" | has("image")' "$registry")" = "false" ]
   [ "$(yq -r '."proj-a" | has("sibling_discovery")' "$registry")" = "false" ]
-}
-
-@test 'register_project_defaults stores $HOME in devcontainer path' {
-  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
-  local home_path="${HOME}/config/devcontainer.json"
-
-  run register_project_defaults "proj-home" "$home_path"
-  [ "$status" -eq 0 ]
-  [ -f "$registry" ]
-  # Raw YAML should contain $HOME, not expanded path
-  # shellcheck disable=SC2016
-  [[ "$(yq -r '."proj-home".devcontainer' "$registry")" == '$HOME'* ]]
 }
 
 @test "register_project_defaults skips existing project with warning" {
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
   cat >"$registry" <<'YAML'
 proj-a:
-  devcontainer: /tmp/original.json
+  devcontainer-manifest: general
   sibling_discovery: false
 YAML
 
-  run register_project_defaults "proj-a" "/tmp/new.json"
+  run register_project_defaults "proj-a" "python"
   [ "$status" -eq 0 ]
   [[ $output == *"already registered"* ]]
-  [ "$(yq -r '."proj-a".devcontainer' "$registry")" = "/tmp/original.json" ]
+  [ "$(yq -r '.["proj-a"]["devcontainer-manifest"]' "$registry")" = "general" ]
   [ "$(yq -r '."proj-a".sibling_discovery' "$registry")" = "false" ]
 }
 
@@ -334,13 +342,13 @@ YAML
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
   cat >"$registry" <<'YAML'
 proj-a:
-  devcontainer: /tmp/original.json
+  devcontainer-manifest: general
   sibling_discovery: false
 YAML
 
-  run register_project_defaults "proj-a" "/tmp/new.json" "true"
+  run register_project_defaults "proj-a" "python" "true"
   [ "$status" -eq 0 ]
-  [ "$(yq -r '."proj-a".devcontainer' "$registry")" = "/tmp/new.json" ]
+  [ "$(yq -r '.["proj-a"]["devcontainer-manifest"]' "$registry")" = "python" ]
   [ "$(yq -r '."proj-a" | has("dockerfile")' "$registry")" = "false" ]
   [ "$(yq -r '."proj-a" | has("image")' "$registry")" = "false" ]
   [ "$(yq -r '."proj-a".sibling_discovery' "$registry")" = "false" ]
@@ -350,13 +358,13 @@ YAML
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
   cat >"$registry" <<'YAML'
 proj-a:
-  devcontainer: /tmp/original.json
+  devcontainer-manifest: general
   sibling_discovery: true
 YAML
 
-  run register_project_defaults "proj-a" "/tmp/new.json" "true"
+  run register_project_defaults "proj-a" "python" "true"
   [ "$status" -eq 0 ]
-  [ "$(yq -r '."proj-a".devcontainer' "$registry")" = "/tmp/new.json" ]
+  [ "$(yq -r '.["proj-a"]["devcontainer-manifest"]' "$registry")" = "python" ]
   [ "$(yq -r '."proj-a" | has("dockerfile")' "$registry")" = "false" ]
   [ "$(yq -r '."proj-a" | has("image")' "$registry")" = "false" ]
   [ "$(yq -r '."proj-a" | has("sibling_discovery")' "$registry")" = "false" ]
@@ -366,13 +374,13 @@ YAML
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
   cat >"$registry" <<'YAML'
 proj-a:
-  devcontainer: /tmp/proj-a.json
+  devcontainer-manifest: general
 YAML
 
-  run register_project_defaults "proj-b" "/tmp/proj-b.json"
+  run register_project_defaults "proj-b" "python"
   [ "$status" -eq 0 ]
-  [ "$(yq -r '."proj-a".devcontainer' "$registry")" = "/tmp/proj-a.json" ]
-  [ "$(yq -r '."proj-b".devcontainer' "$registry")" = "/tmp/proj-b.json" ]
+  [ "$(yq -r '.["proj-a"]["devcontainer-manifest"]' "$registry")" = "general" ]
+  [ "$(yq -r '.["proj-b"]["devcontainer-manifest"]' "$registry")" = "python" ]
   [ "$(yq -r '."proj-b" | has("dockerfile")' "$registry")" = "false" ]
   [ "$(yq -r '."proj-b" | has("image")' "$registry")" = "false" ]
   [ "$(yq -r '."proj-b" | has("sibling_discovery")' "$registry")" = "false" ]
@@ -381,9 +389,9 @@ YAML
 @test "register_project_defaults writes minimum-viable entry" {
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
 
-  run register_project_defaults "proj-a" "/tmp/proj-a.json"
+  run register_project_defaults "proj-a" "general"
   [ "$status" -eq 0 ]
-  [ "$(yq -r '."proj-a".devcontainer' "$registry")" = "/tmp/proj-a.json" ]
+  [ "$(yq -r '.["proj-a"]["devcontainer-manifest"]' "$registry")" = "general" ]
   [ "$(yq -r '."proj-a" | has("dockerfile")' "$registry")" = "false" ]
   [ "$(yq -r '."proj-a" | has("image")' "$registry")" = "false" ]
   [ "$(yq -r '."proj-a" | has("sibling_discovery")' "$registry")" = "false" ]
@@ -392,7 +400,7 @@ YAML
 @test "register_project_defaults fails on invalid existing registry" {
   printf 'not: valid: yaml: [broken\n' >"${XDG_CONFIG_HOME}/dctl/projects.yaml"
 
-  run register_project_defaults "proj-a" "/tmp/proj-a.json"
+  run register_project_defaults "proj-a" "general"
   [ "$status" -ne 0 ]
   [[ $output == *"Invalid YAML"* || $output == *"ailed"* ]]
 }
@@ -401,9 +409,23 @@ YAML
   rm -rf "${XDG_CONFIG_HOME}/dctl"
   [ ! -d "${XDG_CONFIG_HOME}/dctl" ]
 
-  run register_project_defaults "proj-a" "/tmp/proj-a.json"
+  run register_project_defaults "proj-a" "general"
   [ "$status" -eq 0 ]
   [ -d "${XDG_CONFIG_HOME}/dctl" ]
   [ -f "${XDG_CONFIG_HOME}/dctl/projects.yaml" ]
-  [ "$(yq -r '."proj-a".devcontainer' "${XDG_CONFIG_HOME}/dctl/projects.yaml")" = "/tmp/proj-a.json" ]
+  [ "$(yq -r '.["proj-a"]["devcontainer-manifest"]' "${XDG_CONFIG_HOME}/dctl/projects.yaml")" = "general" ]
+}
+
+@test "register_project_defaults force scrubs legacy devcontainer key" {
+  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  cat >"$registry" <<'YAML'
+proj-a:
+  devcontainer: $HOME/cache/path/devcontainer.json
+  sibling_discovery: false
+YAML
+
+  run register_project_defaults "proj-a" "general" "true"
+  [ "$status" -eq 0 ]
+  [ "$(yq -r '.["proj-a"]["devcontainer-manifest"]' "$registry")" = "general" ]
+  [ "$(yq -r '.["proj-a"] | has("devcontainer")' "$registry")" = "false" ]
 }

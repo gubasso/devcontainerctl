@@ -160,7 +160,7 @@ generate_cached_devcontainer() {
 
   local manifest cached_path
   manifest="$(config_compose_manifest_path "$template")"
-  cached_path="$(deployed_devcontainer_path "$template")"
+  cached_path="$(devcontainer_cache_path_for_manifest "$template")"
 
   local -a config_layers=()
   mapfile -t config_layers < <(discover_config_layers "$template")
@@ -209,7 +209,7 @@ ensure_image_available_for_devcontainer() {
   DCTL_INIT_IMAGE_STATUS=""
   DCTL_INIT_IMAGE_REF=""
 
-  cached_path="$(deployed_devcontainer_path "$devcontainer_name")"
+  cached_path="$(devcontainer_cache_path_for_manifest "$devcontainer_name")"
   config_path="$(config_devcontainer_path "$devcontainer_name")"
   if [[ -f $cached_path ]]; then
     image_ref="$(_infer_image_from_devcontainer_json "$cached_path" || true)"
@@ -278,28 +278,26 @@ cmd_init() {
 
   _validate_deployed_devcontainer "$devcontainer"
 
-  local canonical_name existing_registry_path registry_force=false
+  local canonical_name existing_manifest registry_force=false
   canonical_name="$(resolve_canonical_project_name)"
 
-  if command -v yq >/dev/null 2>&1; then
-    existing_registry_path="$(_registry_lookup_devcontainer "$canonical_name")"
-  else
-    existing_registry_path=""
-  fi
-
+  # Skip the validating registry lookup when --force is set: the lookup runs
+  # _validate_registry, which would reject a legacy `devcontainer:` key and
+  # exit before register_project_defaults could scrub it. The "Switching"
+  # warning only fires on the non-force branch, so the lookup is only needed
+  # there.
   if [[ $force == true ]]; then
     registry_force=true
-  elif [[ -n $existing_registry_path ]]; then
-    if [[ ! -f $existing_registry_path ]]; then
-      warn "Registered config path no longer exists: $existing_registry_path; re-registering"
+    existing_manifest=""
+  else
+    if command -v yq >/dev/null 2>&1; then
+      existing_manifest="$(_registry_lookup_devcontainer_manifest "$canonical_name")"
+    else
+      existing_manifest=""
+    fi
+    if [[ -n $existing_manifest && $existing_manifest != "$devcontainer" ]]; then
+      warn "Switching project '$canonical_name' from manifest '$existing_manifest' to '$devcontainer'"
       registry_force=true
-    elif [[ $existing_registry_path == "${DCTL_DEVCONTAINER_CACHE_DIR}/"* ]]; then
-      local registered_template_name
-      registered_template_name="$(basename "$(dirname "$existing_registry_path")")"
-      if [[ -n $registered_template_name && $registered_template_name != "$devcontainer" ]]; then
-        warn "Switching project '$canonical_name' from template '$registered_template_name' to '$devcontainer'"
-        registry_force=true
-      fi
     fi
   fi
 
@@ -310,7 +308,7 @@ cmd_init() {
 
   ensure_image_available_for_devcontainer "$devcontainer"
 
-  register_project_defaults "$canonical_name" "$deployed_config" "$registry_force"
+  register_project_defaults "$canonical_name" "$devcontainer" "$registry_force"
 
   local test_status="passed"
   if ! DCTL_CLI_CONFIG="$deployed_config" cmd_test; then
