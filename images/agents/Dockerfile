@@ -20,43 +20,53 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Package names follow openSUSE conventions. Verify availability with:
 #   docker run --rm opensuse/leap:16.0 bash -c "zypper --non-interactive refresh && zypper info <pkg>"
 # Or check: https://software.opensuse.org/package/<pkg>
+# Retry loop: openSUSE CDN mirrors can temporarily 404 individual RPMs
+# during repo updates. Up to 3 attempts with metadata refresh between retries.
 # hadolint ignore=DL3037
 RUN zypper --non-interactive --gpg-auto-import-keys refresh \
-    && zypper --non-interactive install --no-recommends \
-        ca-certificates \
-        ca-certificates-mozilla \
-        curl \
-        git-core \
-        unzip \
-        ripgrep \
-        fd \
-        bat \
-        fish \
-        jq \
-        tree \
-        htop \
-        sudo \
-        openssh-clients \
-        rsync \
-        stow \
-        # Kitty terminal: terminfo for xterm-kitty (enables keyboard protocol inside containers)
-        kitty-terminfo \
-        # Build dependencies (for Python wheels, Rust crates, etc.)
-        gcc \
-        gcc-c++ \
-        make \
-        binutils \
-        glibc-devel \
-        libffi-devel \
-        libopenssl-3-devel \
-        pkgconf-pkg-config \
-        clang-devel \
-        llvm-devel \
-        dbus-1-devel \
-        # X11 build dependencies (suckless: dwm, st, dmenu, etc.)
-        libX11-devel \
-        libXft-devel \
-        libXinerama-devel \
+    && for attempt in 1 2 3; do \
+        echo "==> Installing zypper packages (attempt ${attempt}/3)..." \
+        && zypper --non-interactive install --no-recommends \
+            ca-certificates \
+            ca-certificates-mozilla \
+            curl \
+            git-core \
+            unzip \
+            ripgrep \
+            fd \
+            bat \
+            fish \
+            jq \
+            tree \
+            htop \
+            sudo \
+            openssh-clients \
+            rsync \
+            stow \
+            kitty-terminfo \
+            gcc \
+            gcc-c++ \
+            make \
+            binutils \
+            glibc-devel \
+            libffi-devel \
+            libopenssl-3-devel \
+            pkgconf-pkg-config \
+            clang-devel \
+            llvm-devel \
+            dbus-1-devel \
+            libX11-devel \
+            libXft-devel \
+            libXinerama-devel \
+        && break \
+        || if [ "$attempt" -lt 3 ]; then \
+            echo "==> Attempt ${attempt}/3 failed — refreshing mirrors and retrying in 5s..."; \
+            sleep 5; \
+            zypper --non-interactive --gpg-auto-import-keys refresh; \
+        else \
+            echo "==> ERROR: zypper install failed after 3 attempts"; exit 1; \
+        fi; \
+    done \
     && zypper clean --all
 
 # Non-root user with passwordless sudo
