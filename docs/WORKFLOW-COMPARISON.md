@@ -467,14 +467,16 @@ declared layers in order. For example, `python.yaml`:
 ```yaml
 layers:
   - base      # shared infrastructure (auth mounts, terminal env)
+  - agents    # shared agents layer (seccomp profile, agent CLI mounts)
   - python    # leaf layer (image tag, cache volumes, bootstrap)
 ```
 
-This merges `base/devcontainer.json` then `python/devcontainer.json` into
+This merges `base/devcontainer.json`, `agents/devcontainer.json`, then
+`python/devcontainer.json` into
 `~/.cache/dctl/devcontainer/python/devcontainer.json`. Both Python projects
 reuse the exact same deployed config layers and image. The Rust project uses a
-different manifest (`rust.yaml` with `layers: [base, rust]`) and image, but
-shares the same `base` layer.
+different manifest (`rust.yaml` with `layers: [base, agents, rust]`) and image,
+but shares the same `base` and `agents` layers.
 
 When the team adds a new shared mount, Ana edits `base` once, runs `dctl init` in each project to refresh the cache, and every workspace picks up the change. No files to copy, no duplication to maintain.
 

@@ -69,8 +69,11 @@ RUN zypper --non-interactive --gpg-auto-import-keys refresh \
     done \
     && zypper clean --all
 
-# Non-root user with passwordless sudo
+# Non-root user with package-management-only passwordless sudo
 # USERNAME must match host $USER for config file consistency
+# (sudo intentionally restricted to /usr/bin/zypper — agents and devcontainer
+# features can still install packages, but the agent cannot run arbitrary
+# commands as root)
 ARG USERNAME
 ARG USER_UID=1000
 ARG USER_GID=1000
@@ -79,7 +82,7 @@ RUN test -n "$USERNAME" || { echo "USERNAME build arg is required"; exit 1; } \
     && groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/bash $USERNAME \
     && rm -f /home/$USERNAME/.bashrc /home/$USERNAME/.bash_logout /home/$USERNAME/.profile \
-    && echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
+    && echo "$USERNAME ALL=(root) NOPASSWD: /usr/bin/zypper" > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME
 
 # Pre-create directories for mounts

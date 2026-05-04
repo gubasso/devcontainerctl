@@ -15,6 +15,7 @@ of layers. Example (`python.yaml`):
 ```yaml
 layers:
   - base
+  - agents
   - python
 ```
 
@@ -29,6 +30,7 @@ Built-in layer directories and manifests in the repository:
 **Layer directories** (each contains a `devcontainer.json`):
 
 - `base/` — shared infrastructure layer (remote user, auth mounts, terminal env)
+- `agents/` — shared agents layer (bubblewrap-friendly security profile and agent CLI config mounts)
 - `general/` — minimal general-purpose sandbox on `devimg/agents:latest`
 - `coordinator/` — coordinator workflow with parent-area visibility
 - `python/` — Python project config on `devimg/python-dev:latest`
@@ -37,11 +39,11 @@ Built-in layer directories and manifests in the repository:
 
 **Manifests** (each declares a composition):
 
-- `general.yaml` — layers: `[base, general]`
-- `coordinator.yaml` — layers: `[base, coordinator]`
-- `python.yaml` — layers: `[base, python]`
-- `rust.yaml` — layers: `[base, rust]`
-- `zig.yaml` — layers: `[base, zig]`
+- `general.yaml` — layers: `[base, agents, general]`
+- `coordinator.yaml` — layers: `[base, agents, coordinator]`
+- `python.yaml` — layers: `[base, agents, python]`
+- `rust.yaml` — layers: `[base, agents, rust]`
+- `zig.yaml` — layers: `[base, agents, zig]`
 
 These install to `~/.local/share/dctl/devcontainers/`.
 

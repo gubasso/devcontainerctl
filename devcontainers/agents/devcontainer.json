@@ -7,9 +7,9 @@
 //
 //   1. Mounts for each agent's config directory (so auth + history persist
 //      across container recreations).
-//   2. `runArgs` that relax Docker's default security profile enough for
-//      agents that internally use bubblewrap (`bwrap`) to sandbox shell
-//      tool calls — primarily OpenAI Codex CLI.
+//   2. `runArgs` that allow agents to use bubblewrap (`bwrap`) for an
+//      internal sandbox — primarily OpenAI Codex CLI — while keeping a
+//      meaningful syscall filter applied to the container.
 //
 // -----------------------------------------------------------------------------
 // Why the runArgs below exist
@@ -17,62 +17,40 @@
 //
 // THE PROBLEM
 // -----------
-// Some agents — most notably OpenAI Codex CLI — wrap every shell command they
-// execute in bubblewrap (`bwrap`). bwrap is a sandboxing tool that gives the
-// executed command a restricted filesystem view, so a rogue command cannot
-// read or write paths outside an explicit allowlist.
-//
-// To create its sandbox, bwrap calls the Linux kernel primitive
+// Some agents — most notably OpenAI Codex CLI — wrap every shell command
+// they execute in bubblewrap (`bwrap`). bwrap creates its sandbox by calling
 //
 //     unshare(CLONE_NEWUSER)
 //
-// which creates a new "user namespace" — an isolated view of UIDs/GIDs. This
-// is called an *unprivileged* user namespace because it works without real
-// root: the process gets fake-root inside the namespace, mapped back to an
-// unprivileged UID on the host.
-//
-// Without the runArgs below, running Codex (or any bwrap-based agent) inside
-// a dctl container fails with:
-//
-//     bwrap: No permissions to create a new namespace, likely because the
-//     kernel does not allow non-privileged user namespaces.
-//
-// WHY IT FAILS (NESTED CONTAINER / NESTED NAMESPACE)
-// --------------------------------------------------
-// dctl starts your workspace as a Docker container — which is itself an
-// isolated environment. Codex then tries to create ANOTHER namespace INSIDE
-// that container. Docker blocks this by default via two independent security
-// mechanisms:
-//
-//   1. SECCOMP (syscall filter)
-//      Docker's default seccomp profile blocks unshare(CLONE_NEWUSER) from
-//      unprivileged processes. Rationale: creating user namespaces from
-//      inside a container has historically been an attack surface for
-//      container escape, so Docker errs on the side of caution.
-//
-//   2. APPARMOR (Linux Security Module)
-//      On Ubuntu 23.10+ and 24.04+, the `docker-default` AppArmor profile
-//      independently denies `unshare` of user namespaces. Even if seccomp
-//      were bypassed, AppArmor would still say no.
-//
-// Either one alone is enough for bwrap's unshare call to return EPERM.
+// to make a new user namespace, plus `clone`, `setns`, `mount`, `umount2`,
+// and `pivot_root` to set up the inner mount view. Docker's default
+// seccomp profile and Ubuntu's `docker-default` AppArmor profile both
+// block those operations from unprivileged callers.
 //
 // WHAT EACH runArg DOES
 // ---------------------
-//   --security-opt seccomp=unconfined
-//       Do not apply the syscall filter to this container.
-//       unshare(CLONE_NEWUSER) becomes reachable by unprivileged processes
-//       inside the container.
+//   --security-opt seccomp=<path>/seccomp-bwrap.json
+//       Hand-written syscall filter shipped with this layer. It is
+//       default-ALLOW with explicit EPERM denies on the
+//       highest-risk syscalls historically used in container escape and
+//       kernel privilege-escalation CVEs (bpf, userfaultfd,
+//       perf_event_open, keyctl, kexec_*, init_module, iopl/ioperm,
+//       reboot, syslog, swapon/swapoff, and a handful of legacy
+//       syscalls). Strictly stronger than seccomp=unconfined; deliberately
+//       looser than moby's default profile so bubblewrap, build tools,
+//       and ad-hoc debugging (`strace`, `gdb`) all keep working out of
+//       the box. See the file's `_meta` block for the full design
+//       rationale and references.
 //
 //   --security-opt apparmor=unconfined
 //       Do not load the AppArmor profile for this container. Required on
-//       Ubuntu 23.10/24.04+ where AppArmor is the second, independent block
-//       on `unshare`.
+//       Ubuntu 23.10/24.04+ where AppArmor independently denies `unshare`
+//       of user namespaces.
 //
 //   --security-opt systempaths=unconfined
 //       Do not mask /proc/sys and similar paths. bwrap reads some of those
 //       paths to probe kernel support for user namespaces; with them masked
-//       it may see empty paths and bail out before even trying.
+//       it may bail out before even trying.
 //
 // WHY THIS IS SAFE ENOUGH FOR A DEV WORKFLOW
 // ------------------------------------------
@@ -81,36 +59,53 @@
 // the user the container runs as. The container still runs as the same
 // non-root user, with the same cgroups, same network scope, same everything.
 //
-// Only Docker's DEFENSIVE policies are relaxed: processes inside the
-// container can now create nested namespaces — something the unprivileged
-// user inside already *could* do as themselves if those defensive policies
-// were not there. Since dctl is already the isolation boundary between your
-// workspace and your host, this is an acceptable tradeoff on a developer
-// machine.
+// Docker's DEFENSIVE policies are relaxed in narrow, targeted ways: the
+// syscall filter still blocks the syscalls most often abused for kernel
+// privilege escalation; AppArmor and the /proc masking are off so bwrap
+// can probe kernel namespace support. Since dctl is already the isolation
+// boundary between your workspace and your host, this is an acceptable
+// tradeoff on a developer machine.
 //
-// ALTERNATIVE (not applied here)
-// ------------------------------
-// Instead of making bwrap work, you can tell Codex to skip its internal
-// sandbox entirely by setting in ~/.codex/config.toml:
+// SECCOMP PROFILE PATH
+// --------------------
+// The path under runArgs is resolved on the host by the devcontainer CLI
+// before being passed to docker. The file is shipped by `make install`,
+// deployed to user config by `dctl deploy`, and never referenced from
+// inside the container. There is no fallback to seccomp=unconfined: if
+// the file is missing, the container fails to start.
 //
-//     sandbox_mode = "danger-full-access"
+// The literal path uses `${localEnv:HOME}/.config/dctl/...`, which matches the
+// rest of this repo's idiom (see the bind mounts below) and assumes the user
+// has not overridden XDG_CONFIG_HOME. If you do set XDG_CONFIG_HOME to a
+// non-default value, `dctl deploy` writes the seccomp file under
+// `$XDG_CONFIG_HOME/dctl/devcontainer/agents/` but the runArgs literal still
+// reads `~/.config/dctl/...` — symlink the deployed file into ~/.config/dctl/
+// or override `runArgs` in your leaf layer.
 //
-// That avoids the nested namespace collision by never invoking bwrap at all.
-// This layer deliberately keeps bwrap functional so agents' defense-in-depth
-// still works if they invoke it — you can layer the Codex config opt-out on
-// top if desired.
+// SUDO HARDENING — SCOPE LIMIT
+// ----------------------------
+// images/agents/Dockerfile narrows passwordless sudo from `NOPASSWD: ALL` to
+// `NOPASSWD: /usr/bin/zypper`. This blocks the common case of `sudo <random
+// command>` but does not eliminate root execution: `sudo zypper install
+// /path/to/local.rpm` will run that RPM's %post script as root, and
+// `--allow-unsigned-rpm` lifts the signature requirement. A determined agent
+// inside the container can still gain root via a crafted local RPM. The
+// trade-off is conscious: zypper covers ~all legitimate package-install needs
+// and stops casual `sudo cp /etc/x ...` style abuse. For a fully sudo-free
+// agent variant, build your own image without the sudoers.d entry.
 //
 // REFERENCES
 // ----------
+//   https://docs.docker.com/engine/security/seccomp/
+//   https://github.com/moby/profiles/blob/main/seccomp/default.json
 //   https://developers.openai.com/codex/concepts/sandboxing
-//   https://github.com/openai/codex/issues/16018
-//   https://github.com/openai/codex/issues/16076
 //   https://github.com/containers/bubblewrap
+//   https://emirb.github.io/blog/microvm-2026/
 //
 // =============================================================================
 {
   "runArgs": [
-    "--security-opt", "seccomp=unconfined",
+    "--security-opt", "seccomp=${localEnv:HOME}/.config/dctl/devcontainer/agents/seccomp-bwrap.json",
     "--security-opt", "apparmor=unconfined",
     "--security-opt", "systempaths=unconfined"
   ],

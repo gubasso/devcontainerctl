@@ -98,6 +98,7 @@ Example:
 # rust.yaml
 layers:
   - base    # shared — reconciled on every deploy
+  - agents  # shared — reconciled on every deploy
   - rust    # leaf — created once, then skip-if-exists
 ```
 

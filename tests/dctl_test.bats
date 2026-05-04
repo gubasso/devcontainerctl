@@ -1313,6 +1313,44 @@ JSON
   [ "$(jq -r '.mounts[1].target' "$deployed")" = "/top" ]
 }
 
+@test "cmd_deploy general deploys agents seccomp asset and merged runArgs reference it" {
+  create_base_template_fixture
+  mkdir -p "${XDG_DATA_HOME}/dctl/devcontainers/agents"
+  cat >"${XDG_DATA_HOME}/dctl/devcontainers/agents/devcontainer.json" <<'JSON'
+{
+  "runArgs": [
+    "--security-opt",
+    "seccomp=${localEnv:HOME}/.config/dctl/devcontainer/agents/seccomp-bwrap.json",
+    "--security-opt",
+    "apparmor=unconfined",
+    "--security-opt",
+    "systempaths=unconfined"
+  ]
+}
+JSON
+  printf '{ "defaultAction": "SCMP_ACT_ALLOW" }\n' >"${XDG_DATA_HOME}/dctl/devcontainers/agents/seccomp-bwrap.json"
+  mkdir -p "${XDG_DATA_HOME}/dctl/devcontainers/general"
+  cat >"${XDG_DATA_HOME}/dctl/devcontainers/general/devcontainer.json" <<'JSON'
+{
+  "image": "devimg/agents:latest"
+}
+JSON
+  create_installed_manifest_fixture general base agents general
+
+  run cmd_deploy devcontainer general
+  [ "$status" -eq 0 ]
+  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/agents/devcontainer.json" ]
+  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/agents/seccomp-bwrap.json" ]
+
+  run generate_cached_devcontainer general
+  [ "$status" -eq 0 ]
+
+  local deployed="${XDG_CACHE_HOME}/dctl/devcontainer/general/devcontainer.json"
+  [ -f "$deployed" ]
+  # shellcheck disable=SC2016 # ${localEnv:HOME} is a devcontainer.json variable; must NOT be shell-expanded
+  [ "$(jq -r '.runArgs[1]' "$deployed")" = 'seccomp=${localEnv:HOME}/.config/dctl/devcontainer/agents/seccomp-bwrap.json' ]
+}
+
 @test "generate_cached_devcontainer reuses cache when fresh" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"

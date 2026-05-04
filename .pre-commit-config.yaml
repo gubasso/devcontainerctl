@@ -7,7 +7,7 @@ repos:
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
       - id: end-of-file-fixer
-      # pretty-format-json omitted: repo has no plain .json files (all are JSONC devcontainer.json)
+      # pretty-format-json omitted intentionally: the only plain .json file (devcontainers/agents/seccomp-bwrap.json) is hand-written and reads better with the structure it has; check-json5 already validates syntax
       - id: check-added-large-files
         args: ["--maxkb=2048"]
       - id: detect-private-key

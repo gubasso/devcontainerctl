@@ -25,6 +25,7 @@ ordered list of layers to compose. For example, `python.yaml`:
 ```yaml
 layers:
   - base      # shared infrastructure (auth mounts, terminal env, remote user)
+  - agents    # shared agents layer (bubblewrap-friendly seccomp profile, agent CLI mounts)
   - python    # leaf layer (image tag, cache volumes, bootstrap commands)
 ```
 
@@ -45,11 +46,11 @@ the filename stem is the manifest name.
 
 | Config | Layers | Image |
 | --- | --- | --- |
-| `general` | base, general | `devimg/agents:latest` |
-| `coordinator` | base, coordinator | `devimg/agents:latest` |
-| `python` | base, python | `devimg/python-dev:latest` |
-| `rust` | base, rust | `devimg/rust-dev:latest` |
-| `zig` | base, zig | `devimg/zig-dev:latest` |
+| `general` | base, agents, general | `devimg/agents:latest` |
+| `coordinator` | base, agents, coordinator | `devimg/agents:latest` |
+| `python` | base, agents, python | `devimg/python-dev:latest` |
+| `rust` | base, agents, rust | `devimg/rust-dev:latest` |
+| `zig` | base, agents, zig | `devimg/zig-dev:latest` |
 
 ## Creating a Custom Manifest
 
@@ -60,6 +61,7 @@ To compose a custom layer stack, create a manifest in user config:
 name: myproject
 layers:
   - base
+  - agents      # include if you want the bundled seccomp profile + agent mounts
   - dotfiles    # optional personal layer (see examples/dotfiles/)
   - python      # leaf — last layer wins for scalar fields
 ```
