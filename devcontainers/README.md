@@ -24,7 +24,7 @@ Installed files under `~/.local/share/dctl/` are never used directly at runtime.
 into user config, and `dctl deploy image <name>` copies the associated managed image
 files into user config:
 
-- `~/.config/dctl/devcontainer/` — deployed manifests plus devcontainer.json layers
+- `~/.config/dctl/devcontainer/` — deployed manifests plus layer directories (each may contain `devcontainer.json` and any sibling assets such as a seccomp profile)
 - `~/.config/dctl/images/` — managed Dockerfile and helper scripts
 
 User config (`~/.config/dctl/`) is the sole runtime source for all operations:
@@ -40,6 +40,7 @@ ordered list of layers to compose into a single `devcontainer.json`:
 # python.yaml
 layers:
   - base      # shared layer — reconciled (overwritten) on every deploy
+  - agents    # shared layer — reconciled on every deploy (seccomp + agent CLI mounts)
   - python    # leaf layer — created on first deploy, then user-protected
 ```
 
@@ -66,6 +67,7 @@ No additional properties are allowed. The filename stem is the manifest name.
 | Directory | Role | Content |
 | --- | --- | --- |
 | `base/` | Shared foundation | Remote user, auth mounts, terminal env |
+| `agents/` | Shared agents layer | Bubblewrap-friendly security profile (custom seccomp + AppArmor/systempaths off) and agent CLI config mounts (Claude Code, Codex, Gemini) |
 | `general/` | Leaf for general | Minimal sandbox on `devimg/agents:latest` |
 | `coordinator/` | Leaf for coordinator | Read-only parent-area mount for sibling repos |
 | `python/` | Leaf for python | Poetry cache volume, pre-commit bootstrap |
@@ -76,11 +78,11 @@ No additional properties are allowed. The filename stem is the manifest name.
 
 | Manifest | Layers |
 | --- | --- |
-| `general.yaml` | `[base, general]` |
-| `coordinator.yaml` | `[base, coordinator]` |
-| `python.yaml` | `[base, python]` |
-| `rust.yaml` | `[base, rust]` |
-| `zig.yaml` | `[base, zig]` |
+| `general.yaml` | `[base, agents, general]` |
+| `coordinator.yaml` | `[base, agents, coordinator]` |
+| `python.yaml` | `[base, agents, python]` |
+| `rust.yaml` | `[base, agents, rust]` |
+| `zig.yaml` | `[base, agents, zig]` |
 
 A layer directory without a manifest (e.g. `base/`) is not selectable — it can
 only appear as a shared layer referenced by another manifest.

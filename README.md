@@ -75,6 +75,7 @@ selectable config is defined by a YAML manifest:
 # python.yaml — declares which layers compose this config
 layers:
   - base      # shared infrastructure (remote user, auth mounts, terminal env)
+  - agents    # shared agents layer (seccomp profile, agent CLI config mounts)
   - python    # leaf layer (image tag, cache volumes, bootstrap commands)
 ```
 

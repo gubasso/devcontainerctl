@@ -751,6 +751,7 @@ defined by a manifest that declares its layer composition:
 # python.yaml — shipped manifest
 layers:
   - base      # shared layer: remote user, auth mounts, terminal env
+  - agents    # shared layer: bubblewrap-friendly seccomp profile, agent CLI mounts
   - python    # leaf layer: image tag, cache volumes, bootstrap commands
 ```
 
@@ -886,6 +887,7 @@ manifest in user config:
 name: myproject
 layers:
   - base
+  - agents      # include if you want the bundled seccomp profile + agent mounts
   - dotfiles    # personal layer (see examples/dotfiles/)
   - python      # leaf — last layer, user-protected on deploy
 ```
@@ -1082,7 +1084,8 @@ docker compose -f .devcontainer/docker-compose.yml down
 
 ### Default Security Profile
 
-- `sudo NOPASSWD` available
+- Passwordless sudo is restricted to `/usr/bin/zypper` only (agents image); the common `sudo <arbitrary command>` path is gone, but `sudo zypper install /local.rpm` will still run that RPM's `%post` script as root, so this is a defense-in-depth narrowing rather than a hard root-execution boundary
+- Agents devcontainer layer ships a hand-written seccomp profile that blocks bpf, userfaultfd, perf_event_open, keyctl, kexec_*, and other historically dangerous syscalls (default-allow + targeted denies; see devcontainers/agents/seccomp-bwrap.json)
 - Safety comes from **mount hygiene**
 
 ```jsonc
@@ -1105,7 +1108,7 @@ docker compose -f .devcontainer/docker-compose.yml down
 - Exfiltration of any readable mounted secret over the network
 - Root inside the container reading all mounted secrets
 
-**Hardening options** (not covered in detail): For higher security, create image variants that remove sudo, add `no-new-privileges`, and drop all capabilities via `--cap-drop=ALL`.
+**Hardening already shipped**: the agents image restricts sudo to /usr/bin/zypper, and the agents devcontainer layer ships a hand-written seccomp profile that blocks the highest-risk container-escape / kernel-LPE syscalls. For higher security, swap the bundled profile for moby's default-deny baseline (see https://github.com/moby/profiles), drop all capabilities via --cap-drop=ALL, and add no-new-privileges in your leaf layer.
 
 ### What's Isolated
 

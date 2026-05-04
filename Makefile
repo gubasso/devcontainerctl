@@ -6,7 +6,7 @@ SYSTEMD_DIR ?= $(HOME)/.local/share/systemd/user
 INSTALL := install
 
 IMAGE_NAMES := agents python-dev rust-dev zig-dev
-DEVCONTAINER_DIRS := python rust zig general coordinator base
+DEVCONTAINER_DIRS := agents python rust zig general coordinator base
 DEVCONTAINER_MANIFESTS := general coordinator python rust zig
 LIB_FILES := common.sh ws.sh image.sh deploy.sh init.sh test.sh auth.sh config.sh
 
@@ -29,7 +29,11 @@ install:
 	$(INSTALL) -d "$(DATA_DIR)/devcontainers"
 	for template in $(DEVCONTAINER_DIRS); do \
 		$(INSTALL) -d "$(DATA_DIR)/devcontainers/$$template"; \
-		$(INSTALL) -m 644 "devcontainers/$$template/devcontainer.json" "$(DATA_DIR)/devcontainers/$$template/devcontainer.json"; \
+		for file in devcontainers/$$template/*; do \
+			[ -f "$$file" ] || continue; \
+			if [ -x "$$file" ]; then mode=755; else mode=644; fi; \
+			$(INSTALL) -m "$$mode" "$$file" "$(DATA_DIR)/devcontainers/$$template/$$(basename $$file)"; \
+		done; \
 	done
 	for manifest in $(DEVCONTAINER_MANIFESTS); do \
 		$(INSTALL) -m 644 "devcontainers/$${manifest}.yaml" "$(DATA_DIR)/devcontainers/$${manifest}.yaml"; \
@@ -58,7 +62,9 @@ uninstall:
 	done
 	rmdir "$(DATA_DIR)/images" 2>/dev/null || true
 	for template in $(DEVCONTAINER_DIRS); do \
-		rm -f "$(DATA_DIR)/devcontainers/$$template/devcontainer.json"; \
+		for file in devcontainers/$$template/*; do \
+			rm -f "$(DATA_DIR)/devcontainers/$$template/$$(basename $$file)"; \
+		done; \
 		rmdir "$(DATA_DIR)/devcontainers/$$template" 2>/dev/null || true; \
 	done
 	for manifest in $(DEVCONTAINER_MANIFESTS); do \
