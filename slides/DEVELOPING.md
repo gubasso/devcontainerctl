@@ -22,14 +22,14 @@ Edit any file under `slides/`; the browser hot-reloads on save.
 
 ## Project layout
 
-| Path | Purpose |
-| --- | --- |
-| `slides.md` | Main deck. Front matter at top configures theme, layout, transitions. Slides separated by `---`. |
-| `pages/*.md` | Imported sub-decks. Reference from `slides.md` with `<<< ./pages/imported-slides.md`. |
-| `components/*.vue` | Reusable Vue components. Use directly in markdown: `<Counter />`. |
-| `snippets/*.ts` | External code samples. Embed with `<<< @/snippets/external.ts`. |
-| `public/` | Static assets served at `/` (create as needed). |
-| `dist/` | Build output (gitignored). |
+| Path               | Purpose                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------ |
+| `slides.md`        | Main deck. Front matter at top configures theme, layout, transitions. Slides separated by `---`. |
+| `pages/*.md`       | Imported sub-decks. Reference from `slides.md` with `<<< ./pages/imported-slides.md`.            |
+| `components/*.vue` | Reusable Vue components. Use directly in markdown: `<Counter />`.                                |
+| `snippets/*.ts`    | External code samples. Embed with `<<< @/snippets/external.ts`.                                  |
+| `public/`          | Static assets served at `/` (create as needed).                                                  |
+| `dist/`            | Build output (gitignored).                                                                       |
 
 Full reference: <https://sli.dev/custom/directory-structure>.
 
@@ -73,6 +73,7 @@ Requires Playwright; on first run Slidev will prompt to install Chromium.
 
 - `npm run dev -- --remote` — expose the dev server on the LAN for a phone preview.
 - `npm run dev -- --port 4000` — change the port.
+- `npm run dev -- --open=false` — start the dev server without auto-opening a browser tab (the `dev` script passes `--open`, so override with `=false` rather than `--no-open`).
 - `slidev build --without-notes` — strip presenter notes from the published bundle.
 
 ## Resources

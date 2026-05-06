@@ -1,662 +1,1040 @@
 ---
-# try also 'default' to start simple
 theme: seriph
-# random image from a curated Unsplash collection by Anthony
-# like them? see https://unsplash.com/collections/94734566/slidev
-background: https://cover.sli.dev
-# some information about your slides (markdown enabled)
-title: Welcome to Slidev
+colorSchema: "all"
+background: "linear-gradient(135deg, #0E2730 0%, #173F4F 55%, #2E6B2A 100%)"
+title: dctl — Devcontainers without the boilerplate
 info: |
-  ## Slidev Starter Template
-  Presentation slides for developers.
-
-  Learn more at [Sli.dev](https://sli.dev)
-# apply UnoCSS classes to the current slide
+  ## devcontainerctl
+  Pre-built images and a unified CLI for AI-agent devcontainer sandboxes.
 class: text-center
-# https://sli.dev/features/drawing
+fonts:
+  sans: "Source Sans Pro, Open Sans"
+  serif: "Source Sans Pro"
+  mono: "Fira Code"
+  weights: "300,400,600,700"
+  italic: true
+  provider: google
 drawings:
   persist: false
-# slide transition: https://sli.dev/guide/animations.html#slide-transitions
 transition: slide-left
-# enable Comark Syntax: https://comark.dev/syntax/markdown
 comark: true
-# duration of the presentation
-duration: 35min
+duration: 15min
 ---
 
-# Welcome to Slidev
+# dctl
 
-Presentation slides for developers
+Devcontainers without the boilerplate
 
-<div @click="$slidev.nav.next" class="mt-12 py-1" hover:bg="white op-10">
-  Press Space for next page <carbon:arrow-right />
-</div>
-
-<div class="abs-br m-6 text-xl">
-  <button @click="$slidev.nav.openInEditor()" title="Open in Editor" class="slidev-icon-btn">
-    <carbon:edit />
-  </button>
-  <a href="https://github.com/slidevjs/slidev" target="_blank" class="slidev-icon-btn">
-    <carbon:logo-github />
-  </a>
+<div class="text-sm opacity-70 mt-8">
+A `snackbar` story — Docker → Dev Containers → dctl
 </div>
 
 <!--
-The last comment block of each slide will be treated as slide notes. It will be visible and editable in Presenter Mode along with the slide. [Read more in the docs](https://sli.dev/guide/syntax.html#notes)
+Frame the talk as a story about Ana, a backend dev whose container setup grows
+from one project to many, and watch the boilerplate compound.
 -->
 
 ---
-transition: fade-out
----
 
-# What is Slidev?
+## layout: default
 
-Slidev is a slides maker and presenter designed for developers, consist of the following features
+# Premises
 
-- 📝 **Text-based** - focus on the content with Markdown, and then style them later
-- 🎨 **Themable** - themes can be shared and re-used as npm packages
-- 🧑‍💻 **Developer Friendly** - code highlighting, live coding with autocompletion
-- 🤹 **Interactive** - embed Vue components to enhance your expressions
-- 🎥 **Recording** - built-in recording and camera view
-- 📤 **Portable** - export to PDF, PPTX, PNGs, or even a hostable SPA
-- 🛠 **Hackable** - virtually anything that's possible on a webpage is possible in Slidev
-<br>
-<br>
+If none of these sound like you, this project probably isn't for you.
 
-Read more about [Why Slidev?](https://sli.dev/guide/why)
+- <mdi-shield-lock class="inline text-brand" /> &nbsp; **You care about security.** Containers don't fix everything, but the attack surface shrinks a lot when your tools don't run on your host.
+
+- <mdi-arrow-split-vertical class="inline text-brand" /> &nbsp; **You want to multi-task.** Several containers and several agents against the same project — at the same time.
+
+- <mdi-file-code-outline class="inline text-brand-warn" /> &nbsp; **You prefer declarative + composable + shareable** config over imperative scripts that drift.
+
+- <mdi-robot-outline class="inline text-brand-deep" /> &nbsp; **You use AI agents** (Claude Code, Codex, Gemini) and want them isolated, with credentials forwarded automatically.
+
+- <mdi-toolbox-outline class="inline text-brand-accent" /> &nbsp; **Your agents need your tooling.** Pre-commit hooks, language servers, formatters, build/test tools (mise, poetry, cargo) — that's how Claude Code and Codex CLI close their feedback loop. The container should mirror the host dev environment, not approximate it.
+
+- <mdi-account-group-outline class="inline text-brand-warn" /> &nbsp; **You work on a team.** Onboarding should be one command, not a wiki page.
 
 <!--
-You can have `style` tag in markdown to override the style for the current page.
-Learn more: https://sli.dev/features/slide-scope-style
+These are premises, not promises. If they hold, the rest of the talk shows how
+much friction this project removes from a normal day.
 -->
 
-<style>
-h1 {
-  background-color: #2B90B6;
-  background-image: linear-gradient(45deg, #4EC5D4 10%, #146b8c 20%);
-  background-size: 100%;
-  -webkit-background-clip: text;
-  -moz-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  -moz-text-fill-color: transparent;
-}
-</style>
+---
+
+layout: center
+class: text-center
+background: 'linear-gradient(180deg, #173F4F 0%, #0E2730 100%)'
+
+---
+
+# Meet Ana
+
+<div class="flex justify-center gap-12 mt-12 text-7xl">
+  <mdi-account-tie-woman class="text-brand" />
+  <mdi-arrow-right class="text-gray-400 self-center text-4xl" />
+  <logos:python />
+</div>
+
+<div class="mt-12 text-xl opacity-80">
+Backend developer. Starts a new Python API: <code>snackbar-api</code>.<br/>
+Wants every tool inside a container. No host pollution.
+</div>
 
 <!--
-Here is another comment.
+Single project, single language, single developer. The simplest possible
+starting point. Watch what she has to write.
 -->
 
 ---
-transition: slide-up
-level: 2
----
 
-# Navigation
-
-Hover on the bottom-left corner to see the navigation's controls panel, [learn more](https://sli.dev/guide/ui#navigation-bar)
-
-## Keyboard Shortcuts
-
-|                                                     |                             |
-| --------------------------------------------------- | --------------------------- |
-| <kbd>right</kbd> / <kbd>space</kbd>                 | next animation or slide     |
-| <kbd>left</kbd>  / <kbd>shift</kbd><kbd>space</kbd> | previous animation or slide |
-| <kbd>up</kbd>                                       | previous slide              |
-| <kbd>down</kbd>                                     | next slide                  |
-
-<!-- https://sli.dev/guide/animations.html#click-animation -->
-<img
-  v-click
-  class="absolute -bottom-9 -left-7 w-80 opacity-50"
-  src="https://sli.dev/assets/arrow-bottom-left.svg"
-  alt=""
-/>
-<p v-after class="absolute bottom-23 left-45 opacity-30 transform -rotate-10">Here!</p>
-
----
 layout: two-cols
-layoutClass: gap-16
+layoutClass: gap-12
+
 ---
 
-# Table of contents
+# Step 1 — One project, pure Docker
 
-You can use the `Toc` component to generate a table of contents for your slides:
+Ana needs two artifacts in her repo:
 
-```html
-<Toc minDepth="1" maxDepth="1" />
-```
+<div class="mt-8 space-y-6">
 
-The title will be inferred from your slide content, or you can override it with `title` and `level` in your frontmatter.
+<div class="flex items-center gap-4">
+  <vscode-icons:file-type-docker class="text-5xl" />
+  <div>
+    <div class="font-mono text-sm">Dockerfile</div>
+    <div class="text-sm opacity-70">~45 lines: OS packages, gh CLI,<br/>non-root user, mise, pipx, npm agents</div>
+  </div>
+</div>
+
+<div class="flex items-center gap-4">
+  <vscode-icons:file-type-shell class="text-5xl" />
+  <div>
+    <div class="font-mono text-sm">run.sh</div>
+    <div class="text-sm opacity-70">Wrapper around <code>docker run</code><br/>with mounts, env, tokens</div>
+  </div>
+</div>
+
+<div class="flex items-center gap-4">
+  <mdi-console class="text-5xl text-brand-warn" />
+  <div>
+    <div class="font-mono text-sm">docker exec ... pre-commit install</div>
+    <div class="text-sm opacity-70">Manual post-create — every recreation</div>
+  </div>
+</div>
+
+<div class="flex items-center gap-4">
+  <mdi-console-line class="text-5xl text-brand" />
+  <div>
+    <div class="font-mono text-sm">docker exec -it snackbar-api-dev bash</div>
+    <div class="text-sm opacity-70">Attach a shell — then run <code>claude</code>,<br/>tests, the dev server, …</div>
+  </div>
+</div>
+
+</div>
 
 ::right::
 
-<Toc text-sm minDepth="1" maxDepth="2" />
+<div class="mt-12">
 
----
-layout: image-right
-image: https://cover.sli.dev
----
+<div class="text-sm opacity-70 mb-2">snackbar-api/run.sh</div>
 
-# Code
-
-Use code snippets and get the highlighting directly, and even types hover!
-
-```ts [filename-example.ts] {all|4|6|6-7|9|all} twoslash
-// TwoSlash enables TypeScript hover information
-// and errors in markdown code blocks
-// More at https://shiki.style/packages/twoslash
-import { computed, ref } from 'vue'
-
-const count = ref(0)
-const doubled = computed(() => count.value * 2)
-
-doubled.value = 2
+```bash
+docker run -d \
+  --name snackbar-api-dev \
+  --hostname snackbar-api-dev \
+  --workdir /workspaces/snackbar-api \
+  -v "$HOME/projects/snackbar-api:/workspaces/snackbar-api" \
+  -v "$HOME/.gitconfig:/home/ana/.gitconfig:ro" \
+  -v "$HOME/.config/gh:/home/ana/.config/gh" \
+  -v "$HOME/.config/glab-cli:/home/ana/.config/glab-cli" \
+  -v "$HOME/.claude:/home/ana/.claude" \
+  -v "$HOME/.claude.json:/home/ana/.claude.json" \
+  -v /tmp:/tmp \
+  -e TERM="${TERM}" \
+  -e COLORTERM="${COLORTERM:-truecolor}" \
+  -e GH_TOKEN="$(gh auth token)" \
+  -e GITLAB_TOKEN="$(glab auth status --show-token \
+       2>/dev/null | sed -n 's/.*Token: //p' | head -n1)" \
+  snackbar-api-dev:latest \
+  bash -lc "sleep infinity"
 ```
 
-<arrow v-click="[4, 5]" x1="350" y1="310" x2="195" y2="342" color="#953" width="2" arrowSize="1" />
-
-<!-- This allow you to embed external code blocks -->
-<<< @/snippets/external.ts#snippet
-
-<!-- Footer -->
-
-[Learn more](https://sli.dev/features/line-highlighting)
-
-<!-- Inline style -->
-<style>
-.footnotes-sep {
-  @apply mt-5 opacity-10;
-}
-.footnotes {
-  @apply text-sm opacity-75;
-}
-.footnote-backref {
-  display: none;
-}
-</style>
-
-<!--
-Notes can also sync with clicks
-
-[click] This will be highlighted after the first click
-
-[click] Highlighted with `count = ref(0)`
-
-[click:3] Last click (skip two clicks)
--->
-
----
-level: 2
----
-
-# Shiki Magic Move
-
-Powered by [shiki-magic-move](https://shiki-magic-move.netlify.app/), Slidev supports animations across multiple code snippets.
-
-Add multiple code blocks and wrap them with <code>````md magic-move</code> (four backticks) to enable the magic move. For example:
-
-````md magic-move {lines: true}
-```ts {*|2|*}
-// step 1
-const author = reactive({
-  name: 'John Doe',
-  books: [
-    'Vue 2 - Advanced Guide',
-    'Vue 3 - Basic Guide',
-    'Vue 4 - The Mystery'
-  ]
-})
-```
-
-```ts {*|1-2|3-4|3-4,8}
-// step 2
-export default {
-  data() {
-    return {
-      author: {
-        name: 'John Doe',
-        books: [
-          'Vue 2 - Advanced Guide',
-          'Vue 3 - Basic Guide',
-          'Vue 4 - The Mystery'
-        ]
-      }
-    }
-  }
-}
-```
-
-```ts
-// step 3
-export default {
-  data: () => ({
-    author: {
-      name: 'John Doe',
-      books: [
-        'Vue 2 - Advanced Guide',
-        'Vue 3 - Basic Guide',
-        'Vue 4 - The Mystery'
-      ]
-    }
-  })
-}
-```
-
-Non-code blocks are ignored.
-
-```vue
-<!-- step 4 -->
-<script setup>
-const author = {
-  name: 'John Doe',
-  books: [
-    'Vue 2 - Advanced Guide',
-    'Vue 3 - Basic Guide',
-    'Vue 4 - The Mystery'
-  ]
-}
-</script>
-```
-````
-
----
-
-# Components
-
-<div grid="~ cols-2 gap-4">
-<div>
-
-You can use Vue components directly inside your slides.
-
-We have provided a few built-in components like `<Tweet/>`, `<BlueSky/>`, and `<Youtube/>` that you can use directly. And adding your custom components is also super easy.
-
-```html
-<Counter :count="10" />
-```
-
-<!-- ./components/Counter.vue -->
-<Counter :count="10" m="t-4" />
-
-Check out [the guides](https://sli.dev/builtin/components.html) for more.
-
-</div>
-<div>
-
-```html
-<Tweet id="1390115482657726468" />
-```
-
-<Tweet id="1390115482657726468" scale="0.65" />
-
-</div>
 </div>
 
 <!--
-Presenter note with **bold**, *italic*, and ~~striked~~ text.
-
-Also, HTML elements are valid:
-<div class="flex w-full">
-  <span style="flex-grow: 1;">Left content</span>
-  <span>Right content</span>
-</div>
+Walk the audience through the highlights: container identity, workspace mount,
+shared auth/agent mounts, terminal env, token extraction. One typo and the
+container starts with broken state.
 -->
 
 ---
-class: px-20
+
+layout: default
+class: pain
+
 ---
 
-# Themes
+# Pain already visible
 
-Slidev comes with powerful theming support. Themes can provide styles, layouts, components, or even configurations for tools. Switching between themes by just **one edit** in your frontmatter:
+- ~45 lines of Dockerfile written from scratch
+- 15+ lines of `docker run` flags — kept in shell history or a wrapper script
+- Token extraction (`$(gh auth token)`, the `glab` + `sed` pipeline) is manual
+- `sleep infinity` is a keepalive hack she now owns
+- No post-create hook — `pre-commit install` must be re-run after every recreation
+- Any change to a mount = stop, remove, retype the whole command
 
-<div grid="~ cols-2 gap-2" m="t-2">
-
-```yaml
----
-theme: default
----
-```
-
-```yaml
----
-theme: seriph
----
-```
-
-<img border="rounded" src="https://github.com/slidevjs/themes/blob/main/screenshots/theme-default/01.png?raw=true" alt="">
-
-<img border="rounded" src="https://github.com/slidevjs/themes/blob/main/screenshots/theme-seriph/01.png?raw=true" alt="">
-
+<div class="mt-12 text-center text-2xl opacity-90">
+And this is the <span class="underline decoration-brand-warn decoration-2 underline-offset-4">simplest possible case</span>: one project, one developer, one language.
 </div>
 
-Read more about [How to use a theme](https://sli.dev/guide/theme-addon#use-theme) and
-check out the [Awesome Themes Gallery](https://sli.dev/resources/theme-gallery).
+<!--
+This is the floor, not the ceiling. The next step is what happens when reality
+shows up and she gets a second project.
+-->
 
 ---
 
-# Clicks Animations
-
-You can add `v-click` to elements to add a click animation.
-
-<div v-click>
-
-This shows up when you press <kbd>space</kbd> or <kbd>right</kbd>, or click outside the slide on the right.
-
-```html
-<div v-click>This shows up when you trigger a click animation.</div>
-```
-
-</div>
-
-<p v-click>
-You can also add modifiers to change the animation:
-</p>
-
-<div class="grid gap-3 mt-4 text-sm" style="grid-template-columns: repeat(3, 1fr) 1.5fr 1fr">
-  <div v-after.up class="p-3 rounded border border-primary/20 bg-primary/10">
-    <div class="font-mono text-xs opacity-60 mb-1">v-click.up</div>
-    <div>Slide from bottom</div>
-  </div>
-  <div v-click.fade-in class="p-3 rounded border border-primary/30 bg-primary/15">
-    <div class="font-mono text-xs opacity-60 mb-1">v-click.fade-in</div>
-    <div>Fade in</div>
-  </div>
-  <div v-click.fade class="p-3 rounded border border-primary/40 bg-primary/20">
-    <div class="font-mono text-xs opacity-60 mb-1">v-click.fade</div>
-    <div>Dim (0.5 opacity)</div>
-  </div>
-  <div v-click.fade.right.scale class="p-3 rounded border border-primary/50 bg-primary/25">
-    <div class="font-mono text-xs opacity-60 mb-1">v-click.fade.right.scale</div>
-    <div>Composed</div>
-  </div>
-  <div v-click.none class="p-3 rounded border border-primary/60 bg-primary/30">
-    <div class="font-mono text-xs opacity-60 mb-1">v-click.none</div>
-    <div>No transition</div>
-  </div>
-</div>
-
-<v-click>
-
-The <span v-mark.red="7"><code>v-mark</code> directive</span>
-also allows you to add
-<span v-mark.circle.orange="8">inline marks</span>
-, powered by [Rough Notation](https://roughnotation.com/):
-
-```html
-<span v-mark.underline.orange>inline markers</span>
-```
-
-</v-click>
-
-<div v-click mt-12>
-
-[Learn more](https://sli.dev/guide/animations#click-animation)
-
-</div>
-
----
-
-# Motions
-
-Motion animations are powered by [@vueuse/motion](https://motion.vueuse.org/), triggered by `v-motion` directive.
-
-```html
-<div
-  v-motion
-  :initial="{ x: -80 }"
-  :enter="{ x: 0 }"
-  :click-3="{ x: 80 }"
-  :leave="{ x: 1000 }"
->
-  Slidev
-</div>
-```
-
-<div class="w-60 relative">
-  <div class="relative w-40 h-40">
-    <img
-      v-motion
-      :initial="{ x: 800, y: -100, scale: 1.5, rotate: -50 }"
-      :enter="final"
-      class="absolute inset-0"
-      src="https://sli.dev/logo-square.png"
-      alt=""
-    />
-    <img
-      v-motion
-      :initial="{ y: 500, x: -100, scale: 2 }"
-      :enter="final"
-      class="absolute inset-0"
-      src="https://sli.dev/logo-circle.png"
-      alt=""
-    />
-    <img
-      v-motion
-      :initial="{ x: 600, y: 400, scale: 2, rotate: 100 }"
-      :enter="final"
-      class="absolute inset-0"
-      src="https://sli.dev/logo-triangle.png"
-      alt=""
-    />
-  </div>
-
-  <div
-    class="text-5xl absolute top-14 left-40 text-[#2B90B6] -z-1"
-    v-motion
-    :initial="{ x: -80, opacity: 0}"
-    :enter="{ x: 0, opacity: 1, transition: { delay: 2000, duration: 1000 } }">
-    Slidev
-  </div>
-</div>
-
-<!-- vue script setup scripts can be directly used in markdown, and will only affects current page -->
-<script setup lang="ts">
-const final = {
-  x: 0,
-  y: 0,
-  rotate: 0,
-  scale: 1,
-  transition: {
-    type: 'spring',
-    damping: 10,
-    stiffness: 20,
-    mass: 2
-  }
-}
-</script>
-
-<div
-  v-motion
-  :initial="{ x:35, y: 30, opacity: 0}"
-  :enter="{ y: 0, opacity: 1, transition: { delay: 3500 } }">
-
-[Learn more](https://sli.dev/guide/animations.html#motion)
-
-</div>
-
----
-
-# $\LaTeX$
-
-$\LaTeX$ is supported out-of-box. Powered by [$\KaTeX$](https://katex.org/).
-
-<div h-3 />
-
-Inline $\sqrt{3x-1}+(1+x)^2$
-
-Block
-$$ {1|3|all}
-\begin{aligned}
-\nabla \cdot \vec{E} &= \frac{\rho}{\varepsilon_0} \\
-\nabla \cdot \vec{B} &= 0 \\
-\nabla \times \vec{E} &= -\frac{\partial\vec{B}}{\partial t} \\
-\nabla \times \vec{B} &= \mu_0\vec{J} + \mu_0\varepsilon_0\frac{\partial\vec{E}}{\partial t}
-\end{aligned}
-$$
-
-[Learn more](https://sli.dev/features/latex)
-
----
-
-# Diagrams
-
-You can create diagrams / graphs from textual descriptions, directly in your Markdown.
-
-<div class="grid grid-cols-4 gap-5 pt-4 -mb-6">
-
-```mermaid {scale: 0.5, alt: 'A simple sequence diagram'}
-sequenceDiagram
-    Alice->John: Hello John, how are you?
-    Note over Alice,John: A typical interaction
-```
-
-```mermaid {theme: 'neutral', scale: 0.8}
-graph TD
-B[Text] --> C{Decision}
-C -->|One| D[Result 1]
-C -->|Two| E[Result 2]
-```
-
-```mermaid
-mindmap
-  root((mindmap))
-    Origins
-      Long history
-      ::icon(fa fa-book)
-      Popularisation
-        British popular psychology author Tony Buzan
-    Research
-      On effectiveness<br/>and features
-      On Automatic creation
-        Uses
-            Creative techniques
-            Strategic planning
-            Argument mapping
-    Tools
-      Pen and paper
-      Mermaid
-```
-
-```plantuml {scale: 0.7}
-@startuml
-
-package "Some Group" {
-  HTTP - [First Component]
-  [Another Component]
-}
-
-node "Other Groups" {
-  FTP - [Second Component]
-  [First Component] --> FTP
-}
-
-cloud {
-  [Example 1]
-}
-
-database "MySql" {
-  folder "This is my folder" {
-    [Folder 3]
-  }
-  frame "Foo" {
-    [Frame 4]
-  }
-}
-
-[Another Component] --> [Example 1]
-[Example 1] --> [Folder 3]
-[Folder 3] --> [Frame 4]
-
-@enduml
-```
-
-</div>
-
-Learn more: [Mermaid Diagrams](https://sli.dev/features/mermaid) and [PlantUML Diagrams](https://sli.dev/features/plantuml)
-
----
-foo: bar
-dragPos:
-  square: 691,32,167,_,-16
----
-
-# Draggable Elements
-
-Double-click on the draggable elements to edit their positions.
-
-<br>
-
-###### Directive Usage
-
-```md
-<img v-drag="'square'" src="https://sli.dev/logo.png">
-```
-
-<br>
-
-###### Component Usage
-
-```md
-<v-drag text-3xl>
-  <div class="i-carbon:arrow-up" />
-  Use the `v-drag` component to have a draggable container!
-</v-drag>
-```
-
-<v-drag pos="663,206,261,_,-15">
-  <div text-center text-3xl border border-main rounded>
-    Double-click me!
-  </div>
-</v-drag>
-
-<img v-drag="'square'" src="https://sli.dev/logo.png">
-
-###### Draggable Arrow
-
-```md
-<v-drag-arrow two-way />
-```
-
-<v-drag-arrow pos="67,452,253,46" two-way op70 />
-
----
-src: ./pages/imported-slides.md
-hide: false
----
-
----
-
-# Monaco Editor
-
-Slidev provides built-in Monaco Editor support.
-
-Add `{monaco}` to the code block to turn it into an editor:
-
-```ts {monaco}
-import { ref } from 'vue'
-import { emptyArray } from './external'
-
-const arr = ref(emptyArray(10))
-```
-
-Use `{monaco-run}` to create an editor that can execute the code directly in the slide:
-
-```ts {monaco-run}
-import { version } from 'vue'
-import { emptyArray, sayHello } from './external'
-
-sayHello()
-console.log(`vue ${version}`)
-console.log(emptyArray<number>(10).reduce(fib => [...fib, fib.at(-1)! + fib.at(-2)!], [1, 1]))
-```
-
----
 layout: center
 class: text-center
+background: 'linear-gradient(180deg, #173F4F 0%, #0E2730 100%)'
+
 ---
 
-# Learn More
+# Step 2 — A second project lands
 
-[Documentation](https://sli.dev) · [GitHub](https://github.com/slidevjs/slidev) · [Showcases](https://sli.dev/resources/showcases)
+<div class="flex justify-center items-center gap-10 mt-12 text-7xl">
+  <logos:python />
+  <mdi-plus class="text-3xl opacity-50 self-center" />
+  <vscode-icons:file-type-rust />
+</div>
 
-<PoweredBySlidev mt-10 />
+<div class="mt-12 text-xl opacity-80">
+<code>snackbar-api</code> (Python) is still going.<br/>
+Now she also owns <code>order-engine</code> — a Rust service.
+</div>
+
+<div class="mt-10 text-lg opacity-70">
+Same base setup. Different language toolchain. Different caches. Different post-create hooks.
+</div>
+
+<!--
+Every team hits this moment. The question is what the second project costs.
+-->
+
+---
+
+layout: two-cols
+layoutClass: gap-8
+
+---
+
+# Two projects, twice the boilerplate
+
+<div class="mt-4 space-y-5">
+
+<div class="border-l-4 border-brand proj-a pl-4 py-1">
+  <div class="flex items-center gap-2 mb-2">
+    <logos:python class="text-2xl" />
+    <span class="font-mono text-base font-semibold">snackbar-api/</span>
+  </div>
+  <div class="flex items-center gap-3 ml-8">
+    <vscode-icons:file-type-docker class="text-2xl" />
+    <span class="font-mono text-xs">Dockerfile</span>
+    <span class="text-xs opacity-60">— ~45 lines</span>
+  </div>
+  <div class="flex items-center gap-3 ml-8">
+    <vscode-icons:file-type-shell class="text-2xl" />
+    <span class="font-mono text-xs">run.sh</span>
+    <span class="text-xs opacity-60">— ~15 lines</span>
+  </div>
+</div>
+
+<div class="border-l-4 border-brand-deep proj-b pl-4 py-1">
+  <div class="flex items-center gap-2 mb-2">
+    <vscode-icons:file-type-rust class="text-2xl" />
+    <span class="font-mono text-base font-semibold">order-engine/</span>
+  </div>
+  <div class="flex items-center gap-3 ml-8">
+    <vscode-icons:file-type-docker class="text-2xl" />
+    <span class="font-mono text-xs">Dockerfile</span>
+    <span class="text-xs opacity-60">— ~45 lines, ~80% identical</span>
+  </div>
+  <div class="flex items-center gap-3 ml-8">
+    <vscode-icons:file-type-shell class="text-2xl" />
+    <span class="font-mono text-xs">run.sh</span>
+    <span class="text-xs opacity-60">— same base mounts + Rust caches</span>
+  </div>
+</div>
+
+</div>
+
+::right::
+
+<div class="mt-4 space-y-3">
+
+<div class="text-sm opacity-70 mb-2">What's different in <code>order-engine/run.sh</code>:</div>
+
+```bash
+# Same 6 shared mounts as snackbar-api...
+# Same TERM / COLORTERM / GH_TOKEN / GITLAB_TOKEN...
+
+  -v "engine-rustup-ana:/home/ana/.rustup" \
+  -v "engine-cargo-registry-ana:/home/ana/.cargo/registry" \
+  -v "engine-cargo-git-ana:/home/ana/.cargo/git" \
+  order-engine-dev:latest bash -lc "sleep infinity"
+```
+
+<div class="mt-4 text-sm opacity-70">And a different post-create:</div>
+
+```bash
+docker exec -it order-engine-dev \
+  bash -lc "cargo build && pre-commit install"
+```
+
+</div>
+
+<!--
+Same shared mounts, repeated. Same env vars, repeated. Different cache volumes
+and different post-create hooks per language. Nothing factors out.
+-->
+
+---
+
+## layout: default
+
+# What happens next
+
+- **4 manual files** for 2 projects — and growing linearly
+- The shared base of the Dockerfile is **copy-pasted**, not shared
+- The shared mounts in `run.sh` are **copy-pasted**, not shared
+- Adding a tool to the base image = update **every** Dockerfile
+- Adding a shared mount = update **every** `run.sh`
+- Fixing a bug in the base = propagate to **every** repo, by hand
+- The two files **will drift** over time
+
+<div class="mt-12 text-center text-xl">
+Docker has no answer for "shared base across projects." <br/>
+<span class="opacity-60 text-base">Devcontainers help with config — but the duplication doesn't go away.</span>
+</div>
+
+<!--
+Hand-off slide for the next section: the dev container CLI improves the runtime
+config story (declarative JSON), but per-project duplication is unchanged.
+That's where dctl comes in.
+-->
+
+---
+
+layout: center
+class: text-center
+background: 'linear-gradient(180deg, #173F4F 0%, #0E2730 100%)'
+
+---
+
+# Step 3 — Enter Dev Containers
+
+<div class="flex justify-center items-center gap-10 mt-12 text-7xl">
+  <vscode-icons:file-type-docker />
+  <mdi-plus class="text-4xl opacity-50 self-center" />
+  <vscode-icons:file-type-json />
+</div>
+
+<div class="mt-12 text-xl opacity-80">
+Same Ana. Same <code>snackbar-api</code>.<br/>
+The runtime config moves out of shell history and into a declarative file.
+</div>
+
+<div class="mt-8 text-base opacity-60">
+The Dockerfile doesn't change — devcontainers don't solve the image problem.
+</div>
+
+<!--
+The dev container CLI consumes a JSON spec describing image, mounts, env, and
+post-create hooks. Same image as before; the runtime is now declarative.
+-->
+
+---
+
+layout: two-cols
+layoutClass: gap-12
+
+---
+
+# Step 3 — Python, dev container style
+
+The Dockerfile from before is reused. New companion file:
+
+<div class="mt-6 space-y-4">
+
+<div class="flex items-center gap-4">
+  <vscode-icons:file-type-docker class="text-4xl" />
+  <div>
+    <div class="font-mono text-sm">Dockerfile</div>
+    <div class="text-sm opacity-70">~45 lines — <span class="text-brand-warn">unchanged</span></div>
+  </div>
+</div>
+
+<div class="flex items-center gap-4">
+  <vscode-icons:file-type-json class="text-4xl" />
+  <div>
+    <div class="font-mono text-sm">.devcontainer/devcontainer.json</div>
+    <div class="text-sm opacity-70">~30 lines — image, mounts, env, hooks</div>
+  </div>
+</div>
+
+<div class="flex items-center gap-4">
+  <mdi-console-line class="text-4xl text-brand" />
+  <div>
+    <div class="font-mono text-sm">devcontainer up --workspace-folder .</div>
+    <div class="text-sm opacity-70">No more 15-line <code>docker run</code></div>
+  </div>
+</div>
+
+<div class="flex items-center gap-4">
+  <mdi-console class="text-4xl text-brand-warn" />
+  <div>
+    <div class="font-mono text-sm">devcontainer exec --workspace-folder . bash</div>
+    <div class="text-sm opacity-70">Attach a shell — then run <code>claude</code>, tests, the dev server, …</div>
+  </div>
+</div>
+
+</div>
+
+::right::
+
+<div class="mt-12">
+
+<div class="text-sm opacity-70 mb-2">snackbar-api/.devcontainer/devcontainer.json</div>
+
+```json
+{
+  "name": "snackbar-api",
+  "image": "snackbar-api-dev:latest",
+  "remoteUser": "ana",
+  "workspaceFolder": "/workspaces/snackbar-api",
+  "containerEnv": {
+    "TERM": "${localEnv:TERM}",
+    "COLORTERM": "${localEnv:COLORTERM}"
+  },
+  "mounts": [
+    "source=${localEnv:HOME}/.gitconfig,target=/home/ana/.gitconfig,type=bind,readonly",
+    "source=${localEnv:HOME}/.config/gh,target=/home/ana/.config/gh,type=bind",
+    "source=${localEnv:HOME}/.claude,target=/home/ana/.claude,type=bind",
+    "source=/tmp,target=/tmp,type=bind"
+  ],
+  "remoteEnv": {
+    "GH_TOKEN": "${localEnv:GH_TOKEN}",
+    "GITLAB_TOKEN": "${localEnv:GITLAB_TOKEN}"
+  },
+  "postCreateCommand": {
+    "pre-commit": "pre-commit install"
+  }
+}
+```
+
+</div>
+
+<!--
+Walk through the JSON: image reference, declared mounts, declared env vars,
+and the postCreateCommand hook. The 15 docker run flags are now a file Ana
+edits once and commits.
+-->
+
+---
+
+layout: two-cols
+layoutClass: gap-8
+
+---
+
+# Step 4 — Two projects, four manual files
+
+<div class="mt-4 space-y-5">
+
+<div class="border-l-4 border-brand proj-a pl-4 py-1">
+  <div class="flex items-center gap-2 mb-2">
+    <logos:python class="text-2xl" />
+    <span class="font-mono text-base font-semibold">snackbar-api/</span>
+  </div>
+  <div class="flex items-center gap-3 ml-8">
+    <vscode-icons:file-type-docker class="text-2xl" />
+    <span class="font-mono text-xs">Dockerfile</span>
+    <span class="text-xs opacity-60">— ~45 lines</span>
+  </div>
+  <div class="flex items-center gap-3 ml-8">
+    <vscode-icons:file-type-json class="text-2xl" />
+    <span class="font-mono text-xs">.devcontainer/devcontainer.json</span>
+    <span class="text-xs opacity-60">— ~30 lines</span>
+  </div>
+</div>
+
+<div class="border-l-4 border-brand-deep proj-b pl-4 py-1">
+  <div class="flex items-center gap-2 mb-2">
+    <vscode-icons:file-type-rust class="text-2xl" />
+    <span class="font-mono text-base font-semibold">order-engine/</span>
+  </div>
+  <div class="flex items-center gap-3 ml-8">
+    <vscode-icons:file-type-docker class="text-2xl" />
+    <span class="font-mono text-xs">Dockerfile</span>
+    <span class="text-xs opacity-60">— ~45 lines, ~80% identical</span>
+  </div>
+  <div class="flex items-center gap-3 ml-8">
+    <vscode-icons:file-type-json class="text-2xl" />
+    <span class="font-mono text-xs">.devcontainer/devcontainer.json</span>
+    <span class="text-xs opacity-60">— ~30 lines, base block duplicated</span>
+  </div>
+</div>
+
+</div>
+
+::right::
+
+<div class="mt-4">
+
+<div class="text-sm opacity-70 mb-2">The shared base block — copy-pasted into both JSONs:</div>
+
+```json
+{
+  "remoteUser": "ana",
+  "containerEnv": {
+    "TERM": "${localEnv:TERM}",
+    "COLORTERM": "${localEnv:COLORTERM}"
+  },
+  "mounts": [
+    "source=${localEnv:HOME}/.gitconfig,target=...,readonly",
+    "source=${localEnv:HOME}/.config/gh,target=...",
+    "source=${localEnv:HOME}/.claude,target=...",
+    "source=/tmp,target=/tmp,type=bind"
+  ],
+  "remoteEnv": {
+    "GH_TOKEN": "${localEnv:GH_TOKEN}",
+    "GITLAB_TOKEN": "${localEnv:GITLAB_TOKEN}"
+  }
+}
+```
+
+<div class="mt-4 text-sm opacity-70">Rust adds <code>rustup</code> + <code>cargo</code> cache volumes and a <code>cargo build</code> hook. Python keeps its own <code>postCreateCommand</code>. Everything else? Identical, repeated.</div>
+
+</div>
+
+<!--
+The devcontainer spec has no composition, no inheritance, no layering. Every
+project is a standalone JSON file. Two projects = duplicated mounts and env.
+-->
+
+---
+
+## layout: default
+
+# What dev containers actually solve
+
+- <mdi-file-document-outline class="inline text-brand" /> &nbsp; **Runtime config is declarative.** Mounts, env, hooks live in a file — not in shell history or a wrapper script.
+
+- <mdi-hook class="inline text-brand" /> &nbsp; **`postCreateCommand` is a real hook.** No more manual <code>docker exec ... pre-commit install</code> after every recreate.
+
+- <mdi-source-commit class="inline text-brand" /> &nbsp; **Config travels with the repo.** Teammates clone and get the same mounts, env, and setup commands.
+
+- <mdi-application-cog-outline class="inline text-brand" /> &nbsp; **One command to start.** <code>devcontainer up</code> replaces the 15-line <code>docker run</code>.
+
+- <mdi-microsoft-visual-studio-code class="inline text-brand" /> &nbsp; **First-class editor support.** VS Code, JetBrains, and Codespaces all consume the spec — open the folder, the editor builds and attaches automatically. Language servers, debuggers, and extensions run **inside** the container.
+
+<div class="mt-12 text-center text-lg opacity-80">
+The spec is an industry standard. Anything that speaks <code>devcontainer.json</code> works.
+</div>
+
+<!--
+This is the genuine win. Declarative runtime + standardized tooling. The
+editor integration matters: language server, debugger, and extensions all
+run inside the container, against the same toolchain the agent uses.
+-->
+
+---
+
+layout: default
+class: pain
+
+---
+
+# Pain that remains
+
+- The Dockerfile is **still hand-written** — ~45 lines per project, no shared base.
+- Now there are **two manual files** per project instead of one.
+- The `devcontainer.json` schema has **no composition**: no inheritance, no layering, no reuse.
+- The shared base block (mounts, env, `remoteUser`) is **copy-pasted** into every JSON.
+- Add a tool to the image → update **every** Dockerfile.
+- Add a shared mount → update **every** `devcontainer.json`.
+- Token forwarding requires <code>${localEnv:GH_TOKEN}</code> in the JSON **and** the variable exported on the host (or a custom <code>initializeCommand</code>) — the spec has no built-in way to call <code>gh auth token</code>.
+
+<div class="mt-12 text-center text-2xl opacity-90">
+The runtime got declarative. The <span class="underline decoration-brand-warn decoration-2 underline-offset-4">duplication problem stayed</span>.
+</div>
+
+<!--
+Devcontainers are a real improvement, but the shape of the duplication just
+shifted from shell flags to JSON keys. That gap is what dctl fills next.
+-->
+
+---
+
+layout: center
+class: text-center
+background: 'linear-gradient(135deg, #0E2730 0%, #173F4F 55%, #2E6B2A 100%)'
+
+---
+
+# Step 5 — Enter `dctl`
+
+<div class="mt-10 text-xl opacity-90">
+One source of truth for Dockerfiles <span class="opacity-60">and</span> devcontainer config.<br/>
+Composable, version-controllable, <span class="text-brand-accent">shared across projects and teammates</span>.
+</div>
+
+<div class="flex justify-center items-center gap-10 mt-12 text-7xl">
+  <mdi-layers-outline class="text-brand" />
+  <mdi-arrow-right class="text-gray-400 self-center text-4xl" />
+  <mdi-rocket-launch-outline class="text-brand-accent" />
+</div>
+
+<div class="mt-12 text-base opacity-70">
+Same Ana. Same projects. Zero per-project boilerplate.
+</div>
+
+<!--
+The pitch: dctl doesn't replace Docker or devcontainers — it builds on both.
+The gain is conventions: managed images, layered config, and workspace-aware
+container identity, all kept in one place users can edit and version.
+-->
+
+---
+
+## layout: default
+
+# The principle — single source of truth
+
+- <mdi-folder-cog-outline class="inline text-brand" /> &nbsp; **Dockerfiles and config live in one place** — under `~/.config/dctl/`, not scattered across repos.
+
+- <mdi-layers-outline class="inline text-brand" /> &nbsp; **Devcontainer config is composed from named layers** — `base`, `agents`, `python`, `rust`, `dotfiles`. The final `devcontainer.json` is built piece by piece.
+
+- <mdi-file-tree-outline class="inline text-brand" /> &nbsp; **A YAML manifest names the pieces in order** — change the manifest, change the composition. No copy-paste.
+
+- <mdi-source-branch class="inline text-brand-accent" /> &nbsp; **Version-controlled and shareable** — your `~/.config/dctl/` is just files. Commit it to a personal dotfiles repo or share a team-wide baseline.
+
+- <mdi-account-group-outline class="inline text-brand-warn" /> &nbsp; **Edit once, every project picks it up** — fix a mount in `base`, every workspace inherits the fix on the next `dctl init`.
+
+<div class="mt-12 text-center text-lg opacity-80">
+The duplication problem collapses because there is <span class="underline decoration-brand decoration-2 underline-offset-4">nothing left to duplicate</span>.
+</div>
+
+<!--
+The conceptual core. Single-source-of-truth + composition is what unlocks
+everything else: shared images, shared layers, project registry, work-clones.
+-->
+
+---
+
+layout: two-cols
+layoutClass: gap-10
+
+---
+
+# Shared Dockerfiles
+
+One folder hosts every managed image. The directory name **is** the image name.
+
+<div class="mt-6 space-y-4">
+
+<div class="flex items-center gap-4">
+  <mdi-folder-outline class="text-4xl text-brand" />
+  <div>
+    <div class="font-mono text-sm">~/.config/dctl/images/&lt;name&gt;/Dockerfile</div>
+    <div class="text-sm opacity-70">One subdir per image — the dir name <em>is</em> the tag</div>
+  </div>
+</div>
+
+<div class="flex items-center gap-4">
+  <mdi-source-merge class="text-4xl text-brand" />
+  <div>
+    <div class="font-mono text-sm">FROM devimg/agents:latest</div>
+    <div class="text-sm opacity-70">Language images compose on top of the shared base — native Docker, no magic</div>
+  </div>
+</div>
+
+<div class="flex items-center gap-4">
+  <mdi-console-line class="text-4xl text-brand-accent" />
+  <div>
+    <div class="font-mono text-sm">dctl image build --all</div>
+    <div class="text-sm opacity-70">Builds the fleet in dependency order — no manual ordering</div>
+  </div>
+</div>
+
+<div class="flex items-center gap-4">
+  <mdi-pencil-outline class="text-4xl text-brand-warn" />
+  <div>
+    <div class="font-mono text-sm">$EDITOR ~/.config/dctl/images/python-dev/Dockerfile</div>
+    <div class="text-sm opacity-70">Open and edit any time — it's your file</div>
+  </div>
+</div>
+
+</div>
+
+::right::
+
+<div class="mt-8">
+
+<div class="text-sm opacity-70 mb-2">Image hierarchy mirrors the config layering:</div>
+
+```text
+openSUSE Leap 16.0
+        │
+        ▼
+devimg/agents:latest
+  shared tools, AI agent CLIs,
+  runtime managers, dev tooling
+        │
+        ├── devimg/python-dev:latest
+        ├── devimg/rust-dev:latest
+        └── devimg/zig-dev:latest
+```
+
+<div class="mt-6 text-sm opacity-70 mb-2">~/.config/dctl/images/</div>
+
+```text
+images/
+├── agents/Dockerfile        # shared base
+├── python-dev/Dockerfile    # FROM devimg/agents
+├── rust-dev/Dockerfile      # FROM devimg/agents
+└── zig-dev/Dockerfile       # FROM devimg/agents
+```
+
+</div>
+
+<!--
+Two layers of sharing: directory layout makes images discoverable by name,
+and FROM lets language images inherit from the shared base. One tool added
+to agents lights up every downstream image on the next build.
+-->
+
+---
+
+layout: two-cols
+layoutClass: gap-10
+
+---
+
+# Composable devcontainer config
+
+The final `devcontainer.json` is **assembled** from named layers — not authored per project.
+
+<div class="mt-6 space-y-4">
+
+<div class="flex items-center gap-4">
+  <mdi-folder-outline class="text-4xl text-brand" />
+  <div>
+    <div class="font-mono text-xs">~/.config/dctl/devcontainer/&lt;layer&gt;/devcontainer.json</div>
+    <div class="text-sm opacity-70">Each layer is a partial config under its own dir</div>
+  </div>
+</div>
+
+<div class="flex items-center gap-4">
+  <vscode-icons:file-type-yaml class="text-4xl" />
+  <div>
+    <div class="font-mono text-sm">&lt;manifest&gt;.yaml</div>
+    <div class="text-sm opacity-70">Lists the layers, in composition order</div>
+  </div>
+</div>
+
+<div class="flex items-center gap-4">
+  <mdi-source-merge class="text-4xl text-brand-accent" />
+  <div>
+    <div class="font-mono text-sm">dctl init</div>
+    <div class="text-sm opacity-70">Merges the layers and caches the result</div>
+  </div>
+</div>
+
+<div class="flex items-center gap-4">
+  <mdi-database-outline class="text-4xl text-brand-warn" />
+  <div>
+    <div class="font-mono text-xs">~/.cache/dctl/devcontainer/&lt;name&gt;/devcontainer.json</div>
+    <div class="text-sm opacity-70">Generated, schema-validated, never edited by hand</div>
+  </div>
+</div>
+
+</div>
+
+::right::
+
+<div class="mt-4">
+
+<div class="text-sm opacity-70 mb-2">python.yaml — the manifest</div>
+
+```yaml
+layers:
+  - base # remoteUser, auth mounts, terminal env
+  - agents # seccomp, agent CLI mounts
+  - python # image tag, caches, hooks
+```
+
+<div class="mt-4 text-sm opacity-70 mb-2">~/.config/dctl/devcontainer/</div>
+
+```text
+devcontainer/
+├── python.yaml          # manifest
+├── rust.yaml            # manifest
+├── base/
+│   └── devcontainer.json
+├── agents/
+│   └── devcontainer.json
+├── python/
+│   └── devcontainer.json
+└── rust/
+    └── devcontainer.json
+```
+
+<div class="mt-3 text-xs opacity-60">
+Layers merge in manifest order — later layers override earlier ones on conflict. Same shape as <code>FROM</code> in a Dockerfile, but for config.
+</div>
+
+</div>
+
+<!--
+The composition graph: many manifests, shared layers, one merged JSON per
+project type. Edit base once, both python.yaml and rust.yaml pick it up.
+The cache is the only thing devcontainer up actually reads.
+-->
+
+---
+
+## layout: default
+
+# Per-project: just point at a manifest
+
+<div class="grid grid-cols-2 gap-10 mt-6">
+
+<div>
+
+<div class="text-sm opacity-70 mb-2">~/.config/dctl/projects.yaml</div>
+
+```yaml
+projects:
+  /home/ana/projects/snackbar-api:
+    devcontainer-manifest: python
+  /home/ana/projects/widget-api:
+    devcontainer-manifest: python
+  /home/ana/projects/order-engine:
+    devcontainer-manifest: rust
+```
+
+<div class="mt-6 text-sm opacity-80">
+Three projects. Two manifests. <strong>Zero per-project files.</strong>
+</div>
+
+</div>
+
+<div>
+
+<div class="space-y-4">
+
+<div class="flex items-center gap-3">
+  <mdi-numeric-1-circle-outline class="text-3xl text-brand" />
+  <div>
+    <div class="font-mono text-sm">dctl init --devcontainer python</div>
+    <div class="text-xs opacity-70">Selects the manifest, merges layers, registers the project</div>
+  </div>
+</div>
+
+<div class="flex items-center gap-3">
+  <mdi-numeric-2-circle-outline class="text-3xl text-brand" />
+  <div>
+    <div class="font-mono text-sm">dctl init</div>
+    <div class="text-xs opacity-70">In an already-registered project — refreshes the cache</div>
+  </div>
+</div>
+
+<div class="flex items-center gap-3">
+  <mdi-numeric-3-circle-outline class="text-3xl text-brand-accent" />
+  <div>
+    <div class="font-mono text-sm">dctl ws up</div>
+    <div class="text-xs opacity-70">Reads the merged cache, starts the container</div>
+  </div>
+</div>
+
+</div>
+
+<div class="mt-8 text-xs opacity-60">
+The merged config names the image (e.g. <code>devimg/python-dev:latest</code>). If it's not built locally, <code>dctl init</code> builds it for you.
+</div>
+
+</div>
+
+</div>
+
+<!--
+The registry is the link between "this project on disk" and "this manifest".
+Two Python projects share one manifest. Adding a third is one command.
+-->
+
+---
+
+layout: two-cols
+layoutClass: gap-10
+
+---
+
+# One command per task
+
+The CLI maps 1-to-1 onto the workflow — no `--workspace-folder` ceremony, no `bash -lic`.
+
+<div class="mt-6 space-y-3 text-sm">
+
+<div class="flex items-baseline gap-3">
+  <mdi-rocket-launch-outline class="text-xl text-brand self-center" />
+  <code class="font-mono">dctl init --devcontainer python</code>
+  <span class="opacity-70">— set up this project</span>
+</div>
+
+<div class="flex items-baseline gap-3">
+  <mdi-play-circle-outline class="text-xl text-brand self-center" />
+  <code class="font-mono">dctl ws up</code>
+  <span class="opacity-70">— start the container</span>
+</div>
+
+<div class="flex items-baseline gap-3">
+  <mdi-restart class="text-xl text-brand self-center" />
+  <code class="font-mono">dctl ws reup</code>
+  <span class="opacity-70">— recreate after a config change</span>
+</div>
+
+<div class="flex items-baseline gap-3">
+  <mdi-console class="text-xl text-brand self-center" />
+  <code class="font-mono">dctl ws shell</code>
+  <span class="opacity-70">— drop into the container</span>
+</div>
+
+<div class="flex items-baseline gap-3">
+  <mdi-robot-outline class="text-xl text-brand self-center" />
+  <code class="font-mono">dctl ws run -- claude</code>
+  <span class="opacity-70">— launch an agent inside</span>
+</div>
+
+<div class="flex items-baseline gap-3">
+  <mdi-flash-outline class="text-xl text-brand self-center" />
+  <code class="font-mono">dctl ws exec -- pytest -q</code>
+  <span class="opacity-70">— run a one-shot command</span>
+</div>
+
+<div class="flex items-baseline gap-3">
+  <mdi-stop-circle-outline class="text-xl text-brand-warn self-center" />
+  <code class="font-mono">dctl ws down</code>
+  <span class="opacity-70">— stop and clean up</span>
+</div>
+
+<div class="flex items-baseline gap-3">
+  <mdi-hammer-wrench class="text-xl text-brand-accent self-center" />
+  <code class="font-mono">dctl image build --all</code>
+  <span class="opacity-70">— rebuild the image fleet, in order</span>
+</div>
+
+</div>
+
+::right::
+
+<div class="mt-4 text-xs">
+
+<div class="opacity-70 mb-1"><strong>A.</strong> Shipped templates (sane defaults)</div>
+
+```bash
+make install && dctl deploy --all
+
+cd ~/projects/snackbar-api
+dctl init --devcontainer python && dctl ws up
+
+cd ~/projects/order-engine
+dctl init --devcontainer rust && dctl ws up
+```
+
+<div class="mt-3 opacity-70 mb-1"><strong>B.</strong> Shared/team config</div>
+
+```bash
+make install
+git clone git@github.com:team/dctl-config ~/.config/dctl
+
+cd ~/projects/snackbar-api
+dctl init --devcontainer team-python && dctl ws up
+
+cd ~/projects/order-engine
+dctl init --devcontainer team-rust && dctl ws up
+```
+
+<div class="mt-3 opacity-80">
+Same CLI. <code>dctl deploy</code> seeds the shipped defaults; <code>~/.config/dctl/</code> is just files — fork, symlink, or share it.
+</div>
+
+</div>
+
+<!--
+A: shipped templates path — make install + dctl deploy gives sane defaults.
+B: shared config path — ~/.config/dctl/ is the team's repo, no deploy needed.
+Same CLI in both; the difference is where the config comes from.
+-->
+
+---
+
+## layout: default
+
+# What `dctl` quietly handles
+
+- <mdi-key-variant class="inline text-brand" /> &nbsp; **Automatic credential forwarding.** `GH_TOKEN` and `GITLAB_TOKEN` extracted from `gh` / `glab` on every `exec`, `shell`, `run`. No `${localEnv:...}` boilerplate. Missing CLI? Silently skipped.
+
+- <mdi-monitor-dashboard class="inline text-brand" /> &nbsp; **Terminal env forwarding.** `TERM`, `COLORTERM`, `TERM_PROGRAM`, Kitty vars — forwarded so colors and terminal-aware tools just work.
+
+- <mdi-source-branch class="inline text-brand" /> &nbsp; **Work-clone awareness.** Sibling clones (`repo/`, `repo.42-add-auth/`) share config but get **separate containers**, keyed by workspace path. Linked-worktree git common dir is bind-mounted automatically.
+
+- <mdi-shield-check-outline class="inline text-brand" /> &nbsp; **Schema-validated manifests.** YAML manifests are checked against `compose.schema.yaml` before merge — typos surface at `dctl init`, not at `devcontainer up`.
+
+- <mdi-clock-outline class="inline text-brand-accent" /> &nbsp; **Weekly image refresh, opt-in.** A user-systemd timer runs `dctl image build --all` so the fleet stays current.
+
+- <mdi-folder-multiple-outline class="inline text-brand-warn" /> &nbsp; **XDG-clean.** Seed ready-to-use templates in `~/.local/share/dctl/`, runtime config in `~/.config/dctl/`, generated cache in `~/.cache/dctl/`. Honors `XDG_*_HOME`. Nothing in the project repo.
+
+<!--
+The non-obvious wins. Each of these would be a custom shell snippet or wiki
+page in the Docker/devcontainer flows. Here they're just defaults.
+-->
+
+---
+
+layout: center
+class: text-center
+background: 'linear-gradient(135deg, #0E2730 0%, #173F4F 55%, #2E6B2A 100%)'
+
+---
+
+# The shape of the difference
+
+<div class="grid grid-cols-3 gap-6 mt-10 text-left">
+
+<div class="border-l-4 border-gray-500 pl-4">
+  <div class="text-base font-semibold opacity-80">Docker</div>
+  <div class="mt-2 text-sm opacity-70">1 Dockerfile per project<br/>15-line <code>docker run</code><br/>Manual post-create<br/>Drift across repos</div>
+</div>
+
+<div class="border-l-4 border-brand-deep pl-4">
+  <div class="text-base font-semibold opacity-90">Dev Containers</div>
+  <div class="mt-2 text-sm opacity-80">1 Dockerfile + 1 JSON per project<br/>Declarative runtime<br/>Editor integration<br/>Still no composition</div>
+</div>
+
+<div class="border-l-4 border-brand pl-4">
+  <div class="text-base font-semibold text-brand-accent">dctl</div>
+  <div class="mt-2 text-sm opacity-90"><strong>0 per-project files</strong><br/>Composable layers<br/>Shared images<br/>Auto credentials &amp; env</div>
+</div>
+
+</div>
+
+<div class="mt-12 text-xl opacity-90">
+Same Docker. Same devcontainer spec. <span class="text-brand-accent">No more boilerplate.</span>
+</div>
+
+<!--
+Recap slide. dctl doesn't replace either layer — it builds on both. The
+value is in the conventions: managed images, layered config, workspace-aware
+identity, and credential forwarding as a default.
+-->
