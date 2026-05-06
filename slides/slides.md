@@ -35,8 +35,8 @@ from one project to many, and watch the boilerplate compound.
 -->
 
 ---
-
-## layout: default
+layout: default
+---
 
 # Premises
 
@@ -60,11 +60,9 @@ much friction this project removes from a normal day.
 -->
 
 ---
-
 layout: center
 class: text-center
 background: 'linear-gradient(180deg, #173F4F 0%, #0E2730 100%)'
-
 ---
 
 # Meet Ana
@@ -86,10 +84,8 @@ starting point. Watch what she has to write.
 -->
 
 ---
-
 layout: two-cols
 layoutClass: gap-12
-
 ---
 
 # Step 1 — One project, pure Docker
@@ -168,10 +164,8 @@ container starts with broken state.
 -->
 
 ---
-
 layout: default
 class: pain
-
 ---
 
 # Pain already visible
@@ -193,11 +187,9 @@ shows up and she gets a second project.
 -->
 
 ---
-
 layout: center
 class: text-center
 background: 'linear-gradient(180deg, #173F4F 0%, #0E2730 100%)'
-
 ---
 
 # Step 2 — A second project lands
@@ -222,10 +214,8 @@ Every team hits this moment. The question is what the second project costs.
 -->
 
 ---
-
 layout: two-cols
 layoutClass: gap-8
-
 ---
 
 # Two projects, twice the boilerplate
@@ -299,8 +289,8 @@ and different post-create hooks per language. Nothing factors out.
 -->
 
 ---
-
-## layout: default
+layout: default
+---
 
 # What happens next
 
@@ -324,11 +314,9 @@ That's where dctl comes in.
 -->
 
 ---
-
 layout: center
 class: text-center
 background: 'linear-gradient(180deg, #173F4F 0%, #0E2730 100%)'
-
 ---
 
 # Step 3 — Enter Dev Containers
@@ -354,10 +342,8 @@ post-create hooks. Same image as before; the runtime is now declarative.
 -->
 
 ---
-
 layout: two-cols
 layoutClass: gap-12
-
 ---
 
 # Step 3 — Python, dev container style
@@ -441,10 +427,8 @@ edits once and commits.
 -->
 
 ---
-
 layout: two-cols
 layoutClass: gap-8
-
 ---
 
 # Step 4 — Two projects, four manual files
@@ -523,8 +507,8 @@ project is a standalone JSON file. Two projects = duplicated mounts and env.
 -->
 
 ---
-
-## layout: default
+layout: default
+---
 
 # What dev containers actually solve
 
@@ -549,10 +533,8 @@ run inside the container, against the same toolchain the agent uses.
 -->
 
 ---
-
 layout: default
 class: pain
-
 ---
 
 # Pain that remains
@@ -575,11 +557,9 @@ shifted from shell flags to JSON keys. That gap is what dctl fills next.
 -->
 
 ---
-
 layout: center
 class: text-center
 background: 'linear-gradient(135deg, #0E2730 0%, #173F4F 55%, #2E6B2A 100%)'
-
 ---
 
 # Step 5 — Enter `dctl`
@@ -606,8 +586,8 @@ container identity, all kept in one place users can edit and version.
 -->
 
 ---
-
-## layout: default
+layout: default
+---
 
 # The principle — single source of truth
 
@@ -631,10 +611,8 @@ everything else: shared images, shared layers, project registry, work-clones.
 -->
 
 ---
-
 layout: two-cols
 layoutClass: gap-10
-
 ---
 
 # Shared Dockerfiles
@@ -715,10 +693,8 @@ to agents lights up every downstream image on the next build.
 -->
 
 ---
-
 layout: two-cols
 layoutClass: gap-10
-
 ---
 
 # Composable devcontainer config
@@ -803,8 +779,8 @@ The cache is the only thing devcontainer up actually reads.
 -->
 
 ---
-
-## layout: default
+layout: default
+---
 
 # Per-project: just point at a manifest
 
@@ -874,10 +850,8 @@ Two Python projects share one manifest. Adding a third is one command.
 -->
 
 ---
-
 layout: two-cols
 layoutClass: gap-10
-
 ---
 
 # One command per task
@@ -978,8 +952,8 @@ Same CLI in both; the difference is where the config comes from.
 -->
 
 ---
-
-## layout: default
+layout: default
+---
 
 # What `dctl` quietly handles
 
@@ -1001,11 +975,9 @@ page in the Docker/devcontainer flows. Here they're just defaults.
 -->
 
 ---
-
 layout: center
 class: text-center
 background: 'linear-gradient(135deg, #0E2730 0%, #173F4F 55%, #2E6B2A 100%)'
-
 ---
 
 # The shape of the difference
