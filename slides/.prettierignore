@@ -1,0 +1,11 @@
+# Slidev decks use per-slide frontmatter (`---\nlayout: foo\n---`) that
+# prettier mangles into setext H2 headings, breaking the deck. Keep the
+# main deck and any `src:`-imported pages out of prettier.
+slides.md
+pages/
+
+# Generated / vendored — never format.
+node_modules/
+dist/
+.slidev/
+package-lock.json

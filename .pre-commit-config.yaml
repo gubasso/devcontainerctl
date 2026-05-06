@@ -81,7 +81,20 @@ repos:
       - id: prettier
         args: [--write]
         files: ^slides/.*\.(md|vue|ts|js|json|ya?ml|css)$
-        exclude: ^slides/(node_modules|dist|\.slidev|package-lock\.json)
+        # slides/slides.md and slides/pages/*.md use Slidev's per-slide
+        # frontmatter syntax (`---\nlayout: foo\n---`), which prettier
+        # mangles into setext H2 headings and breaks the deck. Keep them
+        # out — see slides/.prettierignore for the same rule honored by
+        # any direct `npx prettier` invocation.
+        exclude: |
+          (?x)^slides/(
+            node_modules|
+            dist|
+            \.slidev|
+            package-lock\.json|
+            slides\.md|
+            pages/.*\.md
+          )
 
   - repo: meta
     hooks:
