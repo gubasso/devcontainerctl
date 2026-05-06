@@ -370,3 +370,4 @@ Use `make uninstall` to remove the installed binary, shell modules, templates, D
 - [QUICKSTART.md](docs/QUICKSTART.md) for a short setup path
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) for deeper technical rationale and troubleshooting
 - [spec/README.md](spec/README.md) for the implemented design/spec set
+- [slides/](slides/) for the Slidev presentation (`cd slides && npm install && npm run dev`); auto-deployed to GitHub Pages
