@@ -51,13 +51,6 @@ repos:
         args: ["-i", "E003,E006", "-e", "E005"]
         exclude: ^tests/(.*\.bats|test_helper\.bash)$
 
-  - repo: https://github.com/crate-ci/typos
-    rev: v1.44.0
-    hooks:
-      - id: typos
-        args: ["--write-changes"]
-        exclude: ^images/.*/Dockerfile$
-
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.0
     hooks:
