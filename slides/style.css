@@ -135,10 +135,15 @@ html.dark .slidev-layout :not(pre) > code {
 .slidev-layout.cover h1::after {
   content: "";
   display: block;
-  width: 4rem;
+  width: 5rem;
   height: 4px;
-  background: var(--brand-primary);
-  margin-top: 0.6em;
+  background: linear-gradient(
+    90deg,
+    var(--brand-primary) 0%,
+    var(--brand-accent) 100%
+  );
+  border-radius: 2px;
+  margin: 0.7em auto 0;
 }
 
 /* ─── Section dividers (`layout: center`) — same dark in both modes. ──── */
@@ -170,6 +175,71 @@ html.dark .slidev-layout.pain h1 {
 }
 .proj-b {
   background: linear-gradient(90deg, var(--proj-b-tint), transparent 60%);
+}
+
+/* ─── Recap cards (closing "shape of the difference" slide). ─────────── */
+.recap-card {
+  position: relative;
+  padding: 1.4rem 1.25rem 1.25rem;
+  border-radius: 0.6rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  height: 100%;
+}
+.recap-stage {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.9rem;
+  font-family: "Fira Code", monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  opacity: 0.45;
+}
+.recap-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+.recap-list li {
+  position: relative;
+  padding-left: 1rem;
+  opacity: 0.85;
+}
+.recap-list li::before {
+  content: "·";
+  position: absolute;
+  left: 0;
+  color: var(--brand-mute);
+  font-weight: 700;
+}
+
+.recap-devc {
+  border-color: rgba(23, 63, 79, 0.45);
+}
+html.dark .recap-devc {
+  border-color: rgba(207, 230, 238, 0.25);
+}
+
+.recap-dctl {
+  background: linear-gradient(
+    150deg,
+    rgba(115, 186, 37, 0.18) 0%,
+    rgba(168, 214, 57, 0.08) 100%
+  );
+  border: 1px solid var(--brand-primary);
+  box-shadow:
+    0 0 0 1px rgba(115, 186, 37, 0.25),
+    0 8px 32px -12px rgba(115, 186, 37, 0.45);
+}
+.recap-list-win li {
+  opacity: 1;
+}
+.recap-list-win li::before {
+  content: "✓";
+  color: var(--brand-accent);
+  font-weight: 700;
 }
 
 /* ─── Brand utility classes (referenced from slides.md). ──────────────── */

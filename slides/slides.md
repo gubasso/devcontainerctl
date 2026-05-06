@@ -21,12 +21,22 @@ comark: true
 duration: 15min
 ---
 
+<div class="flex justify-center mb-4">
+  <mdi-rocket-launch class="text-6xl text-brand-accent opacity-95" />
+</div>
+
 # dctl
 
+<div class="text-2xl font-light tracking-wide opacity-95 mt-2">
 Devcontainers without the boilerplate
+</div>
 
-<div class="text-sm opacity-70 mt-8">
-A `snackbar` story — Docker → Dev Containers → dctl
+<div class="text-sm opacity-60 mt-16 tracking-wider uppercase">
+A <code>snackbar</code> story
+</div>
+
+<div class="text-base opacity-80 mt-2 font-light">
+Docker &nbsp;→&nbsp; Dev Containers &nbsp;→&nbsp; <span class="text-brand-accent">dctl</span>
 </div>
 
 <!--
@@ -388,7 +398,7 @@ The Dockerfile from before is reused. New companion file:
 
 ::right::
 
-<div class="mt-12">
+<div class="mt-4">
 
 <div class="text-sm opacity-70 mb-2">snackbar-api/.devcontainer/devcontainer.json</div>
 
@@ -403,18 +413,16 @@ The Dockerfile from before is reused. New companion file:
     "COLORTERM": "${localEnv:COLORTERM}"
   },
   "mounts": [
-    "source=${localEnv:HOME}/.gitconfig,target=/home/ana/.gitconfig,type=bind,readonly",
-    "source=${localEnv:HOME}/.config/gh,target=/home/ana/.config/gh,type=bind",
-    "source=${localEnv:HOME}/.claude,target=/home/ana/.claude,type=bind",
+    "source=${localEnv:HOME}/.gitconfig,target=...,readonly",
+    "source=${localEnv:HOME}/.config/gh,target=...",
+    "source=${localEnv:HOME}/.claude,target=...",
     "source=/tmp,target=/tmp,type=bind"
   ],
   "remoteEnv": {
     "GH_TOKEN": "${localEnv:GH_TOKEN}",
     "GITLAB_TOKEN": "${localEnv:GITLAB_TOKEN}"
   },
-  "postCreateCommand": {
-    "pre-commit": "pre-commit install"
-  }
+  "postCreateCommand": { "pre-commit": "pre-commit install" }
 }
 ```
 
@@ -572,7 +580,7 @@ Composable, version-controllable, <span class="text-brand-accent">shared across 
 <div class="flex justify-center items-center gap-10 mt-12 text-7xl">
   <mdi-layers-outline class="text-brand" />
   <mdi-arrow-right class="text-gray-400 self-center text-4xl" />
-  <mdi-rocket-launch-outline class="text-brand-accent" />
+  <mdi-rocket-launch class="text-brand-accent" />
 </div>
 
 <div class="mt-12 text-base opacity-70">
@@ -982,27 +990,59 @@ background: 'linear-gradient(135deg, #0E2730 0%, #173F4F 55%, #2E6B2A 100%)'
 
 # The shape of the difference
 
-<div class="grid grid-cols-3 gap-6 mt-10 text-left">
+<div class="grid grid-cols-3 gap-5 mt-10 text-left items-stretch">
 
-<div class="border-l-4 border-gray-500 pl-4">
-  <div class="text-base font-semibold opacity-80">Docker</div>
-  <div class="mt-2 text-sm opacity-70">1 Dockerfile per project<br/>15-line <code>docker run</code><br/>Manual post-create<br/>Drift across repos</div>
+<div class="recap-card recap-docker">
+  <div class="recap-stage">01</div>
+  <div class="flex items-center gap-3 mb-4">
+    <vscode-icons:file-type-docker class="text-4xl" />
+    <div class="text-lg font-semibold opacity-90">Docker</div>
+  </div>
+  <ul class="recap-list">
+    <li>1 Dockerfile per project</li>
+    <li>15-line <code>docker run</code></li>
+    <li>Manual post-create</li>
+    <li>Drift across repos</li>
+  </ul>
 </div>
 
-<div class="border-l-4 border-brand-deep pl-4">
-  <div class="text-base font-semibold opacity-90">Dev Containers</div>
-  <div class="mt-2 text-sm opacity-80">1 Dockerfile + 1 JSON per project<br/>Declarative runtime<br/>Editor integration<br/>Still no composition</div>
+<div class="recap-card recap-devc">
+  <div class="recap-stage">02</div>
+  <div class="flex items-center gap-3 mb-4">
+    <vscode-icons:file-type-json class="text-4xl" />
+    <div class="text-lg font-semibold opacity-95">Dev Containers</div>
+  </div>
+  <ul class="recap-list">
+    <li>1 Dockerfile + 1 JSON</li>
+    <li>Declarative runtime</li>
+    <li>Editor integration</li>
+    <li class="opacity-60">Still no composition</li>
+  </ul>
 </div>
 
-<div class="border-l-4 border-brand pl-4">
-  <div class="text-base font-semibold text-brand-accent">dctl</div>
-  <div class="mt-2 text-sm opacity-90"><strong>0 per-project files</strong><br/>Composable layers<br/>Shared images<br/>Auto credentials &amp; env</div>
+<div class="recap-card recap-dctl">
+  <div class="recap-stage">03</div>
+  <div class="flex items-center gap-3 mb-4">
+    <mdi-rocket-launch class="text-4xl text-brand-accent" />
+    <div class="text-xl font-bold text-brand-accent">dctl</div>
+  </div>
+  <ul class="recap-list recap-list-win">
+    <li><strong>0 per-project files</strong></li>
+    <li>Composable layers</li>
+    <li>Shared images</li>
+    <li>Auto credentials &amp; env</li>
+  </ul>
 </div>
 
 </div>
 
-<div class="mt-12 text-xl opacity-90">
-Same Docker. Same devcontainer spec. <span class="text-brand-accent">No more boilerplate.</span>
+<div class="mt-14">
+  <div class="text-xl font-light opacity-80">
+    Same Docker. Same devcontainer spec.
+  </div>
+  <div class="mt-2 text-3xl font-bold tracking-tight text-brand-accent">
+    No more boilerplate.
+  </div>
 </div>
 
 <!--
