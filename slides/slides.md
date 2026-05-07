@@ -94,11 +94,35 @@ starting point. Watch what she has to write.
 -->
 
 ---
-layout: two-cols
-layoutClass: gap-12
+layout: center
+class: text-center
+background: 'linear-gradient(180deg, #173F4F 0%, #0E2730 100%)'
 ---
 
-# Step 1 — One project, pure Docker
+<div class="text-sm opacity-60 tracking-[0.5em] uppercase mb-3">Act 01</div>
+
+# Pure Docker
+
+<div class="flex justify-center gap-10 mt-10 text-7xl">
+  <vscode-icons:file-type-docker />
+</div>
+
+<div class="mt-10 text-xl opacity-80">
+One Dockerfile. One wrapper script.<br/>
+Watch what Ana ends up owning.
+</div>
+
+<!--
+Act I divider. The path Ana already started: hand-written Dockerfile,
+hand-written run.sh, manual post-create steps.
+-->
+
+---
+layout: two-cols
+layoutClass: gap-12 act-docker
+---
+
+# One project, pure Docker
 
 Ana needs two artifacts in her repo:
 
@@ -175,7 +199,7 @@ container starts with broken state.
 
 ---
 layout: default
-class: pain
+class: pain act-docker
 ---
 
 # Pain already visible
@@ -198,11 +222,11 @@ shows up and she gets a second project.
 
 ---
 layout: center
-class: text-center
+class: text-center act-docker
 background: 'linear-gradient(180deg, #173F4F 0%, #0E2730 100%)'
 ---
 
-# Step 2 — A second project lands
+# A second project lands
 
 <div class="flex justify-center items-center gap-10 mt-12 text-7xl">
   <logos:python />
@@ -225,7 +249,7 @@ Every team hits this moment. The question is what the second project costs.
 
 ---
 layout: two-cols
-layoutClass: gap-8
+layoutClass: gap-8 act-docker
 ---
 
 # Two projects, twice the boilerplate
@@ -300,9 +324,10 @@ and different post-create hooks per language. Nothing factors out.
 
 ---
 layout: default
+class: act-docker
 ---
 
-# What happens next
+# What Docker can't share
 
 - **4 manual files** for 2 projects — and growing linearly
 - The shared base of the Dockerfile is **copy-pasted**, not shared
@@ -329,7 +354,9 @@ class: text-center
 background: 'linear-gradient(180deg, #173F4F 0%, #0E2730 100%)'
 ---
 
-# Step 3 — Enter Dev Containers
+<div class="text-sm opacity-60 tracking-[0.5em] uppercase mb-3">Act 02</div>
+
+# Dev Containers
 
 <div class="flex justify-center items-center gap-10 mt-12 text-7xl">
   <vscode-icons:file-type-docker />
@@ -353,10 +380,10 @@ post-create hooks. Same image as before; the runtime is now declarative.
 
 ---
 layout: two-cols
-layoutClass: gap-12
+layoutClass: gap-12 act-devc
 ---
 
-# Step 3 — Python, dev container style
+# Python, dev container style
 
 The Dockerfile from before is reused. New companion file:
 
@@ -436,10 +463,10 @@ edits once and commits.
 
 ---
 layout: two-cols
-layoutClass: gap-8
+layoutClass: gap-8 act-devc
 ---
 
-# Step 4 — Two projects, four manual files
+# Two projects, two JSON files
 
 <div class="mt-4 space-y-5">
 
@@ -516,6 +543,7 @@ project is a standalone JSON file. Two projects = duplicated mounts and env.
 
 ---
 layout: default
+class: act-devc
 ---
 
 # What dev containers actually solve
@@ -527,6 +555,8 @@ layout: default
 - <mdi-source-commit class="inline text-brand" /> &nbsp; **Config travels with the repo.** Teammates clone and get the same mounts, env, and setup commands.
 
 - <mdi-application-cog-outline class="inline text-brand" /> &nbsp; **One command to start.** <code>devcontainer up</code> replaces the 15-line <code>docker run</code>.
+
+- <mdi-heart-pulse class="inline text-brand" /> &nbsp; **Built-in keepalive.** The CLI injects its own shim (<code>overrideCommand: true</code> by default), so no <code>sleep infinity</code> in the Dockerfile or run args.
 
 - <mdi-microsoft-visual-studio-code class="inline text-brand" /> &nbsp; **First-class editor support.** VS Code, JetBrains, and Codespaces all consume the spec — open the folder, the editor builds and attaches automatically. Language servers, debuggers, and extensions run **inside** the container.
 
@@ -542,7 +572,7 @@ run inside the container, against the same toolchain the agent uses.
 
 ---
 layout: default
-class: pain
+class: pain act-devc
 ---
 
 # Pain that remains
@@ -570,7 +600,9 @@ class: text-center
 background: 'linear-gradient(135deg, #0E2730 0%, #173F4F 55%, #2E6B2A 100%)'
 ---
 
-# Step 5 — Enter `dctl`
+<div class="text-sm opacity-60 tracking-[0.5em] uppercase mb-3">Act 03</div>
+
+# Enter `dctl`
 
 <div class="mt-10 text-xl opacity-90">
 One source of truth for Dockerfiles <span class="opacity-60">and</span> devcontainer config.<br/>
@@ -595,6 +627,7 @@ container identity, all kept in one place users can edit and version.
 
 ---
 layout: default
+class: act-dctl
 ---
 
 # The principle — single source of truth
@@ -620,7 +653,7 @@ everything else: shared images, shared layers, project registry, work-clones.
 
 ---
 layout: two-cols
-layoutClass: gap-10
+layoutClass: gap-10 act-dctl
 ---
 
 # Shared Dockerfiles
@@ -702,7 +735,7 @@ to agents lights up every downstream image on the next build.
 
 ---
 layout: two-cols
-layoutClass: gap-10
+layoutClass: gap-10 act-dctl
 ---
 
 # Composable devcontainer config
@@ -788,6 +821,7 @@ The cache is the only thing devcontainer up actually reads.
 
 ---
 layout: default
+class: act-dctl
 ---
 
 # Per-project: just point at a manifest
@@ -821,24 +855,24 @@ Three projects. Two manifests. <strong>Zero per-project files.</strong>
 <div class="flex items-center gap-3">
   <mdi-numeric-1-circle-outline class="text-3xl text-brand" />
   <div>
-    <div class="font-mono text-sm">dctl init --devcontainer python</div>
-    <div class="text-xs opacity-70">Selects the manifest, merges layers, registers the project</div>
+    <div class="font-mono text-sm">dctl init</div>
+    <div class="text-xs opacity-70">Pick a manifest, merge layers, register the project</div>
   </div>
 </div>
 
 <div class="flex items-center gap-3">
   <mdi-numeric-2-circle-outline class="text-3xl text-brand" />
   <div>
-    <div class="font-mono text-sm">dctl init</div>
-    <div class="text-xs opacity-70">In an already-registered project — refreshes the cache</div>
+    <div class="font-mono text-sm">dctl ws up</div>
+    <div class="text-xs opacity-70">Start the container from the merged cache</div>
   </div>
 </div>
 
 <div class="flex items-center gap-3">
   <mdi-numeric-3-circle-outline class="text-3xl text-brand-accent" />
   <div>
-    <div class="font-mono text-sm">dctl ws up</div>
-    <div class="text-xs opacity-70">Reads the merged cache, starts the container</div>
+    <div class="font-mono text-sm">dctl ws shell claude</div>
+    <div class="text-xs opacity-70">Drop in and start working</div>
   </div>
 </div>
 
@@ -859,7 +893,7 @@ Two Python projects share one manifest. Adding a third is one command.
 
 ---
 layout: two-cols
-layoutClass: gap-10
+layoutClass: gap-10 act-dctl
 ---
 
 # One command per task
@@ -961,6 +995,7 @@ Same CLI in both; the difference is where the config comes from.
 
 ---
 layout: default
+class: act-dctl
 ---
 
 # What `dctl` quietly handles
@@ -1000,7 +1035,7 @@ background: 'linear-gradient(135deg, #0E2730 0%, #173F4F 55%, #2E6B2A 100%)'
   </div>
   <ul class="recap-list">
     <li>1 Dockerfile per project</li>
-    <li>15-line <code>docker run</code></li>
+    <li>1–N wrapper scripts (<code>run</code>, <code>exec</code>, …)</li>
     <li>Manual post-create</li>
     <li>Drift across repos</li>
   </ul>
