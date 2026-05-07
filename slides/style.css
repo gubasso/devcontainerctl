@@ -269,3 +269,64 @@ html.dark .recap-devc {
 .decoration-brand-warn {
   text-decoration-color: var(--brand-warn);
 }
+
+/* ─── Act bars (visual cue per section). ──────────────────────────────────
+ * Every content slide in an act gets a colored left bar + a tiny
+ * top-right badge so the audience always knows which section they're in.
+ * Section dividers (`layout: center`) intentionally do not get the bar —
+ * they announce the act explicitly.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+.slidev-layout.act-docker,
+.slidev-layout.act-devc,
+.slidev-layout.act-dctl {
+  position: relative;
+}
+
+.slidev-layout.act-docker::before,
+.slidev-layout.act-devc::before,
+.slidev-layout.act-dctl::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  pointer-events: none;
+}
+
+.slidev-layout.act-docker::before {
+  background: var(--brand-mute);
+}
+.slidev-layout.act-devc::before {
+  background: var(--brand-deep);
+}
+.slidev-layout.act-dctl::before {
+  background: var(--brand-primary);
+}
+
+.slidev-layout.act-docker::after,
+.slidev-layout.act-devc::after,
+.slidev-layout.act-dctl::after {
+  position: absolute;
+  top: 0.9rem;
+  right: 1.4rem;
+  font-family: "Fira Code", monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.45;
+  pointer-events: none;
+}
+.slidev-layout.act-docker::after {
+  content: "01 · Pure Docker";
+  color: var(--brand-mute);
+}
+.slidev-layout.act-devc::after {
+  content: "02 · Dev Containers";
+  color: var(--brand-deep);
+}
+.slidev-layout.act-dctl::after {
+  content: "03 · dctl";
+  color: var(--brand-primary);
+}
