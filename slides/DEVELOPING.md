@@ -22,16 +22,17 @@ Edit any file under `slides/`; the browser hot-reloads on save.
 
 ## Project layout
 
-| Path               | Purpose                                                                                          |
-| ------------------ | ------------------------------------------------------------------------------------------------ |
-| `slides.md`        | Main deck. Front matter at top configures theme, layout, transitions. Slides separated by `---`. |
-| `pages/*.md`       | Imported sub-decks. Reference from `slides.md` with `<<< ./pages/imported-slides.md`.            |
-| `components/*.vue` | Reusable Vue components. Use directly in markdown: `<Counter />`.                                |
-| `snippets/*.ts`    | External code samples. Embed with `<<< @/snippets/external.ts`.                                  |
-| `public/`          | Static assets served at `/` (create as needed).                                                  |
-| `dist/`            | Build output (gitignored).                                                                       |
+| Path        | Purpose                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------ |
+| `slides.md` | Main deck. Front matter at top configures theme, layout, transitions. Slides separated by `---`. |
+| `style.css` | Deck-wide CSS overrides.                                                                         |
+| `public/`   | Static assets served at `/` (create as needed).                                                  |
+| `dist/`     | Build output (gitignored).                                                                       |
 
-Full reference: <https://sli.dev/custom/directory-structure>.
+Slidev also supports `pages/*.md` (imported sub-decks via `<<< ./pages/foo.md`),
+`components/*.vue` (used directly in markdown), and `snippets/*.ts` (embedded
+with `<<< @/snippets/foo.ts`) — add them on demand. Full reference:
+<https://sli.dev/custom/directory-structure>.
 
 ## Common authoring tasks
 

@@ -10,8 +10,7 @@ npm install              # first time only
 npm run dev              # opens http://localhost:3030
 ```
 
-Edit `slides.md` (or files under `components/`, `pages/`, `snippets/`); the dev
-server hot-reloads on save.
+Edit `slides.md` or `style.css`; the dev server hot-reloads on save.
 
 ## Sanity-check the production build (optional)
 
@@ -35,7 +34,7 @@ gh pr create --base master --head develop  # promote to master → triggers depl
 Watch the run: GitHub → Actions → **Deploy slides**. Live URL appears in the
 job summary, and at:
 
-  https://<your-handle>.github.io/devcontainerctl/
+https://<your-handle>.github.io/devcontainerctl/
 
 ## Manual redeploy
 
@@ -46,7 +45,7 @@ config), trigger the workflow manually:
 gh workflow run slides.yml --ref master
 ```
 
-Or via the UI: Actions → **Deploy slides** → *Run workflow*.
+Or via the UI: Actions → **Deploy slides** → _Run workflow_.
 
 ## Troubleshooting
 
