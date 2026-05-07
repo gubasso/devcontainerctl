@@ -7,7 +7,7 @@ repos:
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
       - id: end-of-file-fixer
-      # pretty-format-json omitted: repo has no plain .json files (all are JSONC devcontainer.json)
+      # pretty-format-json omitted intentionally: the only plain .json file (devcontainers/agents/seccomp-bwrap.json) is hand-written and reads better with the structure it has; check-json5 already validates syntax
       - id: check-added-large-files
         args: ["--maxkb=2048"]
       - id: detect-private-key
@@ -32,7 +32,8 @@ repos:
     rev: v3.12.0-2
     hooks:
       - id: shfmt
-        args: ["-i", "2", "-ci"]
+        args: ["-w", "-i", "2", "-ci", "-bn", "-s"]
+        files: '\.(sh|bash|bats)$|^bin/dctl$|^hooks/post-stow$'
 
   # shellharden – auto-quote variables and command substitutions
   - repo: local
@@ -49,13 +50,6 @@ repos:
       - id: bashate
         args: ["-i", "E003,E006", "-e", "E005"]
         exclude: ^tests/(.*\.bats|test_helper\.bash)$
-
-  - repo: https://github.com/crate-ci/typos
-    rev: v1.44.0
-    hooks:
-      - id: typos
-        args: ["--write-changes"]
-        exclude: ^images/.*/Dockerfile$
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.0
@@ -75,8 +69,30 @@ repos:
     rev: v4.13.9
     hooks:
       - id: commitizen
-      - id: commitizen-branch
-        stages: [pre-push]
+
+  # Slides sub-project (Slidev) ----------------------------------------------
+  # Prettier formats Markdown, Vue, TS, JSON inside slides/ only.
+  # rbubley fork is used because pre-commit/mirrors-prettier is archived.
+  - repo: https://github.com/rbubley/mirrors-prettier
+    rev: v3.8.3
+    hooks:
+      - id: prettier
+        args: [--write]
+        files: ^slides/.*\.(md|vue|ts|js|json|ya?ml|css)$
+        # slides/slides.md and slides/pages/*.md use Slidev's per-slide
+        # frontmatter syntax (`---\nlayout: foo\n---`), which prettier
+        # mangles into setext H2 headings and breaks the deck. Keep them
+        # out — see slides/.prettierignore for the same rule honored by
+        # any direct `npx prettier` invocation.
+        exclude: |
+          (?x)^slides/(
+            node_modules|
+            dist|
+            \.slidev|
+            package-lock\.json|
+            slides\.md|
+            pages/.*\.md
+          )
 
   - repo: meta
     hooks:
@@ -97,4 +113,13 @@ repos:
         entry: bats --filter-tags integration tests
         pass_filenames: false
         always_run: true
+        stages: [pre-push]
+      # slidev build – catches deck breakages before pushing to GitHub Pages.
+      # Requires slides/node_modules (run `npm ci` in slides/ first).
+      - id: slidev-build
+        name: slidev build
+        language: system
+        entry: bash -c 'cd slides && npm run build'
+        files: ^slides/
+        pass_filenames: false
         stages: [pre-push]

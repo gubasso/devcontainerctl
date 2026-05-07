@@ -1,0 +1,117 @@
+# Shared Resolution Model
+
+**Status:** Implemented
+
+## Purpose
+
+This document defines the implemented config resolution model used by `dctl`.
+It covers `devcontainer.json` resolution, managed asset deployment, and the
+Dockerfile resolution used by `dctl image build`.
+
+## Goals
+
+- Support work-clone workflows without duplicating config across sibling clones
+- Allow explicit overrides from the CLI and environment
+- Support host-side project configuration in `projects.yaml`
+- Keep user config, installed assets, and generated cache separated by XDG role
+- Make the user config directory the only runtime-authoritative location
+- Make selection deterministic and debuggable
+
+## Devcontainer.json Precedence
+
+`dctl` resolves `devcontainer.json` in this order:
+
+1. `dctl --config <path>`
+2. `DCTL_CONFIG`
+3. `devcontainer-manifest` field in `~/.config/dctl/projects.yaml`
+   (resolves to `~/.cache/dctl/devcontainer/<name>/devcontainer.json`)
+4. `.devcontainer/devcontainer.json` in the current workspace
+5. Work-clone sibling discovery
+6. `~/.config/dctl/default/devcontainer.json`
+
+The winning source is logged. Missing explicit paths are immediate errors.
+
+## XDG Layout
+
+The implemented split is:
+
+- `~/.config/dctl/`
+  - project registry
+  - user defaults
+  - deployed devcontainer config
+  - user Dockerfile overrides
+- `~/.local/share/dctl/`
+  - installed templates
+  - installed managed Dockerfiles
+  - schemas
+- `~/.cache/dctl/`
+  - generated merged `devcontainer.json` files
+
+All paths honor `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, and `XDG_CACHE_HOME`.
+
+## Global Managed-Asset Rule
+
+If files are not in `~/.config/dctl/`, they cannot be used at runtime.
+
+- Installed files under `~/.local/share/dctl/` are seed sources only
+- `dctl deploy` copies managed assets from installed data into user config
+- Runtime operations read only from user config and cache
+
+This rule applies to both managed Dockerfiles and managed devcontainer
+templates.
+
+## Path Normalization
+
+Filesystem paths participating in selection are normalized with `realpath`
+before use. That includes CLI overrides, environment overrides, cache paths
+derived from registry manifests, workspace-derived sibling paths, and the
+workspace folder itself.
+
+## Resolution Logging
+
+`dctl` logs the winning source only. Typical messages include:
+
+- `Using devcontainer config from CLI flag: ...`
+- `Using devcontainer config from project registry: <project> (manifest: <name>) -> ...`
+- `Using devcontainer config from sibling repo: ...`
+- `Using Dockerfile override from ...`
+
+## Dev Container CLI Integration
+
+`dctl` resolves the effective config path before invoking the Dev Container CLI
+and passes it via `--config`. `--workspace-folder` remains the current
+workspace directory, so container identity stays keyed to the current clone.
+
+## Work-Clone Sibling Discovery
+
+Sibling discovery is deterministic:
+
+1. Take the current workspace basename
+2. If it contains `.`, strip everything after the first `.`
+3. Look for a sibling directory with that base name
+4. Require that sibling to be a git repo
+5. Require `.devcontainer/devcontainer.json` in that sibling
+
+Sibling discovery is skipped when the project registry sets
+`sibling_discovery: false`.
+
+## Dockerfile Resolution Scope
+
+Dockerfile resolution applies only to `dctl image build`.
+
+For a managed target, resolution is:
+
+1. `~/.config/dctl/images/<target>/Dockerfile`
+
+No-arg `dctl image build` presents an interactive picker over deployed managed
+images and never consults the project registry. Installed Dockerfiles are seed
+sources only and must be copied into user config by `dctl deploy image ...` or
+`dctl deploy --all-images`.
+
+## Error Handling
+
+- Missing CLI or env override paths fail immediately
+- Missing or unbuilt registry manifests fail immediately, name the registry,
+  and point at `dctl init --devcontainer <name>`
+- Missing user default is a silent miss in the chain
+- Exhausting the chain fails with guidance to run `dctl init` or pass `--config`

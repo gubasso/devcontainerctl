@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # Workspace (ws) commands for dctl (sourced, not executed directly)
 
-[[ -n "${_DCTL_WS_LOADED:-}" ]] && return 0
+[[ -n ${_DCTL_WS_LOADED:-} ]] && return 0
 readonly _DCTL_WS_LOADED=1
 
 : "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)}"
@@ -10,12 +10,8 @@ readonly _DCTL_WS_LOADED=1
 source "${DCTL_LIB_DIR}/common.sh"
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/auth.sh"
-
-require_dotfiles_dir() {
-  DOTFILES="${DOTFILES:-${HOME}/.dotfiles}"
-  [[ -d "$DOTFILES" ]] || err "Dotfiles not found at ${DOTFILES} — set DOTFILES= or ensure ~/.dotfiles exists"
-  export DOTFILES
-}
+# shellcheck source=/dev/null
+source "${DCTL_LIB_DIR}/init.sh"
 
 usage_ws() {
   cat <<'EOF'
@@ -74,7 +70,7 @@ ensure_ws_container_running() {
 
   local running_ids
   running_ids="$(list_running_ws_containers)"
-  if [[ -n "$running_ids" ]]; then
+  if [[ -n $running_ids ]]; then
     return 0
   fi
 
@@ -100,7 +96,7 @@ collect_git_worktree_mounts() {
   common_dir="$(cd -- "$WORKSPACE_FOLDER" && cd -- "$common_dir" && pwd -P)"
 
   # Not a linked worktree — git dir and common dir are identical
-  [[ "$git_dir" != "$common_dir" ]] || return 0
+  [[ $git_dir != "$common_dir" ]] || return 0
 
   # Mount the shared .git directory at the same host path inside the container
   # so the absolute gitdir reference in the worktree's .git file resolves
@@ -113,45 +109,91 @@ collect_term_env() {
 
   local var_name
   for var_name in TERM COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION KITTY_WINDOW_ID KITTY_LISTEN_ON; do
-    if [[ -n "${!var_name:-}" ]]; then
+    if [[ -n ${!var_name:-} ]]; then
       out+=(--remote-env "${var_name}=${!var_name}")
     fi
   done
 }
 
 devcontainer_exec() {
+  local config_path
+  if ! config_path="$(resolve_devcontainer_config)"; then
+    return 1
+  fi
   local -a term_args auth_args
   collect_term_env term_args
   collect_auth_env auth_args
-  devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" "${term_args[@]}" "${auth_args[@]}" "$@"
+  devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" "${term_args[@]}" "${auth_args[@]}" "$@"
 }
 
 cmd_ws_up() {
   require_cmd devcontainer
-  require_dotfiles_dir
   local args=("$@")
   if [[ ${#args[@]} -gt 0 && ${args[0]} == "--" ]]; then
     args=("${args[@]:1}")
+  fi
+
+  local config_path
+  if ! config_path="$(resolve_devcontainer_config)"; then
+    return 1
   fi
 
   local -a git_wt_mounts=()
   collect_git_worktree_mounts git_wt_mounts
   log "Starting devcontainer for $(workspace_path)"
-  devcontainer up --workspace-folder "$WORKSPACE_FOLDER" "${git_wt_mounts[@]}" "${args[@]}"
+  devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" "${git_wt_mounts[@]}" "${args[@]}"
 }
 
 cmd_ws_reup() {
   require_cmd devcontainer
-  require_dotfiles_dir
   local args=("$@")
   if [[ ${#args[@]} -gt 0 && ${args[0]} == "--" ]]; then
     args=("${args[@]:1}")
   fi
 
+  local config_path
+  if ! config_path="$(resolve_devcontainer_config)"; then
+    return 1
+  fi
+
+  # Decide whether to regenerate the merged cache before re-up. Two paths:
+  #   (a) The current project has a manifest registered — use it directly.
+  #   (b) No registry entry, but the resolved config still lives inside the
+  #       cache dir (likely came from --config/DCTL_CONFIG pointing at a
+  #       cached file). Recover the manifest name from the parent dir.
+  local template_name=""
+  local canonical_name registry_manifest
+  canonical_name="$(resolve_canonical_project_name)"
+  if command -v yq >/dev/null 2>&1; then
+    registry_manifest="$(_registry_lookup_devcontainer_manifest "$canonical_name" || true)"
+  else
+    registry_manifest=""
+  fi
+
+  if [[ -n $registry_manifest ]]; then
+    template_name="$registry_manifest"
+  else
+    local cache_root_canonical="$DCTL_DEVCONTAINER_CACHE_DIR"
+    if [[ -d $DCTL_DEVCONTAINER_CACHE_DIR ]]; then
+      cache_root_canonical="$(realpath "$DCTL_DEVCONTAINER_CACHE_DIR")"
+    fi
+    if [[ $config_path == "${cache_root_canonical}/"* ]]; then
+      template_name="$(basename "$(dirname "$config_path")")"
+    fi
+  fi
+
+  if [[ -n $template_name ]]; then
+    local cache_output config_status
+    cache_output="$(generate_cached_devcontainer "$template_name")" || return $?
+    config_path="$(head -1 <<<"$cache_output")"
+    config_status="$(tail -1 <<<"$cache_output")"
+    log "Config cache status: $config_status"
+  fi
+
   local -a git_wt_mounts=()
   collect_git_worktree_mounts git_wt_mounts
   log "Recreating devcontainer for $(workspace_path)"
-  devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --remove-existing-container "${git_wt_mounts[@]}" "${args[@]}"
+  devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" --remove-existing-container "${git_wt_mounts[@]}" "${args[@]}"
 }
 
 cmd_ws_exec() {
@@ -197,7 +239,7 @@ cmd_ws_status() {
 
   local ids
   ids="$(list_ws_containers)"
-  if [[ -z "$ids" ]]; then
+  if [[ -z $ids ]]; then
     warn "No devcontainer found for workspace: $(workspace_path)"
     return 0
   fi
@@ -215,7 +257,7 @@ cmd_ws_down() {
 
   local ids
   ids="$(list_ws_containers)"
-  if [[ -z "$ids" ]]; then
+  if [[ -z $ids ]]; then
     warn "No devcontainer to remove for workspace: $(workspace_path)"
     return 0
   fi

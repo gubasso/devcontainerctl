@@ -2,58 +2,89 @@
 
 ## Prerequisites
 
-- Docker + buildx running (`docker buildx version` to verify)
-- `devcontainer` CLI installed: `bun install -g @devcontainers/cli`
-- Images built: `dctl image build --all`
+- Docker with `buildx`
+- Dev Container CLI installed (`devcontainer`)
 
 ## Setup
 
-1. Run `dctl init --template <python|rust|zig>` in your project root.
-2. Add only project-specific mounts or cache volumes as needed.
-3. Start: `dctl ws up`
-4. Attach: `dctl ws shell`
-5. Re-run validation any time with `dctl test`
-
-## Template
-
-```jsonc
-{
-  "name": "<project-name>",
-  "image": "devimg/agents:latest",
-  "mounts": [
-    // Project-specific SSH known_hosts
-    // "source=${localEnv:HOME}/.ssh/known_hosts,target=/home/${localEnv:USER}/.ssh/known_hosts,type=bind,readonly"
-
-    // Python caches (for python-dev image)
-    // "source=poetry-cache,target=/home/${localEnv:USER}/.cache/pypoetry,type=volume"
-  ]
-}
+```bash
+make install
+cd ~/projects/my-api
+dctl deploy devcontainer python
+dctl deploy image python-dev
+dctl init --devcontainer python
+dctl ws up
+dctl ws shell
 ```
 
-Shared auth/editor mounts, `remoteUser`, `init`, `shutdownAction`, container env, and the dotfiles `postCreateCommand` come from the `devimg/agents` `devcontainer.metadata` label.
+## How Composition Works
 
-## Available Images
+Each selectable config is defined by a YAML **manifest** that declares an
+ordered list of layers to compose. For example, `python.yaml`:
 
-| Image | Use case |
-| --- | --- |
-| `devimg/agents:latest` | General-purpose (Bun, mise, Claude Code, Codex, OpenCode, Gemini CLI) |
-| `devimg/python-dev:latest` | Python projects |
-| `devimg/rust-dev:latest` | Rust projects |
-| `devimg/zig-dev:latest` | Zig projects |
+```yaml
+layers:
+  - base      # shared infrastructure (auth mounts, terminal env, remote user)
+  - agents    # shared agents layer (bubblewrap-friendly seccomp profile, agent CLI mounts)
+  - python    # leaf layer (image tag, cache volumes, bootstrap commands)
+```
+
+Each layer name maps to a directory containing a `devcontainer.json`.
+`dctl init` reads the manifest, resolves each layer from
+`~/.config/dctl/devcontainer/<layer>/devcontainer.json`, and merges them in
+order into a single cached `devcontainer.json` consumed by `dctl ws up`.
+
+The **last layer** in the manifest is the **leaf** — it holds your
+project-specific settings and is protected from overwrites on deploy. All
+preceding layers are **shared** and reconciled automatically.
+
+Manifests are validated against `schemas/compose.schema.yaml` (JSON Schema
+Draft 2020-12). The only field is `layers` (non-empty array of strings);
+the filename stem is the manifest name.
+
+## Available Configs
+
+| Config | Layers | Image |
+| --- | --- | --- |
+| `general` | base, agents, general | `devimg/agents:latest` |
+| `coordinator` | base, agents, coordinator | `devimg/agents:latest` |
+| `python` | base, agents, python | `devimg/python-dev:latest` |
+| `rust` | base, agents, rust | `devimg/rust-dev:latest` |
+| `zig` | base, agents, zig | `devimg/zig-dev:latest` |
+
+## Creating a Custom Manifest
+
+To compose a custom layer stack, create a manifest in user config:
+
+```yaml
+# ~/.config/dctl/devcontainer/myproject.yaml
+name: myproject
+layers:
+  - base
+  - agents      # include if you want the bundled seccomp profile + agent mounts
+  - dotfiles    # optional personal layer (see examples/dotfiles/)
+  - python      # leaf — last layer wins for scalar fields
+```
+
+Then add your layer directories under `~/.config/dctl/devcontainer/` and run
+`dctl init --devcontainer myproject`.
 
 ## Common Commands
 
 ```bash
-dctl ws up             # start
-dctl ws reup           # recreate after devcontainer.json/image changes
-dctl ws shell          # attach shell
-dctl ws run -- claude-session  # run agent command
-dctl ws run -- pytest  # execute arbitrary command
-dctl ws status         # show container(s) for current workspace
-dctl ws down           # stop/remove current workspace container(s)
-dctl image build --all        # rebuild base images
+dctl deploy --list
+dctl init --devcontainer python
+dctl ws up
+dctl ws reup
+dctl ws shell
+dctl ws shell claude
+dctl ws exec -- pytest
+dctl ws status
+dctl ws down
+dctl image build --all
+dctl test
 ```
 
 ## Full Documentation
 
-See [ARCHITECTURE.md](ARCHITECTURE.md).
+See [README.md](../README.md) and [ARCHITECTURE.md](ARCHITECTURE.md).

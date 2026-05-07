@@ -1,0 +1,7 @@
+{
+  "name": "${localWorkspaceFolderBasename}-sandbox",
+  "image": "devimg/python-dev:latest",
+  "postCreateCommand": {
+    "pre-commit": "pre-commit install"
+  }
+}

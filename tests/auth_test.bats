@@ -68,7 +68,7 @@ MOCK
 
   local -a args
   PATH="$(_mock_path)" collect_auth_env args
-  [[ "${args[*]}" == *"--remote-env GH_TOKEN=ghp_test123"* ]]
+  [[ ${args[*]} == *"--remote-env GH_TOKEN=ghp_test123"* ]]
 }
 
 @test "collect_auth_env includes GITLAB_TOKEN when glab authenticated" {
@@ -83,7 +83,7 @@ MOCK
 
   local -a args
   PATH="$(_mock_path)" collect_auth_env args
-  [[ "${args[*]}" == *"--remote-env GITLAB_TOKEN=mock_glab_tok456"* ]]
+  [[ ${args[*]} == *"--remote-env GITLAB_TOKEN=mock_glab_tok456"* ]]
 }
 
 @test "collect_auth_env includes both tokens when both CLIs authenticated" {
@@ -106,8 +106,8 @@ MOCK
 
   local -a args
   PATH="$(_mock_path)" collect_auth_env args
-  [[ "${args[*]}" == *"--remote-env GH_TOKEN=ghp_both123"* ]]
-  [[ "${args[*]}" == *"--remote-env GITLAB_TOKEN=mock_glab_tok789"* ]]
+  [[ ${args[*]} == *"--remote-env GH_TOKEN=ghp_both123"* ]]
+  [[ ${args[*]} == *"--remote-env GITLAB_TOKEN=mock_glab_tok789"* ]]
 }
 
 @test "collect_auth_env suppresses warnings on stderr" {
@@ -160,8 +160,8 @@ MOCK
   export GITLAB_TOKEN="glpat_envonly"
   local -a args
   PATH="$(_no_cli_path)" collect_auth_env args
-  [[ "${args[*]}" == *"--remote-env GH_TOKEN=ghp_envonly"* ]]
-  [[ "${args[*]}" == *"--remote-env GITLAB_TOKEN=glpat_envonly"* ]]
+  [[ ${args[*]} == *"--remote-env GH_TOKEN=ghp_envonly"* ]]
+  [[ ${args[*]} == *"--remote-env GITLAB_TOKEN=glpat_envonly"* ]]
 }
 
 @test "_extract_gh_token prefers env var over CLI" {

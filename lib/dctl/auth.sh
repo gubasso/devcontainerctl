@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # Auth token extraction for dctl (sourced, not executed directly)
 
-[[ -n "${_DCTL_AUTH_LOADED:-}" ]] && return 0
+[[ -n ${_DCTL_AUTH_LOADED:-} ]] && return 0
 readonly _DCTL_AUTH_LOADED=1
 
 : "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)}"
@@ -10,11 +10,11 @@ readonly _DCTL_AUTH_LOADED=1
 source "${DCTL_LIB_DIR}/common.sh"
 
 _extract_gh_token() {
-  if [[ -n "${GH_TOKEN:-}" ]]; then
+  if [[ -n ${GH_TOKEN:-} ]]; then
     printf '%s' "$GH_TOKEN"
     return 0
   fi
-  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  if [[ -n ${GITHUB_TOKEN:-} ]]; then
     printf '%s' "$GITHUB_TOKEN"
     return 0
   fi
@@ -28,7 +28,7 @@ _extract_gh_token() {
   fi
   local token
   token=$(gh auth token 2>/dev/null)
-  if [[ -z "$token" ]]; then
+  if [[ -z $token ]]; then
     warn "Failed to extract gh token"
     return 1
   fi
@@ -36,7 +36,7 @@ _extract_gh_token() {
 }
 
 _extract_glab_token() {
-  if [[ -n "${GITLAB_TOKEN:-}" ]]; then
+  if [[ -n ${GITLAB_TOKEN:-} ]]; then
     printf '%s' "$GITLAB_TOKEN"
     return 0
   fi
@@ -50,7 +50,7 @@ _extract_glab_token() {
   fi
   local token
   token=$(glab auth status --show-token 2>&1 | awk '/Token:/{print $NF}')
-  if [[ -z "$token" ]]; then
+  if [[ -z $token ]]; then
     warn "Failed to extract glab token"
     return 1
   fi

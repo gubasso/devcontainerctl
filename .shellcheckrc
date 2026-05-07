@@ -1,0 +1,7 @@
+external-sources=true
+source-path=SCRIPTDIR
+source-path=SCRIPTDIR/lib
+source-path=SCRIPTDIR/lib/dctl
+source-path=SCRIPTDIR/../lib
+source-path=SCRIPTDIR/../lib/dctl
+shell=bash

@@ -1,0 +1,123 @@
+# Devcontainer Resolution
+
+**Status:** Implemented
+
+## Purpose
+
+This document describes the implemented `devcontainer.json` resolution behavior
+for `dctl`.
+
+## Resolution Algorithm
+
+```text
+resolve_devcontainer_config():
+    if --config flag provided:                          return flag value
+    if DCTL_CONFIG env var set:                         return env var value
+    if projects.yaml has devcontainer-manifest:         return cache path derived from manifest
+    if local .devcontainer/devcontainer.json exists:    return it
+    if work-clone sibling has config:                   return sibling config
+    if ~/.config/dctl/default/devcontainer.json exists: return it
+    error: no config found, run 'dctl init'
+```
+
+All path comparisons use normalized `realpath` values.
+
+## Source Definitions
+
+### CLI Flag
+
+- `dctl --config <path>`
+- highest precedence
+- missing path is an immediate error
+
+### Environment Variable
+
+- `DCTL_CONFIG`
+- used when the CLI flag is absent
+- missing path is an immediate error
+
+### Project Registry
+
+- source: `devcontainer-manifest` field in `~/.config/dctl/projects.yaml`
+- derives `~/.cache/dctl/devcontainer/<name>/devcontainer.json`
+- participates only when present for the canonical project
+- missing or unbuilt registry cache is an error with guidance to run
+  `dctl init --devcontainer <name>`
+
+### Local Project File
+
+- source: `.devcontainer/devcontainer.json` in the current workspace
+
+### Work-Clone Sibling
+
+- source: sibling repo config discovered via the shared resolution model
+
+### User Global Default
+
+- source: `~/.config/dctl/default/devcontainer.json`
+- silent miss if absent
+
+## Integration with the Dev Container CLI
+
+When a config is resolved, `dctl` invokes the Dev Container CLI with:
+
+```text
+devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$resolved_path"
+```
+
+The workspace folder remains the current directory even when the resolved
+config lives elsewhere.
+
+## Command Impact
+
+### `dctl ws up`
+
+- resolves config first
+- passes `--config <resolved-path>`
+
+### `dctl ws reup`
+
+- same as `ws up`
+- adds `--remove-existing-container`
+
+### `dctl test`
+
+- resolves config first
+- reads image information from the resolved config
+- passes the resolved config through to Dev Container CLI operations
+
+### `dctl init`
+
+- selects a devcontainer only from `~/.config/dctl/devcontainer/`
+- errors if no deployed devcontainers are available and instructs the user to
+  run `dctl deploy`
+- reads the selected devcontainer's `.image` field
+- for managed `devimg/<name>:latest` images, validates that
+  `~/.config/dctl/images/<name>/Dockerfile` exists
+- for managed images, runs `docker image inspect` and automatically calls
+  `dctl image build <name>` when the image is missing locally
+- writes merged output to `~/.cache/dctl/devcontainer/<name>/devcontainer.json`
+- registers the manifest name in `~/.config/dctl/projects.yaml`
+- runs `dctl test` against the resolved cache and prints a final summary
+  (project, devcontainer, image status, cache path, registry path, smoke-test
+  result); exits non-zero if the smoke test fails
+- does not write local workspace `.devcontainer/` files
+- does not read from installed templates directly
+- does not override `.image` in the generated cache
+
+### `dctl ws exec`, `dctl ws shell`, `dctl ws run`
+
+- resolve config via the same precedence chain (needed for the `--config` pass-through to `devcontainer exec`)
+- operate on already-running containers selected by workspace label
+
+## Failure Modes
+
+- no config found: fail with guidance to run `dctl init` or pass `--config`
+- explicit override path missing: fail immediately
+- registry manifest unbuilt: fail with guidance to run `dctl init --devcontainer <name>`
+- invalid JSON: let the Dev Container CLI report it
+
+## Logging Requirements
+
+When a source wins, `dctl` logs it at normal verbosity. The log identifies the
+source category and the resolved path.

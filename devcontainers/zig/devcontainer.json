@@ -1,0 +1,8 @@
+{
+  "name": "${localWorkspaceFolderBasename}-sandbox",
+  "image": "devimg/zig-dev:latest",
+  "postCreateCommand": {
+    "zig-zls": "zig-zls-init --allow-unsigned || true",
+    "pre-commit": "pre-commit install"
+  }
+}

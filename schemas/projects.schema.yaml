@@ -1,0 +1,25 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+title: dctl project registry
+description: Per-project configuration for devcontainerctl
+type:
+  - object
+  - "null"
+additionalProperties:
+  type: object
+  properties:
+    devcontainer-manifest:
+      type: string
+      pattern: "^[A-Za-z0-9._-]+$"
+      description: >
+        Name (stem) of a deployed devcontainer manifest under
+        ~/.config/dctl/devcontainer/<name>.yaml. Runtime derives the
+        merged-cache path at ~/.cache/dctl/devcontainer/<name>/devcontainer.json.
+        Do not include the .yaml extension and do not write a path here.
+    sibling_discovery:
+      type: boolean
+      default: true
+      description: >
+        Whether to attempt work-clone sibling discovery. Set to false
+        for repositories whose names contain a dot but are not
+        work-clones.
+  additionalProperties: false

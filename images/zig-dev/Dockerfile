@@ -11,12 +11,12 @@ RUN test -n "$USERNAME" || { echo "USERNAME build arg is required"; exit 1; }
 USER $USERNAME
 
 # System deps: minisign (zig-zls-init signature verification),
-# xz-utils (tar -xJ for zls archives)
+# xz (tar -xJ for zls archives)
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    minisign \
-    xz-utils \
-    && rm -rf /var/lib/apt/lists/*
+RUN zypper --non-interactive install --no-recommends \
+        minisign \
+        xz \
+    && zypper clean --all
 USER $USERNAME
 
 # anyzig: multi-version zig launcher (reads version from build.zig.zon)
@@ -32,9 +32,8 @@ RUN set -euo pipefail \
        | tar xz -C "/home/$USERNAME/.local/bin/" \
     && test -x "/home/$USERNAME/.local/bin/zig"
 
-# zig-zls-init: per-project zls download + .nvim.lua scaffold
-# hadolint ignore=DL3022
-COPY --from=dotfiles --chown=$USERNAME:$USERNAME /bin/.local/bin/zig-zls-init /home/$USERNAME/.local/bin/zig-zls-init
+# zig-zls-init: per-project zls download + signature verification
+COPY --chown=$USERNAME:$USERNAME zig-zls-init /home/$USERNAME/.local/bin/zig-zls-init
 RUN chmod +x /home/$USERNAME/.local/bin/zig-zls-init
 
 # Predictable cache path for volume mounts

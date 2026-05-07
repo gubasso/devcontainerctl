@@ -1,0 +1,15 @@
+{
+  "name": "${localWorkspaceFolderBasename}-coordinator",
+  "image": "devimg/agents:latest",
+  "mounts": [
+    {
+      "source": "${localEnv:HOME}/Projects",
+      "target": "${localEnv:HOME}/Projects",
+      "type": "bind",
+      "readonly": true
+    }
+  ],
+  "postCreateCommand": {
+    "pre-commit": "pre-commit install"
+  }
+}

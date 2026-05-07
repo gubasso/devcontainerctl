@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "purpose": "Hardened seccomp profile for the dctl agents devcontainer layer.",
+    "approach": "Default-allow with targeted denies on the highest-risk syscalls historically used in container escape / kernel LPE exploits. Strictly stronger than seccomp=unconfined, intentionally looser than moby's default-deny baseline so AI agent CLIs (Codex, Claude Code, Gemini) and their bubblewrap-based inner sandboxes work out of the box without per-syscall allowlist tuning.",
+    "trade_off": "Will not auto-block a future-added kernel syscall that turns out to be exploitable. Users who want default-deny semantics should swap seccomp= for moby's default profile (see references) and accept the maintenance cost.",
+    "references": {
+      "docker_seccomp_docs": "https://docs.docker.com/engine/security/seccomp/",
+      "moby_default_profile": "https://github.com/moby/profiles/blob/main/seccomp/default.json",
+      "moby_default_profile_history": "https://github.com/moby/moby/commits/master/profiles/seccomp/default.json",
+      "linux_seccomp_man": "https://man7.org/linux/man-pages/man2/seccomp.2.html",
+      "bubblewrap_source": "https://github.com/containers/bubblewrap",
+      "codex_sandbox_concepts": "https://developers.openai.com/codex/concepts/sandboxing",
+      "container_isolation_critique": "https://emirb.github.io/blog/microvm-2026/"
+    }
+  },
+  "defaultAction": "SCMP_ACT_ALLOW",
+  "syscalls": [
+    {
+      "names": ["bpf", "perf_event_open", "userfaultfd", "keyctl"],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Recurring kernel-LPE vectors. bpf: CVE-2017-16995, CVE-2020-8835, CVE-2021-3490, CVE-2022-23222, etc. perf_event_open: CVE-2013-2094 and many more. userfaultfd: heap-spray primitive used in Dirty Pipe and others (kernel 5.11+ supports kernel.unprivileged_userfaultfd=0 too). keyctl: CVE-2016-0728 use-after-free."
+    },
+    {
+      "names": ["kexec_load", "kexec_file_load", "init_module", "finit_module", "delete_module"],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Kernel image / kernel module manipulation. No legitimate use from inside a dev container."
+    },
+    {
+      "names": ["iopl", "ioperm", "swapon", "swapoff", "reboot", "syslog"],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Raw hardware / system control. iopl/ioperm grant raw I/O port access. swapon/swapoff manipulate swap. reboot is reboot. syslog reads the kernel ring buffer (kASLR info leak)."
+    },
+    {
+      "names": ["uselib", "create_module", "get_kernel_syms", "query_module", "nfsservctl", "vm86", "vm86old"],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Legacy syscalls; either removed in modern kernels or never used in containers. Denying them costs nothing and shrinks the attack surface against unmaintained code paths."
+    }
+  ]
+}

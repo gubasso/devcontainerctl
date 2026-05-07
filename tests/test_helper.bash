@@ -29,6 +29,23 @@ EOF
   chmod +x "${TEST_TMPDIR}/bin/${name}"
 }
 
+sanitized_bin_excluding() {
+  local sanitized="${TEST_TMPDIR}/sanitized_bin"
+  mkdir -p "$sanitized"
+  local src dst
+  for src in /usr/bin/* /bin/*; do
+    [[ -e $src ]] || continue
+    dst="${sanitized}/$(basename "$src")"
+    [[ -e $dst ]] && continue
+    ln -s "$src" "$dst" 2>/dev/null || true
+  done
+  local name
+  for name in "$@"; do
+    rm -f "${sanitized}/${name}"
+  done
+  printf '%s\n' "$sanitized"
+}
+
 assert_mock_called() {
   local pattern="$1"
   grep -F -- "$pattern" "${TEST_TMPDIR}/mock_calls.log" >/dev/null
