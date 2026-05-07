@@ -69,8 +69,6 @@ repos:
     rev: v4.13.9
     hooks:
       - id: commitizen
-      - id: commitizen-branch
-        stages: [pre-push]
 
   # Slides sub-project (Slidev) ----------------------------------------------
   # Prettier formats Markdown, Vue, TS, JSON inside slides/ only.
