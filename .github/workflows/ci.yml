@@ -1,8 +1,9 @@
 name: CI
 
+# Temporarily disabled: auto-triggers removed while CI is hanging.
+# Implementation is preserved; re-enable by restoring `push:` and `pull_request:` below.
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   lint:
