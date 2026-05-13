@@ -11,19 +11,35 @@
 # guarantees, pin versions and validate checksums. Current approach favors
 # simplicity for personal devcontainers with weekly rebuilds.
 
-FROM opensuse/leap:16.0
+# Base image: opensuse/tumbleweed is the rolling release. Docker Hub's tag
+# is rebuilt frequently against the current snapshot and mirrors sync
+# atomically per snapshot, so the chronic mirror-lag 404s that plague
+# Leap 16.0's image don't occur here. Tumbleweed's recommended upgrade
+# command is `zypper dist-upgrade` (not `zypper update`).
+#   https://en.opensuse.org/Portal:Tumbleweed
+# hadolint ignore=DL3006
+FROM opensuse/tumbleweed
 
 ENV LANG=C.UTF-8
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+# Defence-in-depth against transient mirror 404s: disable libzypp's parallel
+# package preload so a single mirror miss doesn't abort the whole transaction
+# — standard sequential download falls back to the master.
+#   https://www.suse.com/support/update/announcement/2025/suse-ru-202520488-1/
+ENV ZYPP_PCK_PRELOAD=0
+
 # System dependencies + build tools for native extensions
 # Package names follow openSUSE conventions. Verify availability with:
-#   docker run --rm opensuse/leap:16.0 bash -c "zypper --non-interactive refresh && zypper info <pkg>"
+#   docker run --rm opensuse/tumbleweed bash -c "zypper --non-interactive refresh && zypper info <pkg>"
 # Or check: https://software.opensuse.org/package/<pkg>
-# Retry loop: openSUSE CDN mirrors can temporarily 404 individual RPMs
-# during repo updates. Up to 3 attempts with metadata refresh between retries.
-# hadolint ignore=DL3037
-RUN zypper --non-interactive --gpg-auto-import-keys refresh \
+# clang-devel/llvm-devel are unversioned metapackages — they pull whatever
+# LLVM major version is current in the snapshot.
+# Retry loop: defence in depth against transient mirror flaps. Up to 3
+# attempts with -f metadata refresh between retries.
+# hadolint ignore=DL3035,DL3037
+RUN zypper --non-interactive --gpg-auto-import-keys refresh -f \
+    && zypper --non-interactive --gpg-auto-import-keys dist-upgrade --no-recommends --auto-agree-with-licenses --allow-vendor-change \
     && for attempt in 1 2 3; do \
         echo "==> Installing zypper packages (attempt ${attempt}/3)..." \
         && zypper --non-interactive install --no-recommends \
@@ -62,7 +78,7 @@ RUN zypper --non-interactive --gpg-auto-import-keys refresh \
         || if [ "$attempt" -lt 3 ]; then \
             echo "==> Attempt ${attempt}/3 failed — refreshing mirrors and retrying in 5s..."; \
             sleep 5; \
-            zypper --non-interactive --gpg-auto-import-keys refresh; \
+            zypper --non-interactive --gpg-auto-import-keys refresh -f; \
         else \
             echo "==> ERROR: zypper install failed after 3 attempts"; exit 1; \
         fi; \

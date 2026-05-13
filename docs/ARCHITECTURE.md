@@ -170,7 +170,7 @@ The spec set remains useful as a design record and glossary:
 Separate agent tools from language tooling for better caching:
 
 ```text
-devimg/agents:latest    (openSUSE Leap 16.0 + bun + node LTS + agent CLIs + mise + build deps)
+devimg/agents:latest    (openSUSE Tumbleweed + bun + node LTS + agent CLIs + mise + build deps)
        │
        ├── devimg/python-dev:latest   (poetry via mise; inherits base python, overridden by project pin)
        ├── devimg/rust-dev:latest     (rustup with no default toolchain)
@@ -247,7 +247,7 @@ The container user is created with the same name as your host `$USER`, and UID/G
 
 ### Layer 0: Agent Tools Base (agents/)
 
-Foundation layer using openSUSE Leap 16.0 for broad compatibility and package availability.
+Foundation layer using openSUSE Tumbleweed (rolling release) for current package versions and atomic mirror snapshots.
 
 **Includes**:
 

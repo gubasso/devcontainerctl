@@ -703,7 +703,7 @@ One folder hosts every managed image. The directory name **is** the image name.
 <div class="text-sm opacity-70 mb-2">Image hierarchy mirrors the config layering:</div>
 
 ```text
-openSUSE Leap 16.0
+openSUSE Tumbleweed
         │
         ▼
 devimg/agents:latest
