@@ -293,7 +293,7 @@ Runs the workspace smoke test: prerequisite checks, managed image build if neede
 ## Image Architecture
 
 ```text
-openSUSE Leap 16.0
+openSUSE Tumbleweed
         │
         ▼
 devimg/agents:latest
