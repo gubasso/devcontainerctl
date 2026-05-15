@@ -9,15 +9,15 @@
 
 `devcontainerctl` (`dctl`) exists to provide a **secure, reproducible sandbox** for running AI coding agents (e.g. Claude Code, Codex CLI, Gemini CLI). These agents execute model-generated commands against arbitrary repository content, untrusted dependencies, and remote services; they must be assumed to be running attacker-controlled code at all times.
 
-The current implementation uses Docker as the only supported runtime. This document:
+This document specifies the **podman-first sandbox architecture** for `dctl`:
 
 1. States the project's premises — what the sandbox must achieve and what it must not be (§1).
-2. Audits the current security posture (§2).
+2. Describes the configured posture (§2).
 3. Defines the threat model relevant to AI-agent execution (§3).
 4. Names the **viable candidate set** of runtime backends (§4). Full per-option analysis lives in `RUNTIMES.md`.
-5. Proposes a tiered migration plan (§5) that preserves the project's ergonomics goals (declarative, composable, shareable configuration) while introducing a real security boundary.
+5. Proposes a tiered build-out plan (§5) keeping the project's ergonomics goals intact (declarative, composable, shareable configuration) while delivering a real security boundary.
 
-**The final default backend is not chosen in this revision.** All FC-class options are kept as candidates pending a prototyping milestone (§4.4).
+The Linux backend is committed in [DECISION-LINUX.md §2](./DECISION-LINUX.md): **libkrun via `crun --krun`, fronted by rootless Podman**. Every container operation in the codebase invokes `podman` and nothing else; `dctl` interprets `devcontainer.json` itself.
 
 ---
 
@@ -29,7 +29,7 @@ This section is load-bearing for the rest of the spec. Every later decision must
 
 - **Hardware-virtualization boundary against adversarial code.** A serious attempt at host compromise must require a hypervisor-class bug, not a routine syscall trick or a known kernel CVE. Anything weaker than a KVM-class boundary (or platform-equivalent: Apple Virtualization.framework) is unacceptable as the *primary* isolation, regardless of how cleanly it integrates.
 - **Cross-platform.** Linux is the primary target (openSUSE in particular, given the project's image base). macOS is a first-class secondary target. Windows is best-effort via WSL2.
-- **OCI-image-driven authoring surface.** The existing `images/` Dockerfile flow and `devcontainer.json` schema are the user-authoring surface. The runtime swap may convert OCI images into other formats internally (rootfs tarballs, ext4, etc.); the user never authors anything other than OCI/devcontainer artifacts.
+- **OCI-image-driven authoring surface.** The existing `images/` Containerfile flow and `devcontainer.json` schema are the user-authoring surface. The runtime swap may convert OCI images into other formats internally (rootfs tarballs, ext4, etc.); the user never authors anything other than OCI/devcontainer artifacts.
 - **Acceptable cold-start.** A few hundred milliseconds to a few seconds for `dctl ws up`. Sub-second is preferred; multi-second is the upper bound for laptop ergonomics.
 
 ### 1.2 Security goals
@@ -51,8 +51,8 @@ This section is load-bearing for the rest of the spec. Every later decision must
 
 ### 1.4 Anti-premises (what we explicitly reject)
 
-- **Bare Docker / Podman (rootful or rootless) as the primary boundary.** See §1.5 for reasoning. Hardened seccomp, AppArmor, and `cap-drop` are defense-in-depth, not the boundary.
-- **`--privileged`, Docker socket bind-mount, `--cap-add` for non-essential caps.** Already avoided in the current configuration; explicitly disallowed going forward.
+- **Bare Podman (rootful or rootless) as the primary boundary.** See §1.5 for reasoning. Hardened seccomp, AppArmor, and `cap-drop` are defense-in-depth, not the boundary.
+- **`--privileged`, container-socket bind-mount, `--cap-add` for non-essential caps.** Disallowed across all configurations.
 - **A runtime that requires re-implementing the OCI ecosystem from scratch** with a permanent maintenance burden the size of containerd. Targeted plumbing (rootfs builder, in-guest init, vsock channel) is acceptable; rebuilding containerd is not.
 - **Hardware-attested isolation against the host (Confidential Containers / TDX / SEV-SNP)** as the threat-model framing. The host is trusted; the workload is not. We solve workload isolation, not host distrust.
 - **Language-level sandboxes** (V8 isolates, WebAssembly) as the boundary. Cannot host the agent's full toolchain (`pytest`, `cargo`, `git`, native compilers).
@@ -63,53 +63,32 @@ This section is load-bearing for the rest of the spec. Every later decision must
 
 The shared-kernel container model is a resource-isolation boundary, not a security boundary. Three observations make it unacceptable as the primary boundary for the AI-agent threat model:
 
-1. **Recurring container breakouts.** November 2025 alone produced **three back-to-back runc CVEs** — CVE-2025-31133, CVE-2025-52565, CVE-2025-52881 — each delivering full container breakout via mount races and procfs symlink tricks. These affect Docker, **Podman, and Kubernetes alike**. Earlier examples include Leaky Vessels (CVE-2024-21626) and CVE-2025-9074 (Docker Desktop). See [Sysdig analysis](https://www.sysdig.com/blog/runc-container-escape-vulnerabilities) and [CNCF technical overview](https://www.cncf.io/blog/2025/11/28/runc-container-breakout-vulnerabilities-a-technical-overview/).
+1. **Recurring container breakouts.** November 2025 alone produced **three back-to-back runc CVEs** — CVE-2025-31133, CVE-2025-52565, CVE-2025-52881 — each delivering full container breakout via mount races and procfs symlink tricks. These affect **Podman, Kubernetes, and every other runc-based runtime alike**. See [Sysdig analysis](https://www.sysdig.com/blog/runc-container-escape-vulnerabilities) and [CNCF technical overview](https://www.cncf.io/blog/2025/11/28/runc-container-breakout-vulnerabilities-a-technical-overview/).
 2. **Kernel LPE cadence.** Linux kernel local-privilege-escalation surfaces at roughly monthly cadence (bpf, io_uring, netfilter, page-cache aging, and so on). Each one is a host compromise on shared-kernel runtimes. Hypervisor escapes, by contrast, are a $250K–$500K bug class ([emirb microvm-2026](https://emirb.github.io/blog/microvm-2026/)).
 3. **Namespaces are a resource-control mechanism, not a security boundary.** This is a design fact, not a bug. Namespaces let the kernel partition resources for non-malicious tenants; they do not constitute a barrier against an adversary running code on the same kernel.
 
-Rootless mode reduces *blast radius* (escape lands as the invoking user instead of host root) but does not change the *probability*: every kernel LPE still lands on the host. The November 2025 runc CVEs explicitly affect rootless Docker and Podman. Rootless containers remain valuable as a **controller around** a microVM (see `RUNTIMES.md` §4.4 for libkrun + `crun --krun`); they are not the boundary.
+Rootless mode reduces *blast radius* (escape lands as the invoking user instead of host root) but does not change the *probability*: every kernel LPE still lands on the host. The November 2025 runc CVEs explicitly affect rootless Podman. Rootless Podman remains valuable as a **controller around** a microVM (see `RUNTIMES.md` §4.4 for libkrun + `crun --krun`); it is not the boundary.
 
 ---
 
-## 2. Current State (as-of audit)
+## 2. Configured posture (target)
 
-`dctl` is a Bash CLI that wraps the Microsoft `devcontainer` CLI and `docker`. The user-facing schema is plain `devcontainer.json` plus a small composition system over manifest layers (`schemas/compose.schema.yaml`). All container operations shell out to `docker` and `devcontainer up/exec`.
+`dctl` is a Bash CLI that consumes `devcontainer.json` directly and composes layers via YAML manifests (`schemas/compose.schema.yaml`). Every container operation invokes `podman` and nothing else; `lib/dctl/lifecycle.sh` interprets the `devcontainer.json` lifecycle keys (`postCreateCommand`, `postStartCommand`, `remoteEnv`, `mounts`, `runArgs`) in-process. Implementation phasing is in [IMPLEMENTATION-PLAN.md](./IMPLEMENTATION-PLAN.md).
 
-### 2.1 Code anchors
+### 2.1 Required posture
 
-- `bin/dctl:1-114` — entrypoint and dispatcher. No runtime selection. Docker is assumed.
-- `lib/dctl/ws.sh:55-65` — every container query is `docker ps …` keyed on the `devcontainer.local_folder` label. Runtime is hardcoded to Docker at the Bash level.
-- `lib/dctl/ws.sh:129-197` — `dctl ws up/reup` shells out to `devcontainer up`.
-- `lib/dctl/ws.sh:252-267` — `dctl ws down` runs `docker rm -f`.
-- `lib/dctl/auth.sh:60-70` — host `gh`/`glab` tokens are extracted on the host and forwarded into the container as `GH_TOKEN`/`GITLAB_TOKEN` via `--remote-env`. **This is the highest-value secret in the current threat model and is provided to the agent on every `exec`/`shell`/`run`.**
+The composed `devcontainer.json` (base + agents leaf) **must** satisfy all of the following:
 
-### 2.2 Configured posture
-
-Reading `devcontainers/base/devcontainer.json:1-33` and `devcontainers/agents/devcontainer.json:106-134`:
-
-- **Not privileged.** No `privileged: true`, no extra capabilities. Repository-wide `grep -rn "privileged|cap-add|docker.sock|userns"` returns no `--privileged`, no Docker-socket mount, no `--cap-add`. The "Docker is unsafe because of `--privileged`" critique does not apply to this project as currently shipped.
-- **Runs as a non-root user.** `images/agents/Dockerfile:77-86` creates `$USERNAME` with UID/GID matched to the host at build time; `base/devcontainer.json:2` sets `remoteUser`. The container is non-root from PID 1 onward.
-- **Sudo is narrowed but not eliminated.** `images/agents/Dockerfile:85` allows passwordless `sudo /usr/bin/zypper` only. Defense-in-depth, not a hard boundary: a crafted local RPM with a `%post` script still gains root inside the container (`docs/ARCHITECTURE.md:1087`).
-- **Custom seccomp profile, weaker than Docker's default.** `devcontainers/agents/seccomp-bwrap.json` is **default-allow** with explicit `EPERM` denies on ~20 high-risk syscalls (`bpf`, `userfaultfd`, `perf_event_open`, `keyctl`, `kexec_*`, `init_module`, `iopl/ioperm`, `swapon`, `reboot`, `syslog`, plus legacy syscalls). The profile's `_meta` block is honest about the trade-off: it exists so `bwrap` (Codex CLI's inner sandbox) can `unshare(CLONE_NEWUSER)` without being blocked. This is materially weaker than the upstream moby default-deny baseline.
-- **AppArmor and `/proc` masking are off.** `devcontainers/agents/devcontainer.json:108-110` sets `apparmor=unconfined` and `systempaths=unconfined` for the same `bwrap` reason: `bwrap` probes `/proc/sys/kernel/unprivileged_userns_clone` and bails if masked. This removes a layer that has historically blunted real-world Linux LPEs.
-- **No user-namespace remap.** `updateRemoteUserUID: false` in `base/devcontainer.json:3`; the host UID is mapped 1-to-1 inside the container. There is no `userns=auto`, no rootless Docker, no `userns-remap`.
-- **Bind mounts that matter:** `~/.gitconfig` (RO), `~/.config/gh`, `~/.config/glab-cli`, `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.gemini`, **`/tmp` host bind**, plus `coordinator/devcontainer.json:4-10` mounting `~/Projects` read-only. The agent CLI configuration directories contain **OAuth refresh tokens** (Claude session, GitHub/GitLab tokens). Anything inside the container that can read files-as-user can exfiltrate them.
-- **Network egress is open by default.** `docs/ARCHITECTURE.md:1119,1138` — bridge/NAT, outbound internet allowed (required for the model APIs). There is no egress allowlist.
-- **`/tmp` is bind-mounted from the host** (`base/devcontainer.json:27-30`). Writable shared surface between host and container; not a privilege boundary, but a covert/IPC channel and a place to drop persistence.
-
-### 2.3 Audit conclusion
-
-The shipped profile is approximately the strongest configuration achievable while keeping a single shared kernel **and** keeping `bwrap` (the inner sandbox used by Codex CLI) functional. It is honest about its limits (`docs/ARCHITECTURE.md:1083-1142`) and avoids the worst-class mistakes commonly cited in Docker-security critiques (no `--privileged`, no socket mount, non-root inside).
-
-For the AI-agent threat model, however, several concerns remain:
-
-- The seccomp profile is intentionally permissive.
-- AppArmor is disabled.
-- The network is unrestricted.
-- OAuth tokens for GitHub/GitLab/Claude are mounted into the agent's filesystem.
-- The kernel boundary is shared with the host. Any kernel LPE or container-runtime escape is a host compromise.
-
-The migration in §5 is structured to address each of these in order.
+- **Not privileged.** No `privileged: true`, no container-socket bind-mount, no `--cap-add`. Audited via `grep -rn "privileged|cap-add|userns"` returning zero hits.
+- **Runs as a non-root user.** `images/agents/Containerfile` creates `$USERNAME` with UID/GID matched to the host at build time; `base/devcontainer.json` sets `remoteUser`. The container is non-root from PID 1 onward.
+- **Sudo is narrowed.** Passwordless `sudo /usr/bin/zypper` only; no `NOPASSWD: ALL`. Defense-in-depth — a crafted local package with a `%post` script can still gain root inside the container, which is acceptable because the surrounding boundary is a microVM, not the host kernel.
+- **Default seccomp is the strict baseline** under microVM isolation ([§5.4 Tier 3](#54-tier-3--relax-inner-constraints-once-the-outer-boundary-is-a-hypervisor)). The permissive `seccomp-bwrap.json` profile is retained only for the `agents-permissive` opt-in profile that hosts Codex CLI's inner `bwrap` sandbox.
+- **AppArmor stays enabled** for the default `agents-strict` profile; `apparmor=unconfined` is only acceptable on the opt-in `agents-permissive` profile.
+- **`--cap-drop=ALL` and `--security-opt=no-new-privileges`** appear in the agents layer's default `runArgs`.
+- **No long-lived OAuth token directories are bind-mounted.** `~/.config/gh`, `~/.config/glab-cli`, `~/.claude*`, `~/.codex`, `~/.gemini` are **never** bind-mounted live; tokens are forwarded as short-lived env (`GH_TOKEN`, `GITLAB_TOKEN`) or copied into a per-session ephemeral tmpdir under `$DCTL_CACHE_DIR/sessions/<workspace-hash>/`. See [§5.1 Tier 0](#51-tier-0--configuration-hygiene-do-now-regardless-of-runtime) and [IMPLEMENTATION-PLAN.md §Phase 4](./IMPLEMENTATION-PLAN.md).
+- **`/tmp` is a tmpfs**, never a host bind.
+- **Network egress is allowlisted by default.** A `lib/dctl/net.sh` module emits the in-VM nftables ruleset; only model APIs, package mirrors, and the workspace's git remotes are reachable.
+- **Per-workspace container identity.** Every container carries `--label devcontainer.local_folder=$PWD`; `dctl ws` queries match on that label, so work-clones of the same repo produce distinct containers.
 
 ---
 
@@ -131,10 +110,10 @@ The agent reads `~/.config/gh/hosts.yml`, `~/.claude/.credentials.json`, `$GH_TO
 
 ### 3.3 Container → host privilege escalation
 
-Requires either a runtime (runc/crun/Docker) bug or a kernel LPE.
+Requires either an OCI runtime (runc / crun) bug or a kernel LPE.
 
-- **November 2025** brought three back-to-back runc CVEs (CVE-2025-31133, CVE-2025-52565, CVE-2025-52881), each delivering full container breakout via mount races and procfs symlink tricks. These affect Docker, **Podman**, and Kubernetes alike.
-- **Earlier examples:** Leaky Vessels (CVE-2024-21626), CVE-2025-9074 (Docker Desktop), and a continuous stream of bpf/io_uring/netfilter LPEs.
+- **November 2025** brought three back-to-back runc CVEs (CVE-2025-31133, CVE-2025-52565, CVE-2025-52881), each delivering full container breakout via mount races and procfs symlink tricks. These affect **Podman, Kubernetes, and every other runc-based runtime alike**.
+- **Continuous background:** a steady stream of bpf / io_uring / netfilter / page-cache LPEs in the upstream kernel.
 
 This is the class of risk that shared-kernel container runtimes cannot structurally eliminate. *Namespaces are a resource-control mechanism, not a security boundary.*
 
@@ -170,6 +149,16 @@ All four candidates provide a KVM-class hypervisor boundary. They are FC-class o
 | **Kata Containers + Cloud Hypervisor** | Same KVM boundary class as FC, slightly larger device surface in default config; virtio-fs available; the path the Kata community actively exercises. | `RUNTIMES.md` §4.3 |
 | **libkrun + `crun --krun`** on Podman-rootless | Rust VMM derived from FC and CH; same hardware-isolation class; lowest plumbing cost (`podman --runtime krun run` consumes OCI images directly). | `RUNTIMES.md` §4.4 |
 
+**Residual host-kernel surface under a hardware-virt boundary.** A hardware-virt boundary **shifts** the host-kernel attack surface; it does not reduce it to zero. Every KVM-based VMM retains two well-defined host-facing surfaces: (a) `/dev/kvm` ioctls (the hypercall path), and (b) the VMM's virtio device backends (block, net, vsock, fs, optionally gpu). This is a different category from the shared-kernel case — a compromise here is a hypervisor- or virtio-class bug ($250K–$500K bounty class per [emirb microvm-2026](https://emirb.github.io/blog/microvm-2026/)), not a routine kernel LPE or syscall trick — but it is not the empty set. Recent precedent: [CVE-2026-5747](https://aws.amazon.com/security/security-bulletins/2026-015-aws/) (Firecracker virtio-pci OOB write, opt-in flag) shows that "small VMM" is not "no VMM CVEs."
+
+The size and shape of (b) varies between the §4.1 candidates and is an operational trade-off rather than a boundary-class difference:
+
+- **Firecracker** ships the smallest device set by design: virtio-net, virtio-blk, serial, no virtio-fs, no virtio-gpu. Kata-on-FC is forced into the devmapper snapshotter for the same reason.
+- **Cloud Hypervisor** adds virtio-fs, virtio-mem, PCI hotplug, VFIO, GPU passthrough (Landlock-sandboxed host-side; see `RUNTIMES.md` §4.3).
+- **libkrun** uses virtio-fs as the default rootfs path (how `crun --krun` mounts the OCI bundle), and its TSI feature (Transparent Socket Impersonation) terminates per-connection TCP state on the **host's** TCP/IP stack via a userspace proxy in the VMM process — different from Firecracker's TAP/bridge path, neither strictly smaller. virtio-gpu (virgl/venus) is available via `krun_set_gpu_options` but **off by default** in the Podman+krun path; enabling it would meaningfully widen the host-side surface and is therefore gated behind an explicit profile opt-in.
+
+The colleague-style critique "krun shares the kernel with the host" conflates (b) with shared-kernel namespacing and is **wrong on the boundary class** — the guest runs its own kernel (`init.krun` as guest PID 1; `libkrunfw` bundles it), runc-class breakouts do not reach the host, and kernel LPEs inside the guest stay inside the guest. But the underlying intuition (libkrun's host-side device-backend surface is non-zero and **wider** than bare Firecracker's) is correct and is accepted as the trade-off in `DECISION-LINUX.md` §2.4 and §6 Risk #1. The bare-Firecracker escape hatch in `RUNTIMES.md` §4.1 / `DECISION-LINUX.md` §2.5 remains documented for cases where minimizing this surface is worth the plumbing cost.
+
 ### 4.2 Platform-specific candidate
 
 - **Apple `container`** — the macOS-native equivalent of an FC-class microVM via Virtualization.framework. Pairs with any of the §4.1 options on the Linux side. See `RUNTIMES.md` §4.6.
@@ -193,10 +182,9 @@ A prototyping milestone should produce concrete numbers (cold-start, mount laten
 
 The following options were evaluated and rejected. Reasoning is in `RUNTIMES.md`; pointers here:
 
-- Bare Docker (rootful) — `RUNTIMES.md` §1.1
-- Bare Podman (rootful) — `RUNTIMES.md` §1.2
-- Hardened-container path alone — `RUNTIMES.md` §1.3
-- Docker rootless / Podman rootless as the boundary — `RUNTIMES.md` §2 (kept as defense-in-depth and as a controller front-end for libkrun)
+- Bare Podman (rootful) — `RUNTIMES.md` §1.1
+- Hardened-container path alone — `RUNTIMES.md` §1.2
+- Podman rootless as the boundary — `RUNTIMES.md` §2.1 (kept as defense-in-depth and as a controller front-end for libkrun)
 - bubblewrap / Landlock / seccomp-only as the boundary — `RUNTIMES.md` §2.3
 - QEMU full-fat — `RUNTIMES.md` §4.5 (rejected on TCB grounds)
 - firecracker-containerd, flintlock, Ignite, AWS Nomad FC driver — cluster-shaped, see `RUNTIMES.md` §5.1–§5.3, §5.9
@@ -220,17 +208,17 @@ These are cheap and address the realistic attack tree (§3.1, §3.4) more effect
 4. **Add `no-new-privileges` and `--cap-drop=ALL`** to `runArgs` in the agents layer. The seccomp profile is permissive on syscalls; cap-drop covers the rest of the historical privilege paths.
 5. **Document the `bwrap`/AppArmor trade-off as a named profile.** Ship `agents-permissive` (current `bwrap`-friendly behavior) alongside `agents-strict` (moby default seccomp + AppArmor enabled) for projects that don't need Codex's `bwrap` inner sandbox. Make the choice explicit and opt-in.
 
-### 5.2 Tier 1 — Runtime abstraction; keep Docker as default, add Podman-rootless
+### 5.2 Tier 1 — Runtime adapter on top of Podman-rootless
 
 This is the cheap correctness win and the engineering precondition for Tier 2.
 
-1. Introduce `DCTL_RUNTIME ∈ {docker, podman, kata-fc, kata-ch, krun, gvisor, apple-container}` and route every `docker` invocation in `lib/dctl/ws.sh` through a small adapter (`lib/dctl/runtime/<name>.sh`). The user-facing schema (`devcontainer.json`, manifests) does not change.
-2. Add Podman rootless as the second backend, with rootless-specific Tier-0 defaults (no privileged ports, pasta networking, `userns=auto:size=65536`). Podman-rootless is treated as **defense-in-depth and a controller front-end** for §5.3, not as the security boundary.
+1. Introduce `DCTL_RUNTIME ∈ {podman, kata-fc, kata-ch, krun, gvisor, apple-container}` and route every container operation in `lib/dctl/ws.sh` through a small adapter (`lib/dctl/runtime/<name>.sh`). The user-facing schema (`devcontainer.json`, manifests) does not change. The `podman` adapter calls `podman` directly — there is no other container CLI in the codebase.
+2. Configure Podman-rootless defaults (no privileged ports, pasta networking, `userns=auto:size=65536`). Podman-rootless is treated as **defense-in-depth and a controller front-end** for §5.3, not as the security boundary.
 3. Make `dctl test` runtime-aware: the same smoke-test must pass against every backend.
 
 ### 5.3 Tier 2 — FC-class hardware boundary as the recommended default (Linux + macOS)
 
-This delivers the real hardware boundary without breaking ergonomics. Because all §4.1 candidates consume OCI images, `images/` and the Dockerfile build flow do not change at this tier.
+This delivers the real hardware boundary without breaking ergonomics. Because all §4.1 candidates consume OCI images, `images/` and the Containerfile build flow do not change at this tier.
 
 1. Add at least one §4.1 candidate as a backend behind the same adapter introduced in Tier 1. The specific candidate (Kata-FC, Kata-CH, libkrun, or bare-FC) is chosen based on Tier 1 prototyping results and the §4.4 criteria.
 2. Add **Apple `container`** as the macOS backend.
@@ -239,7 +227,7 @@ This delivers the real hardware boundary without breaking ergonomics. Because al
 
 ### 5.4 Tier 3 — Relax inner constraints once the outer boundary is a hypervisor
 
-Once an FC-class runtime is the default, the inner-container freedom can be expanded confidently (package installs, Docker-in-Docker, build sandboxes) because the boundary is now a hypervisor rather than a syscall filter. The custom permissive seccomp profile (`devcontainers/agents/seccomp-bwrap.json`) becomes non-load-bearing and `agents-strict` can become the default profile under VM-bounded runtimes.
+Once an FC-class runtime is the default, the inner-container freedom can be expanded confidently (package installs, nested container runtimes, build sandboxes) because the boundary is now a hypervisor rather than a syscall filter. The custom permissive seccomp profile (`devcontainers/agents/seccomp-bwrap.json`) becomes non-load-bearing and `agents-strict` can become the default profile under VM-bounded runtimes.
 
 ### 5.5 Runtime-abstraction layer (sketch)
 
@@ -247,16 +235,15 @@ Once an FC-class runtime is the default, the inner-container freedom can be expa
 lib/dctl/
   runtime/
     common.sh        # interface: rt_run, rt_exec, rt_ps, rt_rm, rt_build
-    docker.sh        # current behavior, default for back-compat
-    podman.sh        # rootless, pasta, userns=auto
+    podman.sh        # podman-rootless, pasta, userns=auto
     kata-fc.sh       # nerdctl --runtime io.containerd.kata.v2 with FC VMM config
     kata-ch.sh       # nerdctl --runtime io.containerd.kata.v2 with CH VMM config
     krun.sh          # podman --runtime krun ...
     bare-fc.sh       # dctl-owned FC controller (escape hatch)
     gvisor.sh        # nerdctl --runtime runsc ...
     apple.sh         # `container run …`
-  ws.sh              # calls rt_* instead of docker
-  image.sh           # calls rt_build instead of docker build
+  ws.sh              # calls rt_* via the adapter
+  image.sh           # calls rt_build via the adapter
 ```
 
 Runtime selection mirrors how config already composes:
@@ -265,7 +252,7 @@ Runtime selection mirrors how config already composes:
 2. User global default in `~/.config/dctl/default/devcontainer.json` sets the user's preferred runtime.
 3. `DCTL_RUNTIME` env or `--runtime` flag overrides for one-off cases.
 
-Composable, declarative, runtime-agnostic. The same `python.yaml` manifest produces a Docker container on a CI machine without nested virt and an FC-class microVM on a KVM-equipped laptop.
+Composable, declarative, runtime-agnostic. The same `python.yaml` manifest produces a gVisor-sandboxed container on a CI machine without nested virt and an FC-class microVM on a KVM-equipped laptop.
 
 ---
 
@@ -278,7 +265,7 @@ Composable, declarative, runtime-agnostic. The same `python.yaml` manifest produ
 | T0.3 — egress allowlist | new `lib/dctl/net.sh` + `nftables` shim or `slirp4netns --enable-sandbox --disable-host-loopback` | 3–5 d | Medium (UX for adding domains) |
 | T0.4 — `no-new-privileges`, `cap-drop=ALL` | `devcontainers/agents/devcontainer.json:107-111` | 30 min | Low (verify Codex `bwrap` still starts) |
 | T0.5 — `agents-strict` profile alongside `agents-permissive` | new `devcontainers/agents-strict/` | 1 d | Low |
-| T1.1 — runtime adapter | `bin/dctl`, `lib/dctl/ws.sh`, new `lib/dctl/runtime/*.sh` | 2–3 d | Low; Docker behavior preserved |
+| T1.1 — runtime adapter | `bin/dctl`, `lib/dctl/ws.sh`, new `lib/dctl/runtime/*.sh` | 2–3 d | Low; podman-first throughout |
 | T1.2 — Podman rootless backend + smoke tests | `lib/dctl/runtime/podman.sh`, `tests/` | 2 d | Medium (slirp4netns/pasta perf) |
 | T2.0 — prototyping milestone (§4.4) | one-off; produce numbers for at least two §4.1 candidates | 1–2 wk | Low (information-gathering) |
 | T2.1a — Kata-FC backend | `lib/dctl/runtime/kata-fc.sh`, docs, devmapper setup | 3–5 d | Medium (host KVM detection, runtime class registration in containerd, devmapper) |
@@ -305,7 +292,7 @@ A future revision of this spec is considered to have **reached** each tier when:
 - `agents-strict` and `agents-permissive` profiles both exist and are documented.
 
 ### Tier 1
-- `dctl` command paths route through a runtime adapter; no direct `docker` invocation remains in `lib/dctl/`.
+- `dctl` command paths route through the runtime adapter; no direct container-CLI shell-out remains in `lib/dctl/` outside the adapter.
 - Podman rootless is a fully tested backend; the standard smoke-test passes against it.
 - `DCTL_RUNTIME`, project-level, and user-level runtime selection all work.
 
@@ -318,7 +305,7 @@ A future revision of this spec is considered to have **reached** each tier when:
 
 ### Tier 3
 - The custom permissive seccomp profile is no longer required by default; `agents-strict` becomes the default profile under VM-bounded runtimes.
-- Inner Docker-in-Docker and package installation work without weakening the host's security posture.
+- Inner nested container runtimes (e.g. nested Podman) and package installation work without weakening the host's security posture.
 
 ---
 
@@ -329,7 +316,7 @@ A future revision of this spec is considered to have **reached** each tier when:
 - **Claude session token forwarding.** Is there a documented short-lived token export path for Claude Code, equivalent to `gh auth token`? If not, what is the minimal subset of `~/.claude` that must be projected into the container, and can it be projected as an ephemeral copy rather than a live mount?
 - **Egress allowlist UX.** How should users add domains? Static manifest entries, an interactive `dctl net allow <host>` command, or both? What is the right default set?
 - **CI parity.** Some CI environments lack nested virtualization. The default backend in CI must be either rootless containers + gVisor, or rootless containers with the strict profile. The spec should pick one as the documented CI default.
-- **Image distribution.** Kata consumes OCI images, but rootfs construction has subtle differences (init systems, kernel modules, agent injection). Are upstream `images/agents/Dockerfile` artifacts directly compatible, or is a Kata-specific (or libkrun-specific) build target needed?
+- **Image distribution.** Kata consumes OCI images, but rootfs construction has subtle differences (init systems, kernel modules, agent injection). Are upstream `images/agents/Containerfile` artifacts directly compatible, or is a Kata-specific (or libkrun-specific) build target needed?
 - **Cross-runtime feature parity.** Some `devcontainer.json` features (e.g. `mounts`, `forwardPorts`, lifecycle scripts) may behave differently across backends. The runtime adapter must define which subset is portable; the rest must produce a clear error rather than silently degrade.
 
 ---
@@ -359,7 +346,6 @@ A future revision of this spec is considered to have **reached** each tier when:
 - [firecracker-go-sdk](https://github.com/firecracker-microvm/firecracker-go-sdk)
 - [firepilot — Rust FC SDK](https://github.com/rik-org/firepilot)
 - [firectl](https://github.com/firecracker-microvm/firectl)
-- [magmastonealex/firedocker](https://github.com/magmastonealex/firedocker)
 - [iximiuz Labs — Firecracker hands-on](https://labs.iximiuz.com/courses/firecracker-hands-on/run-first-microvm)
 - [Single-app rootfs for Firecracker (cloudkernels.net)](https://blog.cloudkernels.net/posts/fc-rootfs/)
 - [buildfs (crates.io)](https://crates.io/crates/buildfs)
@@ -367,12 +353,9 @@ A future revision of this spec is considered to have **reached** each tier when:
 - [OSInside/flake-pilot](https://github.com/OSInside/flake-pilot)
 - [SUSE Package Hub — flake-pilot](https://packagehub.suse.com/packages/flake-pilot/)
 
-### Docker / Podman security
-- [Docker — Rootless mode](https://docs.docker.com/engine/security/rootless/)
-- [Docker — userns-remap](https://docs.docker.com/engine/security/userns-remap/)
+### Podman security
 - [Podman — rootless tutorial](https://github.com/containers/podman/blob/main/docs/tutorials/rootless_tutorial.md)
 - [Red Hat — Rootless Podman user-namespace modes](https://www.redhat.com/en/blog/rootless-podman-user-namespace-modes)
-- [VS Code Dev Containers + Podman walkthrough](https://blog.okikio.dev/from-docker-to-podman-vs-code-devcontainers)
 
 ### gVisor and macOS
 - [gVisor — docs](https://gvisor.dev/docs/)

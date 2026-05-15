@@ -129,7 +129,7 @@ gVisor is a *different* boundary (userspace kernel rather than hypervisor), used
 - **Boundary class matches the §1.1 premise.** HVF/Virtualization.framework is the macOS equivalent of KVM-class isolation. "FC-for-Mac" is an accurate analogy.
 - **OCI-native authoring surface** — same `images/` artifacts work.
 - **Apple-backed maintenance.**
-- **Maturity in 2026.** v0.8.0 (Jan 2026) is described upstream as "validation of concept, usable in specific scenarios." The `dctl` use case (single agent VM, OCI image in, exec out) is exactly that narrow shape. References: [Addo Zhang — "Apple container 0.8.0: seven-month evolution from birth to maturity" (Feb 2026)](https://addozhang.medium.com/apple-container-0-8-0-seven-month-evolution-from-birth-to-maturity-1021e570bbb7), [outcoldman — "Apple container: tired of Docker" (May 2026)](https://www.outcoldman.com/blog/2026/05/02/apple-container-tired-of-docker/).
+- **Maturity in 2026.** v0.8.0 (Jan 2026) is described upstream as "validation of concept, usable in specific scenarios." The `dctl` use case (single agent VM, OCI image in, exec out) is exactly that narrow shape. Reference: [Addo Zhang — "Apple container 0.8.0: seven-month evolution from birth to maturity" (Feb 2026)](https://addozhang.medium.com/apple-container-0-8-0-seven-month-evolution-from-birth-to-maturity-1021e570bbb7).
 - **Why not libkrun's HVF backend?** It exists, but as of 2026 it has documented bind-mount permission gaps relative to Apple's `applehv` driver — see [containers/podman discussion #27679](https://github.com/containers/podman/discussions/27679) and [Sergio López on macOS GPU + virtio-fs](https://sinrega.org/2024-03-06-enabling-containers-gpu-macos/). Until those close, Apple `container` is the cleaner Mac story. This explicitly resolves [SPEC.md §8 — "Cross-platform mental model"](./SPEC.md).
 
 ### 3.3 What `dctl` owns vs. what is upstream
@@ -242,7 +242,6 @@ This decision narrows [SPEC.md §5–6](./SPEC.md) but does not change its tier 
 
 - [apple/container](https://github.com/apple/container) — upstream repository.
 - [Addo Zhang — "Apple container 0.8.0: seven-month evolution from birth to maturity" (Feb 2026)](https://addozhang.medium.com/apple-container-0-8-0-seven-month-evolution-from-birth-to-maturity-1021e570bbb7).
-- [outcoldman — "Apple container: tired of Docker" (May 2026)](https://www.outcoldman.com/blog/2026/05/02/apple-container-tired-of-docker/).
 - [InfoQ — "Apple Containerization brings Linux containers to macOS" (Jun 2025)](https://www.infoq.com/news/2025/06/apple-container-linux/).
 - [The Register — "Apple Containerization" (Jun 2025)](https://www.theregister.com/2025/06/10/apple_tries_to_contain_itself/).
 

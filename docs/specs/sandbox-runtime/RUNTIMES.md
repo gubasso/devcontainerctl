@@ -31,22 +31,16 @@ Rejection reasoning is required so future revisions can audit whether the constr
 
 These options are documented to make the rejection reasoning explicit (SPEC.md §1.5). They are **not** acceptable as the primary sandbox under SPEC.md §3.
 
-### 1.1 Bare Docker (rootful)
+### 1.1 Bare Podman (rootful)
 
-- **What it is** — Current `dctl` default. Daemon runs as root; container UID mapped 1:1 to host UID; no userns remap.
-- **Security posture** — Shared kernel. Container escape lands as **host root**. Daemon attack surface is itself rooted. Every kernel LPE (bpf, io_uring, netfilter, runc mount-race class) is a host compromise.
-- **CVE evidence (recent)** — runc CVE-2025-31133, CVE-2025-52565, CVE-2025-52881 (Nov 2025) all deliver full container breakout via mount races and procfs symlink tricks; CVE-2024-21626 (Leaky Vessels); CVE-2025-9074 (Docker Desktop). [Sysdig analysis](https://www.sysdig.com/blog/runc-container-escape-vulnerabilities); [CNCF technical overview](https://www.cncf.io/blog/2025/11/28/runc-container-breakout-vulnerabilities-a-technical-overview/).
+- **What it is** — Daemonless rootful OCI runtime; shared-kernel boundary semantics.
+- **Security posture** — Shared kernel. Container escape via runc mount-race / procfs symlink tricks lands as **host root**. Every kernel LPE (bpf, io_uring, netfilter) is a host compromise.
+- **CVE evidence (recent)** — runc CVE-2025-31133, CVE-2025-52565, CVE-2025-52881 (Nov 2025) all deliver full container breakout via mount races and procfs symlink tricks; affect rootful Podman directly. [Sysdig analysis](https://www.sysdig.com/blog/runc-container-escape-vulnerabilities); [CNCF technical overview](https://www.cncf.io/blog/2025/11/28/runc-container-breakout-vulnerabilities-a-technical-overview/).
 - **OCI fit** — native baseline.
 - **Maintenance** — excellent, but irrelevant: the boundary is structurally insufficient for the threat model.
 - **Verdict — `rejected`.** Namespaces are a resource-control mechanism, not a security boundary; the 1:1 UID mapping makes escape outcomes worst-case (host root).
 
-### 1.2 Bare Podman (rootful)
-
-- **What it is** — Daemonless OCI runtime; same shared-kernel boundary semantics as rootful Docker.
-- **Security posture** — Same shared-kernel reality. Nov 2025 runc CVEs explicitly affect rootful Podman.
-- **Verdict — `rejected`.** Removing the daemon eliminates one CVE class but does not change the boundary.
-
-### 1.3 Hardened-container path (seccomp / AppArmor / cap-drop only)
+### 1.2 Hardened-container path (seccomp / AppArmor / cap-drop only)
 
 - **What it is** — Strong seccomp profile, AppArmor profile, `cap-drop=ALL`, `no-new-privileges`. The hygiene hardening already enumerated in SPEC.md §5.1 (Tier 0).
 - **Security posture** — Defense-in-depth: each layer raises the cost of an exploit but cannot prevent kernel-level LPEs from succeeding.
@@ -56,23 +50,15 @@ These options are documented to make the rejection reasoning explicit (SPEC.md �
 
 ## 2. Reduced-blast-radius containers (better, still insufficient as primary)
 
-### 2.1 Docker rootless
+### 2.1 Podman rootless
 
-- **What it is** — Daemon runs as user; container UIDs remapped via `/etc/subuid`. [Docker rootless docs](https://docs.docker.com/engine/security/rootless/).
-- **Security posture** — Escape lands as **invoking user**, not host root. Same shared kernel; same kernel-LPE class; daemon attack surface still exists, just not as root.
-- **OCI fit** — full.
-- **Maintenance** — supported upstream, less battle-tested than rootful.
-- **Verdict — `defense-in-depth only`.** "Lands as user" still owns the developer's SSH keys, git creds, dotfiles, and probably sudo. Useful as a **controller around a microVM** (see §4.4 libkrun), not as the primary boundary.
-
-### 2.2 Podman rootless
-
-- **What it is** — Daemonless rootless OCI runtime; fork-exec per invocation, no persistent privileged process. [Podman rootless tutorial](https://github.com/containers/podman/blob/main/docs/tutorials/rootless_tutorial.md); [Red Hat: rootless Podman user-namespace modes](https://www.redhat.com/en/blog/rootless-podman-user-namespace-modes); [Docker userns-remap](https://docs.docker.com/engine/security/userns-remap/) for comparison.
-- **Security posture** — Best-of-class shared-kernel posture: no daemon, userns by default, slirp4netns/pasta networking. **Still shared kernel** — Nov 2025 runc CVEs apply.
-- **OCI fit** — full; the `devcontainer` CLI honors `DOCKER_HOST` pointing at the Podman socket; VS Code Dev Containers exposes `dev.containers.dockerPath: "podman"` ([VS Code + Podman walkthrough](https://blog.okikio.dev/from-docker-to-podman-vs-code-devcontainers)).
+- **What it is** — Daemonless rootless OCI runtime; fork-exec per invocation, no persistent privileged process. Container UIDs remapped via `/etc/subuid`. [Podman rootless tutorial](https://github.com/containers/podman/blob/main/docs/tutorials/rootless_tutorial.md); [Red Hat: rootless Podman user-namespace modes](https://www.redhat.com/en/blog/rootless-podman-user-namespace-modes).
+- **Security posture** — Best-of-class shared-kernel posture: no daemon, userns by default, slirp4netns/pasta networking. Escape lands as **invoking user**, not host root. **Still shared kernel** — Nov 2025 runc CVEs apply.
+- **OCI fit** — full; consumes the project's existing OCI images via `podman run`.
 - **Maintenance** — active under `containers/` org.
 - **Verdict — `defense-in-depth only`** when used as the boundary; **`viable controller`** when paired with a microVM runtime (libkrun via `crun --krun` in §4.4 is the canonical example: Podman is the front-end, the microVM is the boundary).
 
-### 2.3 bubblewrap / Landlock / seccomp-only
+### 2.2 bubblewrap / Landlock / seccomp-only
 
 - **What it is** — `bwrap` is already used **inside** the agent container by Codex CLI as an inner sandbox. As an outer sandbox: namespaces + seccomp + Landlock LSM.
 - **Security posture** — shared kernel; Landlock policy language is still maturing.
@@ -110,10 +96,10 @@ These options meet SPEC.md §1.2: a hypervisor-class boundary between agent-exec
   - in-guest init (mount /proc, eth0, vsock listener, exec agent)
   - controller via [firecracker-go-sdk](https://github.com/firecracker-microvm/firecracker-go-sdk) or [firepilot](https://github.com/rik-org/firepilot) (~500 LOC helper binary)
   - vsock-based exec channel (`socat` or small helper)
-  - replacement for `devcontainer up` — VS Code's CLI does not drive FC
+  - own lifecycle interpreter for `devcontainer.json` (already needed by the podman-first plan; not FC-specific)
   - kernel image lifecycle (updates, signing)
 - **Cost estimate** — ~3–5 calendar weeks one-time + ongoing maintenance of rootfs builder, kernel updates, in-guest agent.
-- **Public precedent** — [firedocker](https://github.com/magmastonealex/firedocker), firebuild, [buildfs (crates.io)](https://crates.io/crates/buildfs), [iximiuz Firecracker hands-on](https://labs.iximiuz.com/courses/firecracker-hands-on/run-first-microvm), [single-app rootfs cookbook](https://blog.cloudkernels.net/posts/fc-rootfs/), [firectl](https://github.com/firecracker-microvm/firectl), archived [Ignite](https://github.com/weaveworks/ignite) reference recipes.
+- **Public precedent** — firebuild, [buildfs (crates.io)](https://crates.io/crates/buildfs), [iximiuz Firecracker hands-on](https://labs.iximiuz.com/courses/firecracker-hands-on/run-first-microvm), [single-app rootfs cookbook](https://blog.cloudkernels.net/posts/fc-rootfs/), [firectl](https://github.com/firecracker-microvm/firectl), archived [Ignite](https://github.com/weaveworks/ignite) reference recipes.
 - **Verdict — `viable default candidate`** (high-assurance / power-user path). Smallest TCB of any option, lowest supply-chain risk, highest implementation cost. Worth keeping as a documented escape hatch even if not the default.
 
 ### 4.2 Firecracker via Kata Containers
@@ -140,8 +126,9 @@ These options meet SPEC.md §1.2: a hypervisor-class boundary between agent-exec
 
 - **What it is** — Rust VMM under [containers/libkrun](https://github.com/containers/libkrun) (v1.18.0, 2026-04-24). Code partly **derived from Firecracker, Cloud Hypervisor, and rust-vmm**. Integrates with `crun` via `crun --krun`, which is a Podman-native OCI runtime. [Red Hat: RamaLama + libkrun (Jul 2025)](https://developers.redhat.com/articles/2025/07/02/supercharging-ai-isolation-microvms-ramalama-libkrun); [containers/krunvm](https://github.com/containers/krunvm).
 - **Security posture** — KVM microVM; same hardware-isolation class as FC. Maintainer's threat model ([libkrun #538](https://github.com/containers/libkrun/discussions/538)): "the guest and the VMM pertain to the same security context… should be thought of as a single entity." `crun --krun` wraps the microVM in Podman-rootless's userns + seccomp envelope, providing the host-side containment FC's `jailer` provides standalone.
+- **Residual host-facing device set vs. bare Firecracker** — same boundary class, **wider** host-side surface in three places: **virtio-fs is the default rootfs path** (how `crun --krun` mounts the OCI bundle into the guest; Firecracker has no virtio-fs and pays a devmapper-snapshotter cost in Kata-on-FC); **TSI's host-side proxy** terminates per-connection TCP on the host's `AF_INET` stack via real userspace sockets ([libkrunfw TSI patch](https://github.com/containers/libkrunfw/blob/main/patches/0009-Transparent-Socket-Impersonation-implementation.patch)) — different from FC's TAP+netfilter path, not strictly smaller; **virtio-gpu (virgl/venus)** is available via `krun_set_gpu_options` (FC has no GPU support) but is **off by default** in `podman --runtime krun`. These are the technical content behind the §4.4 trade-off, not a boundary-class regression — a guest-kernel LPE remains a guest-kernel compromise, not a host compromise. See [SPEC.md §4.1 "Residual host-kernel surface"](./SPEC.md) for the cross-candidate framing.
 - **OCI fit** — full. `podman --runtime krun run <image>` consumes OCI images directly; rootfs conversion is internal to `crun-krun`. No bespoke builder.
-- **Networking** — TSI (Transparent Socket Impersonation) eliminates TAP/bridge plumbing.
+- **Networking** — TSI (Transparent Socket Impersonation) removes TAP/bridge/NAT plumbing on the host in exchange for a host-side userspace proxy.
 - **Maintenance** — active under `containers/` org (same org as Podman, crun, Buildah). Powers Microsandbox, RamaLama, krunvm.
 - **Cross-platform** — Linux KVM and macOS HVF (Hypervisor.framework) backends.
 - **What `dctl` would own** — a `runtime/krun.sh` adapter that adds `--runtime krun` to existing Podman calls. Rootfs conversion, kernel image, in-guest agent are all upstream.
@@ -177,14 +164,14 @@ These options meet SPEC.md §1.2: a hypervisor-class boundary between agent-exec
 
 ### 5.3 Ignite (Weaveworks)
 
-- **What it is** — Weaveworks' Firecracker-as-Docker-CLI tool. Archived in 2023. [Repository (archived)](https://github.com/weaveworks/ignite).
+- **What it is** — Weaveworks' Firecracker-as-container-CLI tool. Archived in 2023. [Repository (archived)](https://github.com/weaveworks/ignite).
 - **Verdict — `rejected (archived)`.** Reference recipes still useful for the bare-FC path (§4.1).
 
 ### 5.4 SUSE flake-pilot / firecracker-pilot
 
 - **What it is** — [OSInside/flake-pilot](https://github.com/OSInside/flake-pilot). App launcher: symlink → launcher → podman or Firecracker backend. [SUSE Package Hub](https://packagehub.suse.com/packages/flake-pilot/).
 - **Why considered** — The project ships an openSUSE-based image, so SUSE-aligned tooling is a natural fit candidate.
-- **Why it doesn't fit** — The Firecracker backend uses **kernel + rootfs tarballs from HTTPS**, not OCI registries. It bypasses the entire Dockerfile / devcontainer build flow `dctl` is built around. Tiny project (~8 stars), DIY networking (manual TAP, kernel msgs leak into stdout). The OCI image flow would have to be re-implemented anyway.
+- **Why it doesn't fit** — The Firecracker backend uses **kernel + rootfs tarballs from HTTPS**, not OCI registries. It bypasses the entire Containerfile / devcontainer build flow `dctl` is built around. Tiny project (~8 stars), DIY networking (manual TAP, kernel msgs leak into stdout). The OCI image flow would have to be re-implemented anyway.
 - **Verdict — `inspirational only`.** A useful example of a thin SUSE-native FC wrapper; not a backend `dctl` should adopt.
 
 ### 5.5 Hyperlight (Microsoft)
@@ -218,10 +205,8 @@ These options meet SPEC.md §1.2: a hypervisor-class boundary between agent-exec
 
 | Option | Boundary | OCI fit | `dctl` owns | Maintenance | Verdict |
 |---|---|---|---|---|---|
-| Bare Docker (rootful) | shared kernel | full | nothing | excellent | rejected |
 | Bare Podman (rootful) | shared kernel | full | nothing | excellent | rejected |
 | Hardened-container path | shared kernel + LSMs | n/a | profile maintenance | n/a | DiD only |
-| Docker rootless | shared kernel + userns | full | nothing | good | DiD only |
 | Podman rootless | shared kernel + userns | full | nothing | excellent | DiD only / viable controller |
 | bwrap / Landlock | shared kernel | n/a | inner profile | active | DiD only |
 | gVisor | userspace kernel | full | nothing | active (Google) | viable fallback (no-KVM) |
