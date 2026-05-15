@@ -17,6 +17,7 @@ source "${DCTL_LIB_DIR}/image.sh"
 source "${DCTL_LIB_DIR}/deploy.sh"
 source "${DCTL_LIB_DIR}/init.sh"
 source "${DCTL_LIB_DIR}/test.sh"
+source "${DCTL_LIB_DIR}/doctor.sh"
 source "${DCTL_LIB_DIR}/config.sh"
 
 usage() {
@@ -30,6 +31,7 @@ Commands:
   init         Register the current project using a deployed devcontainer
   deploy       Copy installed templates/images into user config
   test         Validate the current workspace setup
+  doctor       Probe the host for libkrun + rootless Podman readiness
   ws           Manage the current workspace's devcontainer lifecycle
   image        Build and inspect devcontainer base images
   config       Project registry management
@@ -84,6 +86,10 @@ main() {
     test)
       shift
       main_test "$@"
+      ;;
+    doctor)
+      shift
+      main_doctor "$@"
       ;;
     ws)
       shift

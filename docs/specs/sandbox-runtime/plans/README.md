@@ -12,7 +12,7 @@ The briefs are **ephemeral**: after a round merges, its brief is deleted and any
 Each brief is inlined into `$ARGUMENTS`:
 
 ```sh
-/prex -ar "$(cat docs/specs/sandbox-runtime/plans/00-preflight-doctor.md)"
+/prex -ar "$(cat docs/specs/sandbox-runtime/plans/10-runtime-adapter-and-lifecycle.md)"
 ```
 
 Recommended flags:
@@ -32,7 +32,7 @@ The cross-round dependencies are encoded in each brief's `Depends on:` header. *
 
 | # | Brief | Status | Commit | Notes |
 |---|---|---|---|---|
-| 00 | [preflight-doctor](00-preflight-doctor.md) | Pending | — | Host preflight + `dctl doctor` + `docs/INSTALL.md`. |
+| 00 | preflight-doctor | Done — <commit-sha-pending> — 2026-05-15 | — | Host preflight + `dctl doctor` + `docs/INSTALL.md`. |
 | 10 | [runtime-adapter-and-lifecycle](10-runtime-adapter-and-lifecycle.md) | Pending | — | `lib/dctl/runtime/{common,krun}.sh` + `lib/dctl/lifecycle.sh`. |
 | 15a | [helper-tree-and-autoload](15a-helper-tree-and-autoload.md) | Pending | — | Extract `lib/dctl/_lib/`; rewrite `bin/dctl`; new `lib/dctl/CLAUDE.md`. |
 | 15b | [command-tree-extraction](15b-command-tree-extraction.md) | Pending | — | Extract `commands/{ws,image,init,test,doctor,deploy,config}/`; add `tests/structure_test.bats`; re-anchor remaining briefs. |

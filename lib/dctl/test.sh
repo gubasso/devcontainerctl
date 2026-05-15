@@ -286,5 +286,6 @@ cmd_test() {
 }
 
 main_test() {
+  warn "'dctl test' will be rewired to podman in Phase 2; use 'dctl doctor' to verify host setup."
   cmd_test "$@"
 }

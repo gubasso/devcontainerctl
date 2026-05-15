@@ -8,7 +8,7 @@ INSTALL := install
 IMAGE_NAMES := agents python-dev rust-dev zig-dev
 DEVCONTAINER_DIRS := agents python rust zig general coordinator base
 DEVCONTAINER_MANIFESTS := general coordinator python rust zig
-LIB_FILES := common.sh ws.sh image.sh deploy.sh init.sh test.sh auth.sh config.sh
+LIB_FILES := common.sh ws.sh image.sh deploy.sh init.sh test.sh auth.sh config.sh doctor.sh
 
 .PHONY: install uninstall install-systemd uninstall-systemd test test-unit test-integration lint check gate-no-eval gate-no-raw-ansi gate-one-public-fn-per-file
 
@@ -19,6 +19,8 @@ install:
 	for lib in $(LIB_FILES); do \
 		$(INSTALL) -m 644 "lib/dctl/$$lib" "$(LIB_DIR)/$$lib"; \
 	done
+	$(INSTALL) -d "$(LIB_DIR)/runtime"
+	$(INSTALL) -m 644 "lib/dctl/runtime/common.sh" "$(LIB_DIR)/runtime/common.sh"
 	for image in $(IMAGE_NAMES); do \
 		$(INSTALL) -d "$(DATA_DIR)/images/$$image"; \
 		for file in images/$$image/*; do \
@@ -53,6 +55,8 @@ uninstall:
 	for lib in $(LIB_FILES); do \
 		rm -f "$(LIB_DIR)/$$lib"; \
 	done
+	rm -f "$(LIB_DIR)/runtime/common.sh"
+	rmdir "$(LIB_DIR)/runtime" 2>/dev/null || true
 	rmdir "$(LIB_DIR)" 2>/dev/null || true
 	for image in $(IMAGE_NAMES); do \
 		for file in images/$$image/*; do \

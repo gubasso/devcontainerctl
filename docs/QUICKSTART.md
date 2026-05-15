@@ -2,8 +2,7 @@
 
 ## Prerequisites
 
-- Docker with `buildx`
-- Dev Container CLI installed (`devcontainer`)
+- Podman (rootless) + libkrun + crun-krun (run `dctl doctor` to verify)
 
 ## Setup
 

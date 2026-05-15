@@ -1,12 +1,12 @@
 # CLAUDE.md — devcontainerctl
 
-Pre-built Docker images and the unified `dctl` CLI for AI-agent devcontainer sandboxes.
+Pre-built Podman/libkrun images and the unified `dctl` CLI for AI-agent devcontainer sandboxes.
 
 ## Quick Orientation
 
 - `bin/dctl` — thin CLI entrypoint (bootstrap, source modules, dispatch)
 - `lib/dctl/` — shell library modules (`common`, `ws`, `image`, `init`, `test`, `auth`, `config`)
-- `images/` — managed Dockerfiles, one subdir per image
+- `images/` — managed Containerfiles, one subdir per image
 - `devcontainers/` — layer directories plus YAML composition manifests (validated by `schemas/compose.schema.yaml`)
 - `systemd/` — weekly image rebuild timer + service
 - `tests/` — bats-based unit and integration coverage
