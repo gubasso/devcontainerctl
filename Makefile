@@ -6,7 +6,7 @@ SYSTEMD_DIR ?= $(HOME)/.local/share/systemd/user
 INSTALL := install
 
 IMAGE_NAMES := agents python-dev rust-dev zig-dev
-DEVCONTAINER_DIRS := agents python rust zig general coordinator base
+DEVCONTAINER_DIRS := agents agents-permissive python rust zig general coordinator base
 DEVCONTAINER_MANIFESTS := general coordinator python rust zig
 LIB_FILES := lifecycle.sh
 

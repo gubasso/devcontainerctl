@@ -54,7 +54,7 @@ __dctl_dispatch() {
   # Post-15b, every public command group routes only through
   # `commands/<group>/_dispatch.sh`.
   case "$group" in
-    init | deploy | test | doctor | ws | image | config) ;;
+    init | deploy | test | doctor | ws | image | config | net) ;;
     *)
       printf '\033[1;31mERROR:\033[0m Unknown command group: %s\n' "$group" >&2
       exit 1

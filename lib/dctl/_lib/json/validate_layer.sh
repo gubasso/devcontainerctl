@@ -24,6 +24,7 @@ _validate_devcontainer_layer() {
     [runArgs]=1
     [containerEnv]=1
     [remoteEnv]=1
+    [network]=1
     [remoteUser]=1
     [containerUser]=1
     [updateRemoteUserUID]=1

@@ -8,63 +8,52 @@ readonly _DCTL_RUNTIME_KRUN_LOADED=1
 
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/_lib/source.sh"
-
 __dctl_require _lib/log.sh
 __dctl_require _lib/paths.sh
 __dctl_require _lib/auth/gh_token.sh
 __dctl_require _lib/auth/glab_token.sh
 __dctl_require _lib/workspace/label_filter.sh
+__dctl_require commands/net/_compose.sh
 __dctl_require commands/doctor/_helpers.sh
 __dctl_require commands/doctor/kvm.sh
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/runtime/common.sh"
-
 _dctl_krun_preflight() {
   if [[ -n ${_DCTL_KRUN_PREFLIGHT_OK:-} ]]; then
     return 0
   fi
-
   if ! _doctor_minimal_preflight; then
     err "krun runtime preflight failed. Run 'dctl doctor' for full diagnostics."
   fi
-
   _DCTL_KRUN_PREFLIGHT_OK=1
 }
-
 _krun_strip_jsonc_comments() {
   sed '/^[[:space:]]*\/\//d' "$1"
 }
-
 _krun_resolve_config() {
   local workspace_folder="$1"
   local config_path="$2"
   local config_json jq_err
-
   [[ -n $workspace_folder ]] || err "rt_* requires a workspace folder"
   [[ -n $config_path ]] || err "rt_* requires a config path"
   [[ -f $config_path ]] || err "Resolved devcontainer config does not exist: $config_path"
-
   config_json="$(_krun_strip_jsonc_comments "$config_path")" || return 1
   if ! jq_err="$(jq empty <<<"$config_json" 2>&1)"; then
     printf 'JSON syntax error in %s:\n  %s\n' "$config_path" "$jq_err" >&2
     return 1
   fi
-
   printf '%s\n' "$config_json"
 }
-
 _krun_workspace_label_filter() {
   local workspace_folder="$1"
   [[ -n $workspace_folder ]] || err "_krun_workspace_label_filter requires a workspace folder"
   printf 'label=devcontainer.local_folder=%s' "$(cd -- "$workspace_folder" && pwd -P)"
 }
-
 _krun_default_annotations() {
   printf '%s\0' \
     "--annotation" "krun.ram_mib=4096" \
     "--annotation" "krun.cpus=2"
 }
-
 _krun_http2_workaround() {
   # The referenced ai-agents-sandbox lines currently fall back to no-microvm for
   # Copilot CLI rather than applying an env/sysctl tweak. Keep a documented hook
@@ -74,16 +63,13 @@ _krun_http2_workaround() {
     :
   fi
 }
-
 _krun_emit_mount_flag() {
   local mount_json="$1"
   local mount_type source target options readonly_flag
-
   if jq -e 'type == "string"' >/dev/null 2>&1 <<<"$mount_json"; then
     printf '%s\0%s\0' "--mount" "$(jq -r '.' <<<"$mount_json")"
     return 0
   fi
-
   mount_type="$(jq -r '.type // empty' <<<"$mount_json")"
   source="$(jq -r '.source // .src // empty' <<<"$mount_json")"
   target="$(jq -r '.target // .dst // .destination // empty' <<<"$mount_json")"
@@ -92,10 +78,8 @@ _krun_emit_mount_flag() {
   # error). Track for parity in DECISION-LINUX.md when relevant.
   options=""
   readonly_flag="$(jq -r '.readonly // .readOnly // empty' <<<"$mount_json")"
-
   [[ -n $mount_type ]] || err "Mount entry is missing .type"
   [[ -n $target ]] || err "Mount entry is missing .target"
-
   local spec="type=${mount_type},target=${target}"
   if [[ -n $source ]]; then
     spec="${spec},source=${source}"
@@ -106,27 +90,21 @@ _krun_emit_mount_flag() {
   if [[ $readonly_flag == "true" ]]; then
     spec="${spec},readonly"
   fi
-
   printf '%s\0%s\0' "--mount" "$spec"
 }
-
 _krun_extract_run_flags() {
   local config_json="$1"
   local item key value
-
   while IFS= read -r item; do
     printf '%s\0' "$item"
   done < <(jq -r '.runArgs // [] | .[]' <<<"$config_json")
-
   while IFS= read -r key; do
     value="$(jq -r --arg key "$key" '.containerEnv[$key]' <<<"$config_json")"
     printf '%s\0%s=%s\0' "--env" "$key" "$value"
   done < <(jq -r '.containerEnv // {} | keys[]' <<<"$config_json")
-
   while IFS= read -r item; do
     _krun_emit_mount_flag "$item"
   done < <(jq -c '.mounts // [] | .[]' <<<"$config_json")
-
   value="$(jq -r '.workspaceMount // empty' <<<"$config_json")"
   if [[ -n $value ]]; then
     printf '%s\0%s\0' "--mount" "$value"
@@ -241,6 +219,13 @@ _krun_collect_exec_env_flags() {
   fi
 }
 
+_krun_inject_allowlist_env() {
+  local workspace_folder="$1"
+  local json
+  json="$(net_compose_allowlist_json "$workspace_folder")"
+  printf '%s\0%s=%s\0' "--env" "DCTL_NETWORK_ALLOWLIST_JSON" "$json"
+}
+
 _krun_rt_run() {
   local workspace_folder="$1"
   local config_path="$2"
@@ -257,6 +242,9 @@ _krun_rt_run() {
   while IFS= read -r -d '' item; do
     flags+=("$item")
   done < <(_krun_extract_run_flags "$config_json")
+  while IFS= read -r -d '' item; do
+    flags+=("$item")
+  done < <(_krun_inject_allowlist_env "$workspace_folder")
 
   annotations=()
   while IFS= read -r -d '' item; do
@@ -315,8 +303,14 @@ _krun_rt_run() {
     # shellcheck source=/dev/null
     source "${DCTL_LIB_DIR}/lifecycle.sh"
   fi
-  run_postcreate "$ctr" "$config_json"
-  run_poststart "$ctr" "$config_json"
+  if ! run_postcreate "$ctr" "$config_json"; then
+    podman rm -f "$ctr" >/dev/null 2>&1 || true
+    err "postCreateCommand failed; container removed"
+  fi
+  if ! run_poststart "$ctr" "$config_json"; then
+    podman rm -f "$ctr" >/dev/null 2>&1 || true
+    err "postStartCommand failed; container removed"
+  fi
 
   printf '%s\n' "$ctr"
 }

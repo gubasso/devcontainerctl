@@ -18,11 +18,13 @@ source_dctl_functions() {
   __dctl_require _lib/auth/gh_token.sh
   __dctl_require _lib/auth/glab_token.sh
   __dctl_require _lib/auth/collect_env.sh
+  __dctl_require _lib/auth/ephemeral_creds.sh
   __dctl_require _lib/workspace/git_worktree.sh
   __dctl_require _lib/workspace/resolve_config.sh
   __dctl_require _lib/workspace/canonical_name.sh
   __dctl_require _lib/workspace/sibling.sh
   __dctl_require _lib/workspace/label_filter.sh
+  __dctl_require _lib/workspace/session_hash.sh
   __dctl_require _lib/term/collect_env.sh
   __dctl_require _lib/fzf.sh
   __dctl_require _lib/json/strip_comments.sh
@@ -61,6 +63,9 @@ source_dctl_functions() {
   __dctl_require commands/test/_dispatch.sh
   __dctl_require commands/test/run.sh
   __dctl_require commands/config/_dispatch.sh
+  __dctl_require commands/net/_dispatch.sh
+  __dctl_require commands/net/allow.sh
+  __dctl_require commands/net/show.sh
 }
 
 create_template_fixture() {
@@ -1855,4 +1860,85 @@ EOF
   [[ $output == *"Missing bind mount source(s) on host"* ]]
   [[ $output == *"$missing"* ]]
   assert_mock_not_called "podman run --runtime krun --detach"
+}
+
+@test "collect_ephemeral_cred_mounts copies minimal agent credential files into the session dir" {
+  HOME="${TEST_TMPDIR}/home"
+  export HOME
+  mkdir -p "$HOME/.claude" "$HOME/.codex" "$HOME/.gemini"
+  printf 'claude-token\n' >"$HOME/.claude/.credentials.json"
+  printf 'codex-token\n' >"$HOME/.codex/auth.json"
+  printf 'gemini-token\n' >"$HOME/.gemini/key.json"
+
+  local -a mounts=()
+  collect_ephemeral_cred_mounts mounts
+
+  local session_dir
+  session_dir="$(workspace_session_dir)"
+  [ -f "${session_dir}/claude/.credentials.json" ]
+  [ -f "${session_dir}/codex/auth.json" ]
+  [ -f "${session_dir}/gemini/key.json" ]
+  [[ ${mounts[*]} == *"${session_dir}/claude/.credentials.json"* ]]
+  [[ ${mounts[*]} == *"${session_dir}/codex/auth.json"* ]]
+  [[ ${mounts[*]} == *"${session_dir}/gemini/key.json"* ]]
+  [[ ${mounts[*]} == *"target=${HOME}/.claude/.credentials.json,readonly"* ]]
+  [[ ${mounts[*]} == *"target=${HOME}/.codex/auth.json,readonly"* ]]
+  [[ ${mounts[*]} == *"target=${HOME}/.gemini/key.json,readonly"* ]]
+}
+
+@test "cmd_ws_down removes the session dir even when no container exists" {
+  local session_dir
+  session_dir="$(workspace_session_dir)"
+  mkdir -p "$session_dir"
+  printf 'temp\n' >"${session_dir}/token"
+
+  enable_mocks
+  create_mock podman 0 ""
+
+  run cmd_ws_down
+  [ "$status" -eq 0 ]
+  [ ! -e "$session_dir" ]
+}
+
+@test "generate_cached_devcontainer writes the effective network allowlist into the cache" {
+  create_user_base_layer_fixture
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/general"
+  cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/general/devcontainer.json" <<'EOF'
+{
+  "image": "devimg/agents:latest",
+  "network": {
+    "allow": ["foo.example"]
+  }
+}
+EOF
+  create_user_manifest_fixture general base general
+
+  run generate_cached_devcontainer general true
+  [ "$status" -eq 0 ]
+  local cached="${XDG_CACHE_HOME}/dctl/devcontainer/general/devcontainer.json"
+  [ "$(jq -r '.network.allow[]' "$cached" | grep -c '^foo.example$')" -eq 1 ]
+  [ "$(jq -r '.network.allow[]' "$cached" | grep -c '^api.anthropic.com$')" -eq 1 ]
+}
+
+@test "cmd_net_allow appends to the leaf devcontainer and regenerates the manifest cache" {
+  create_user_base_layer_fixture
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/general"
+  cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/general/devcontainer.json" <<'EOF'
+{
+  "image": "devimg/agents:latest"
+}
+EOF
+  create_user_manifest_fixture general base general
+  git -C "$WORKSPACE_FOLDER" init -q
+  git -C "$WORKSPACE_FOLDER" remote add origin "https://github.com/org/myproj.git"
+  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<'EOF'
+org-myproj:
+  devcontainer-manifest: general
+EOF
+
+  run cmd_net_allow foo.example
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.network.allow[]' "${XDG_CONFIG_HOME}/dctl/devcontainer/general/devcontainer.json" | grep -c '^foo.example$')" -eq 1 ]
+  [ "$(jq -r '.network.allow[]' "${XDG_CACHE_HOME}/dctl/devcontainer/general/devcontainer.json" | grep -c '^foo.example$')" -eq 1 ]
+  [[ $output == *$'user\tfoo.example'* ]]
 }

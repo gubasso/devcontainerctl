@@ -49,6 +49,7 @@ RUN zypper --non-interactive --gpg-auto-import-keys refresh -f \
             git-core \
             unzip \
             ripgrep \
+            nftables \
             fd \
             bat \
             fish \
@@ -98,7 +99,10 @@ RUN test -n "$USERNAME" || { echo "USERNAME build arg is required"; exit 1; } \
     && groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/bash $USERNAME \
     && rm -f /home/$USERNAME/.bashrc /home/$USERNAME/.bash_logout /home/$USERNAME/.profile \
-    && echo "$USERNAME ALL=(root) NOPASSWD: /usr/bin/zypper" > /etc/sudoers.d/$USERNAME \
+    && { \
+        echo "Defaults!/usr/local/bin/dctl-egress env_keep += \"DCTL_NETWORK_ALLOWLIST_JSON\""; \
+        echo "$USERNAME ALL=(root) NOPASSWD: /usr/bin/zypper, /usr/local/bin/dctl-egress"; \
+    } > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME
 
 # Pre-create directories for mounts
@@ -116,6 +120,9 @@ RUN zypper --non-interactive addrepo https://cli.github.com/packages/rpm/gh-cli.
     && zypper --non-interactive --gpg-auto-import-keys refresh \
     && zypper --non-interactive install --no-recommends gh \
     && zypper clean --all
+
+COPY dctl-egress /usr/local/bin/dctl-egress
+RUN chmod 0755 /usr/local/bin/dctl-egress
 
 USER $USERNAME
 WORKDIR /home/$USERNAME

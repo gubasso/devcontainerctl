@@ -16,6 +16,9 @@ __dctl_require _lib/json/merge_runargs.sh
 __dctl_require _lib/json/merge_configs.sh
 __dctl_require _lib/registry/validate_manifest.sh
 __dctl_require _lib/registry/read_manifest_layers.sh
+__dctl_require commands/net/_default_allowlist.sh
+__dctl_require commands/net/_user_allowlist.sh
+__dctl_require commands/net/_compose.sh
 __dctl_require commands/image/build.sh
 __dctl_require commands/image/_helpers.sh
 __dctl_require runtime/common.sh
@@ -103,7 +106,7 @@ generate_cached_devcontainer() {
   require_cmd jq
 
   mkdir -p "$(dirname "$cached_path")"
-  local tmp_path tmp_acc
+  local tmp_path tmp_acc allowlist_json
   tmp_path="$(mktemp "${cached_path}.tmp.XXXXXX")"
   tmp_acc="$(mktemp "${cached_path}.layers.XXXXXX")"
   cp "${config_layers[0]}" "$tmp_acc"
@@ -120,6 +123,18 @@ generate_cached_devcontainer() {
   done
 
   mv "$tmp_acc" "$tmp_path"
+  # The cache file is shared across workspaces (keyed only by manifest name in
+  # $DCTL_DEVCONTAINER_CACHE_DIR), so it must not capture per-workspace git
+  # remotes. Runtime injection in krun.sh:_krun_inject_allowlist_env recomputes
+  # the full per-workspace list at `podman run` time.
+  allowlist_json="$(DCTL_NET_OMIT_GIT_REMOTES=1 DCTL_NET_MANIFEST_HINT="$template" net_compose_allowlist_json "$WORKSPACE_FOLDER")"
+  if ! jq --argjson allow "$allowlist_json" '
+    .network = ((.network // {}) | .allow = $allow)
+  ' "$tmp_path" >"${tmp_path}.allow"; then
+    rm -f "$tmp_path" "${tmp_path}.allow"
+    err "Failed to merge allowlist into cache for '$template'"
+  fi
+  mv "${tmp_path}.allow" "$tmp_path"
   # TODO(70): honor manifest runtime.resources block when schema support lands.
   if ! jq '
     .runArgs = (

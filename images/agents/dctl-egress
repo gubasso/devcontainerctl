@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+readonly DCTL_EGRESS_TABLE="dctl_egress"
+
+dctl_egress_main() {
+  case "${1:-}" in
+    --daemon)
+      _dctl_egress_daemon
+      ;;
+    --refresh)
+      _dctl_egress_refresh
+      ;;
+    --teardown)
+      _dctl_egress_teardown
+      ;;
+    --loop)
+      _dctl_egress_loop
+      ;;
+    *)
+      printf 'Usage: dctl-egress [--daemon|--refresh|--teardown]\n' >&2
+      return 1
+      ;;
+  esac
+}
+
+_dctl_egress_daemon() {
+  local pidfile
+  _dctl_egress_refresh
+  pidfile="$(_dctl_egress_pidfile)"
+  if [[ -f $pidfile ]] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+    return 0
+  fi
+
+  nohup "$0" --loop >/tmp/dctl-egress.log 2>&1 &
+  printf '%s\n' "$!" >"$pidfile"
+  disown || true
+}
+
+_dctl_egress_loop() {
+  while true; do
+    sleep 300
+    _dctl_egress_refresh
+  done
+}
+
+_dctl_egress_refresh() {
+  require_cmd nft
+  require_cmd jq
+
+  local allowlist_json="${DCTL_NETWORK_ALLOWLIST_JSON:-}"
+  [[ -n $allowlist_json ]] || {
+    printf 'DCTL_NETWORK_ALLOWLIST_JSON is required\n' >&2
+    return 2
+  }
+
+  local -a allow4=() allow6=()
+  _dctl_collect_allowlist_ips "$allowlist_json" allow4 allow6
+  if [[ ${#allow4[@]} -eq 0 && ${#allow6[@]} -eq 0 ]]; then
+    printf 'No allowlist entries resolved for nftables install\n' >&2
+    return 1
+  fi
+
+  local rules_file
+  rules_file="$(mktemp /tmp/dctl-egress.nft.XXXXXX)"
+  _dctl_write_rules_file "$rules_file" allow4 allow6
+  nft -f "$rules_file"
+  rm -f "$rules_file"
+}
+
+_dctl_egress_teardown() {
+  nft delete table inet "$DCTL_EGRESS_TABLE" >/dev/null 2>&1 || true
+  rm -f "$(_dctl_egress_pidfile)"
+}
+
+_dctl_collect_allowlist_ips() {
+  local allowlist_json="$1"
+  local -n _allow4="$2"
+  local -n _allow6="$3"
+  local entry resolved
+  # shellcheck disable=SC2034
+  declare -A seen4=() seen6=()
+
+  while IFS= read -r entry; do
+    [[ -n $entry ]] || continue
+    if [[ $entry =~ ^[0-9.]+/[0-9]+$ ]]; then
+      _dctl_append_unique seen4 _allow4 "$entry"
+      continue
+    fi
+    if [[ $entry =~ ^[0-9a-f:]+/[0-9]+$ ]]; then
+      _dctl_append_unique seen6 _allow6 "$entry"
+      continue
+    fi
+    if [[ $entry == \*.* ]]; then
+      printf 'warning: wildcard allowlist entry requires explicit host entries: %s\n' "$entry" >&2
+      continue
+    fi
+
+    while IFS= read -r resolved; do
+      [[ -n $resolved ]] || continue
+      _dctl_append_unique seen4 _allow4 "$resolved"
+    done < <(getent ahostsv4 "$entry" 2>/dev/null | awk '{print $1}' | sort -u)
+
+    while IFS= read -r resolved; do
+      [[ -n $resolved ]] || continue
+      _dctl_append_unique seen6 _allow6 "$resolved"
+    done < <(getent ahostsv6 "$entry" 2>/dev/null | awk '{print $1}' | sort -u)
+  done < <(jq -r '.[]' <<<"$allowlist_json")
+}
+
+_dctl_append_unique() {
+  local -n _seen="$1"
+  local -n _out="$2"
+  local value="$3"
+  [[ -n ${_seen[$value]:-} ]] && return 0
+  _seen["$value"]=1
+  _out+=("$value")
+}
+
+_dctl_write_rules_file() {
+  local path="$1"
+  local -n _allow4="$2"
+  local -n _allow6="$3"
+
+  {
+    printf 'table inet %s {\n' "$DCTL_EGRESS_TABLE"
+    _dctl_print_set "allow4" "ipv4_addr" _allow4
+    _dctl_print_set "allow6" "ipv6_addr" _allow6
+    cat <<'EOF'
+  chain output {
+    type filter hook output priority 0; policy drop;
+    ct state established,related accept
+    oif lo accept
+    udp dport 53 accept
+    tcp dport 53 accept
+    ip daddr @allow4 accept
+    ip6 daddr @allow6 accept
+  }
+}
+EOF
+  } >"$path"
+}
+
+_dctl_print_set() {
+  local name="$1"
+  local nft_type="$2"
+  local -n _values="$3"
+  local value
+
+  printf '  set %s {\n' "$name"
+  printf '    type %s;\n' "$nft_type"
+  printf '    flags interval;\n'
+  if [[ ${#_values[@]} -gt 0 ]]; then
+    printf '    elements = { '
+    for value in "${!_values[@]}"; do
+      [[ $value -gt 0 ]] && printf ', '
+      printf '%s' "${_values[$value]}"
+    done
+    printf ' }\n'
+  fi
+  printf '  }\n'
+}
+
+_dctl_egress_pidfile() {
+  if [[ -w /run || ( -d /run && -w /run ) ]]; then
+    printf '/run/dctl-egress.pid\n'
+  else
+    printf '/tmp/dctl-egress.pid\n'
+  fi
+}
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || {
+    printf 'Missing required command: %s\n' "$1" >&2
+    return 1
+  }
+}
+
+dctl_egress_main "$@"

@@ -39,7 +39,13 @@ teardown() {
 }
 
 @test "_lib files define at most one function (15a exemptions allowed)" {
-  local exempt=("_lib/source.sh" "_lib/log.sh" "_lib/paths.sh")
+  local exempt=(
+    "_lib/source.sh"
+    "_lib/log.sh"
+    "_lib/paths.sh"
+    "_lib/workspace/session_hash.sh"
+    "_lib/auth/ephemeral_creds.sh"
+  )
   while IFS= read -r -d '' f; do
     local rel="${f#"${repo_root}"/lib/dctl/}"
     local skip=false

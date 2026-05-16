@@ -176,6 +176,19 @@ These remain unaffected by this decision and apply runtime-agnostically:
 - **Egress allowlist UX** — independent of runtime.
 - **Cross-runtime feature parity** — the runtime adapter must define which `devcontainer.json` keys are portable; the rest must error explicitly rather than silently degrade.
 
+### 5.1 Phase-40 egress enforcement
+
+libkrun's TSI removes host-side TAP and bridge plumbing, but it does not apply
+an outbound policy on its own. Round 40 therefore installs a per-VM egress
+policy inside the guest with nftables (Option A). The control surface lives in
+`lib/dctl/commands/net/` and the in-guest bootstrap script
+`images/agents/dctl-egress`.
+
+Option B, a userspace `dctl-proxy`, is rejected for this round. It would add a
+new binary, new HTTP/TLS interception semantics, and a larger support surface
+without changing the underlying isolation class. Revisit it only if DNS
+rotation or wildcard-host ergonomics prove untenable in practice.
+
 ---
 
 ## 6. Risks accepted
