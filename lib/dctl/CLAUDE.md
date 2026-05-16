@@ -2,8 +2,8 @@
 
 Shell implementation for `dctl`.
 
-Round 15a introduces the `_lib/` helper tree and lazy dispatch bootstrap.
-The flat `*.sh` files remain as compatibility shims until round 15b.
+Round 15a introduced the `_lib/` helper tree and lazy dispatch bootstrap.
+Round 15b adds the `commands/` tree and removes the flat compatibility shims.
 
 ## What / Where
 
@@ -12,8 +12,7 @@ The flat `*.sh` files remain as compatibility shims until round 15b.
 | Dispatcher bootstrap | `bin/dctl` |
 | Internal helpers | `lib/dctl/_lib/<topic>/<name>.sh` |
 | Eager helper bootstrap | `lib/dctl/_lib/source.sh`, `_lib/log.sh`, `_lib/paths.sh` |
-| Command tree | `lib/dctl/commands/<group>/` in round 15b |
-| Transitional flat shims | `lib/dctl/{common,auth,config,init,ws,...}.sh` |
+| Command tree | `lib/dctl/commands/{ws,image,init,deploy,config,test,doctor}/` |
 | Runtime adapter | `lib/dctl/runtime/{common,krun}.sh` |
 | Lifecycle interpreter | `lib/dctl/lifecycle.sh` |
 
@@ -25,6 +24,7 @@ The flat `*.sh` files remain as compatibility shims until round 15b.
 - `__` prefix is internal-only; plain names are exported helper APIs.
 - One function per helper file is the default rule.
 - Blessed exceptions:
+  - `_lib/source.sh` groups `__dctl_require`, `__dctl_autoload_register`, `__dctl_dispatch`.
   - `_lib/log.sh` groups `log`, `warn`, `err`, `require_cmd`.
   - `_lib/paths.sh` groups XDG state and path-printer helpers.
 
@@ -33,25 +33,24 @@ The flat `*.sh` files remain as compatibility shims until round 15b.
 - `bin/dctl` eagerly loads only `_lib/source.sh`, `_lib/log.sh`, and `_lib/paths.sh`.
 - All other helpers load through `__dctl_require`.
 - `__dctl_dispatch` short-circuits `help`, `--help`, `version`, `--version`, and no-arg entry before loading any command group.
-- Round 15a still falls back to the flat `lib/dctl/<group>.sh` modules when `commands/<group>/_dispatch.sh` is absent.
-- Round 15b removes that fallback after the command tree exists.
+- Round 15b removed the flat fallback; `__dctl_dispatch` routes only to `commands/<group>/_dispatch.sh`.
 
 ## Size Guidance
 
 - Soft target: about 200 lines per file.
 - Hard ceiling: 500 lines per file.
 - Small helper files are allowed when they preserve the one-function-per-file layout adopted in 15a.
+- `tests/structure_test.bats` enforces the command-tree layout, the 500-line ceiling, and the `_lib` one-function rule with exemptions for `_lib/source.sh`, `_lib/log.sh`, and `_lib/paths.sh`.
 
-## Compatibility Shims
+## Command Groups
 
-- `common.sh`, `auth.sh`, `config.sh`, `init.sh`, and `ws.sh` now exist to `__dctl_require` moved helpers and preserve current entry points.
-- Verb bodies stay in the flat files for 15a.
-- Do not add new helper implementations back into the flat shims.
+- Round 15b groups: `ws`, `image`, `init`, `deploy`, `config`, `test`, `doctor`
+- Round 40 adds: `net`
 
-## Do Not Move In 15a
+## Do Not Move
 
 - `lib/dctl/runtime/common.sh`
 - `lib/dctl/runtime/krun.sh`
 - `lib/dctl/lifecycle.sh`
 
-Those files are preserved verbatim in this round.
+Those files stay flat until a second runtime backend lands or `lifecycle.sh` grows enough to justify a split.

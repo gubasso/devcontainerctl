@@ -7,11 +7,14 @@ readonly _DCTL_RUNTIME_KRUN_LOADED=1
 : "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)}"
 
 # shellcheck source=/dev/null
-source "${DCTL_LIB_DIR}/common.sh"
-# shellcheck source=/dev/null
-source "${DCTL_LIB_DIR}/auth.sh"
-# shellcheck source=/dev/null
-source "${DCTL_LIB_DIR}/doctor.sh"
+source "${DCTL_LIB_DIR}/_lib/source.sh"
+
+__dctl_require _lib/log.sh
+__dctl_require _lib/paths.sh
+__dctl_require _lib/auth/gh_token.sh
+__dctl_require _lib/auth/glab_token.sh
+__dctl_require commands/doctor/_helpers.sh
+__dctl_require commands/doctor/kvm.sh
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/runtime/common.sh"
 

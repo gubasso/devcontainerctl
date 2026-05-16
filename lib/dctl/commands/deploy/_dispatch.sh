@@ -1,15 +1,19 @@
 # shellcheck shell=bash
-# Deploy command for dctl (sourced, not executed directly)
 
-[[ -n ${_DCTL_DEPLOY_LOADED:-} ]] && return 0
-readonly _DCTL_DEPLOY_LOADED=1
+[[ -n ${_DCTL_COMMANDS_DEPLOY_DISPATCH_LOADED:-} ]] && return 0
+readonly _DCTL_COMMANDS_DEPLOY_DISPATCH_LOADED=1
 
-: "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)}"
+: "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)}"
 
 # shellcheck source=/dev/null
-source "${DCTL_LIB_DIR}/common.sh"
-# shellcheck source=/dev/null
-source "${DCTL_LIB_DIR}/config.sh"
+source "${DCTL_LIB_DIR}/_lib/source.sh"
+
+__dctl_require _lib/log.sh
+__dctl_require _lib/paths.sh
+__dctl_require _lib/fzf.sh
+__dctl_require _lib/registry/validate_manifest.sh
+__dctl_require _lib/registry/read_manifest_layers.sh
+__dctl_require commands/deploy/_discover.sh
 
 usage_deploy() {
   cat <<'EOF'
@@ -35,88 +39,6 @@ Interactive:
 EOF
 }
 
-_discover_installed_devcontainers() {
-  local manifests=()
-  shopt -s nullglob
-  local f name
-  for f in "$DEVCONTAINERS_DIR"/*.yaml; do
-    name="$(basename "$f" .yaml)"
-    manifests+=("$name")
-  done
-  shopt -u nullglob
-  [[ ${#manifests[@]} -gt 0 ]] && printf '%s\n' "${manifests[@]}"
-}
-
-_discover_deployed_devcontainers() {
-  local manifests=()
-  shopt -s nullglob
-  local f name
-  for f in "$DCTL_DEVCONTAINER_DIR"/*.yaml; do
-    name="$(basename "$f" .yaml)"
-    manifests+=("$name")
-  done
-  shopt -u nullglob
-  [[ ${#manifests[@]} -gt 0 ]] && printf '%s\n' "${manifests[@]}"
-}
-
-_discover_installed_images() {
-  local targets=()
-  shopt -s nullglob
-  local dir name
-  for dir in "$IMAGES_DIR"/*/; do
-    [[ -f "${dir}Dockerfile" ]] || continue
-    name="$(basename "$dir")"
-    targets+=("$name")
-  done
-  shopt -u nullglob
-  [[ ${#targets[@]} -gt 0 ]] && printf '%s\n' "${targets[@]}"
-}
-
-_discover_deployed_images() {
-  local targets=()
-  shopt -s nullglob
-  local dir name
-  for dir in "$DCTL_IMAGES_DIR"/*/; do
-    [[ -f "${dir}Dockerfile" ]] || continue
-    name="$(basename "$dir")"
-    targets+=("$name")
-  done
-  shopt -u nullglob
-  [[ ${#targets[@]} -gt 0 ]] && printf '%s\n' "${targets[@]}"
-}
-
-_discover_installed_selectable_devcontainers() {
-  _discover_installed_devcontainers
-}
-
-_discover_deployed_selectable_devcontainers() {
-  _discover_deployed_devcontainers
-}
-
-_category_installed_root() {
-  case "$1" in
-    devcontainer) printf '%s\n' "$DEVCONTAINERS_DIR" ;;
-    image) printf '%s\n' "$IMAGES_DIR" ;;
-    *) err "Unknown deploy category: $1" ;;
-  esac
-}
-
-_category_deployed_root() {
-  case "$1" in
-    devcontainer) printf '%s\n' "$DCTL_DEVCONTAINER_DIR" ;;
-    image) printf '%s\n' "$DCTL_IMAGES_DIR" ;;
-    *) err "Unknown deploy category: $1" ;;
-  esac
-}
-
-_preview_file_for_category() {
-  case "$1" in
-    devcontainer) printf 'devcontainer.json\n' ;;
-    image) printf 'Dockerfile\n' ;;
-    *) err "Unknown deploy category: $1" ;;
-  esac
-}
-
 _print_status_group() {
   local title="$1"
   shift
@@ -128,43 +50,6 @@ _print_status_group() {
     return
   fi
   printf '  %s\n' "${items[@]}"
-}
-
-_collect_dir_plan_entries() {
-  local category="$1"
-  local name="$2"
-  local mode="$3"
-  local internal="${4:-false}"
-
-  local src_root dest_root src_dir dest_dir
-  src_root="$(_category_installed_root "$category")"
-  dest_root="$(_category_deployed_root "$category")"
-  src_dir="${src_root}/${name}"
-  dest_dir="${dest_root}/${name}"
-
-  [[ -d $src_dir ]] || return 0
-
-  local source rel dest action
-  while IFS= read -r source; do
-    [[ -n $source ]] || continue
-    rel="${source#"${src_dir}"/}"
-    dest="${dest_dir}/${rel}"
-
-    if [[ ! -f $dest ]]; then
-      action="CREATE"
-    elif cmp -s "$source" "$dest"; then
-      action="NOOP-IDENTICAL"
-    elif [[ $mode == "reset" ]]; then
-      action="OVERWRITE-WITH-BACKUP"
-    elif [[ $category == "devcontainer" && $internal == true ]]; then
-      action="OVERWRITE"
-    else
-      action="SKIP-EXISTS"
-    fi
-
-    printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-      "$action" "$category" "$name" "$internal" "$source" "$dest"
-  done < <(find "$src_dir" -type f | sort)
 }
 
 _collect_deploy_plan() {
@@ -525,7 +410,8 @@ cmd_deploy() {
   [[ $selection_count -le 1 ]] || err "Choose exactly one deploy selector or list mode"
 
   if [[ -n $list_scope ]]; then
-    list_deploy_entries "$list_scope"
+    __dctl_require commands/deploy/list.sh
+    cmd_deploy_list "$list_scope"
     return 0
   fi
 
@@ -554,22 +440,15 @@ cmd_deploy() {
     mapfile -t names < <(_discover_installed_images)
   fi
 
+  __dctl_require commands/deploy/plan.sh
+
   if [[ $all == true ]]; then
-    local dev_name image_name plan_output
-    while IFS= read -r dev_name; do
-      [[ -n $dev_name ]] || continue
-      plan_output="$(_collect_deploy_plan devcontainer "$dev_name" "$([[ $reset == true ]] && printf reset || printf normal)")" || exit $?
-      plan+="$plan_output"$'\n'
-    done < <(_discover_installed_devcontainers)
-    while IFS= read -r image_name; do
-      [[ -n $image_name ]] || continue
-      plan_output="$(_collect_deploy_plan image "$image_name" "$([[ $reset == true ]] && printf reset || printf normal)")" || exit $?
-      plan+="$plan_output"$'\n'
-    done < <(_discover_installed_images)
+    __dctl_require commands/deploy/all.sh
+    plan="$(cmd_deploy_all "$([[ $reset == true ]] && printf reset || printf normal)")"
   else
     for name in "${names[@]}"; do
       local plan_output
-      plan_output="$(_collect_deploy_plan "$category" "$name" "$([[ $reset == true ]] && printf reset || printf normal)")" || exit $?
+      plan_output="$(cmd_deploy_plan "$category" "$([[ $reset == true ]] && printf reset || printf normal)" "$name")" || exit $?
       plan+="$plan_output"$'\n'
     done
   fi
@@ -586,7 +465,8 @@ cmd_deploy() {
     return 0
   fi
 
-  _apply_deploy_plan "$deduped_plan"
+  __dctl_require commands/deploy/apply.sh
+  cmd_deploy_apply "$deduped_plan"
 }
 
 main_deploy() {

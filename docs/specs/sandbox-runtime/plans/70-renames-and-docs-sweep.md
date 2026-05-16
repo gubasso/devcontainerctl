@@ -32,7 +32,7 @@ Add optional keys:
 - `runtime.resources.memory_mib` (default 4096), `runtime.resources.cpus` (default 2).
 - `network.allow` (list of host strings; matches the round-40 `commands/net/*` consumer).
 
-`commands/init/generate_cache.sh` (rewired in round 20) already emits the runtime overlay; this round's schema addition makes the manifest-level override path official.
+`commands/init/_generate_cache.sh` (rewired in round 20) already emits the runtime overlay; this round's schema addition makes the manifest-level override path official.
 
 ### 2. Rename build files: `images/<name>/Dockerfile` → `images/<name>/Containerfile`
 
@@ -40,12 +40,12 @@ Four files via `git mv` to preserve history: `agents`, `python-dev`, `rust-dev`,
 
 Shell-side updates:
 
-- `lib/dctl/_lib/paths.sh` (was `common.sh:108,113` pre-reorg) — `Dockerfile` → `Containerfile` in path-builder helpers.
-- `lib/dctl/commands/deploy/_discover.sh` (was `deploy.sh:67,80` pre-reorg) and `commands/deploy/apply.sh` (was `deploy.sh:115` pre-reorg `image)` case-arm) — `Dockerfile` → `Containerfile`.
-- `lib/dctl/commands/image/_helpers.sh` (was `image.sh:53` pre-reorg) — existence check `Dockerfile` → `Containerfile`. Rename the `resolve_dockerfile()` function + `$dockerfile_path` variable → `resolve_containerfile()` / `$containerfile_path`. The helper **file** itself becomes `resolve_containerfile`-named per the one-function-per-file convention if it's currently in a file named after the function — otherwise leave the filename.
-- `lib/dctl/commands/test/run.sh` (was `test.sh:180` pre-reorg) — call `resolve_containerfile`.
+- `lib/dctl/_lib/paths.sh` — `Dockerfile` → `Containerfile` in path-builder helpers.
+- `lib/dctl/commands/deploy/_discover.sh` and `commands/deploy/apply.sh` — `Dockerfile` → `Containerfile`.
+- `lib/dctl/commands/image/_helpers.sh` — existence check `Dockerfile` → `Containerfile`. Rename the `resolve_dockerfile()` function + `$dockerfile_path` variable → `resolve_containerfile()` / `$containerfile_path`. The helper **file** itself becomes `resolve_containerfile`-named per the one-function-per-file convention if it's currently in a file named after the function — otherwise leave the filename.
+- `lib/dctl/commands/test/run.sh` — call `resolve_containerfile`.
 - `tests/dctl_test.bats` — ~16 references including `touch ".../Dockerfile"` test setup, `.bak.` backup-suffix assertions (which become `Containerfile.bak.<timestamp>` automatically since the suffix is path-derived), and test descriptions ("make install puts Containerfiles in DATA_DIR/images", etc.).
-- **Leave the legacy YAML registry key `dockerfile`** in `lib/dctl/_lib/registry/validate.sh` (was `config.sh:279,290` pre-reorg `del(.dockerfile)`) and `tests/config_test.bats` alone — that's the deprecated schema key being explicitly rejected by the migration logic; renaming would break the deprecation path. Add a short source comment confirming the legacy key is intentionally preserved.
+- **Leave the legacy YAML registry key `dockerfile`** in `lib/dctl/_lib/registry/validate.sh` and `tests/config_test.bats` alone — that's the deprecated schema key being explicitly rejected by the migration logic; renaming would break the deprecation path. Add a short source comment confirming the legacy key is intentionally preserved.
 
 ### 3. Top-level docs sweep
 

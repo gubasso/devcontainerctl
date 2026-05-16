@@ -18,7 +18,10 @@ readonly _DCTL_LIFECYCLE_LOADED=1
 : "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)}"
 
 # shellcheck source=/dev/null
-source "${DCTL_LIB_DIR}/common.sh"
+source "${DCTL_LIB_DIR}/_lib/source.sh"
+
+__dctl_require _lib/log.sh
+__dctl_require _lib/workspace/resolve_config.sh
 
 _lifecycle_strip_jsonc_comments() {
   sed '/^[[:space:]]*\/\//d' "$1"
@@ -34,7 +37,9 @@ _lifecycle_resolve_config() {
   config_path="$(
     WORKSPACE_FOLDER="$workspace_folder" DCTL_LIB_DIR="$DCTL_LIB_DIR" bash -lc '
       set -euo pipefail
-      source "$DCTL_LIB_DIR/common.sh"
+      source "$DCTL_LIB_DIR/_lib/source.sh"
+      __dctl_require _lib/log.sh
+      __dctl_require _lib/workspace/resolve_config.sh
       resolve_devcontainer_config
     '
   )" || return 1

@@ -10,9 +10,12 @@ source_auth() {
   readonly DCTL_LIB_DIR="${repo_root}/lib/dctl"
   set -euo pipefail
   # shellcheck source=/dev/null
-  source "${DCTL_LIB_DIR}/common.sh"
-  # shellcheck source=/dev/null
-  source "${DCTL_LIB_DIR}/auth.sh"
+  source "${DCTL_LIB_DIR}/_lib/source.sh"
+  __dctl_require _lib/log.sh
+  __dctl_require _lib/paths.sh
+  __dctl_require _lib/auth/gh_token.sh
+  __dctl_require _lib/auth/glab_token.sh
+  __dctl_require _lib/auth/collect_env.sh
 }
 
 # PATH with mock dir + system dirs (for tests needing mocks)

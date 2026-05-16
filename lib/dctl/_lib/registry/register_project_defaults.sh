@@ -1,26 +1,19 @@
 # shellcheck shell=bash
-# Project registry module for dctl (sourced, not executed directly)
 
-[[ -n ${_DCTL_CONFIG_LOADED:-} ]] && return 0
-readonly _DCTL_CONFIG_LOADED=1
+[[ -n ${_DCTL_REGISTRY_REGISTER_PROJECT_DEFAULTS_LOADED:-} ]] && return 0
+readonly _DCTL_REGISTRY_REGISTER_PROJECT_DEFAULTS_LOADED=1
 
-: "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)}"
+: "${DCTL_LIB_DIR:?DCTL_LIB_DIR must be set before sourcing _lib helpers}"
 
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/_lib/source.sh"
 
 __dctl_require _lib/log.sh
-__dctl_require _lib/paths.sh
 __dctl_require _lib/registry/file.sh
 __dctl_require _lib/registry/exists.sh
-__dctl_require _lib/registry/validate_manifest.sh
 __dctl_require _lib/registry/validate.sh
-__dctl_require _lib/registry/read_manifest_layers.sh
-__dctl_require _lib/registry/read_field.sh
-__dctl_require _lib/registry/lookup_manifest.sh
-__dctl_require _lib/registry/lookup_discovery.sh
-__dctl_require _lib/registry/ensure_file.sh
 __dctl_require _lib/registry/has_project.sh
+__dctl_require _lib/registry/ensure_file.sh
 
 register_project_defaults() {
   local canonical_name="$1"
@@ -103,31 +96,4 @@ register_project_defaults() {
   _validate_registry "$registry"
 
   log "Registered project '$canonical_name' (devcontainer-manifest: $manifest_name) in $registry"
-}
-
-usage_config() {
-  cat <<'EOF'
-Usage: dctl config <command>
-
-Commands:
-  help    Show this help text
-
-Project registry: ~/.config/dctl/projects.yaml
-EOF
-}
-
-cmd_config() {
-  local command="${1:-help}"
-  case "$command" in
-    help | -h | --help)
-      usage_config
-      ;;
-    *)
-      err "Unknown config command: $command"
-      ;;
-  esac
-}
-
-main_config() {
-  cmd_config "$@"
 }

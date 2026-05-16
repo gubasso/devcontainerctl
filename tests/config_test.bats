@@ -18,9 +18,17 @@ setup() {
   export DCTL_LIB_DIR="${repo_root}/lib/dctl"
   set -euo pipefail
   # shellcheck source=/dev/null
-  source "${DCTL_LIB_DIR}/common.sh"
-  # shellcheck source=/dev/null
-  source "${DCTL_LIB_DIR}/config.sh"
+  source "${DCTL_LIB_DIR}/_lib/source.sh"
+  __dctl_require _lib/log.sh
+  __dctl_require _lib/paths.sh
+  __dctl_require _lib/workspace/canonical_name.sh
+  __dctl_require _lib/workspace/resolve_config.sh
+  __dctl_require _lib/workspace/sibling.sh
+  __dctl_require _lib/registry/lookup_manifest.sh
+  __dctl_require _lib/registry/lookup_discovery.sh
+  __dctl_require _lib/registry/register_project_defaults.sh
+  __dctl_require _lib/registry/validate.sh
+  __dctl_require commands/config/_dispatch.sh
 
   # Copy schema for validation tests
   cp "${BATS_TEST_DIRNAME}/../schemas/projects.schema.yaml" \
@@ -41,7 +49,7 @@ run_with_workspace() {
   shift
   run env WORKSPACE_FOLDER="$wf" XDG_DATA_HOME="$XDG_DATA_HOME" \
     XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
-    bash -c 'source "'"$DCTL_LIB_DIR"'/common.sh"; source "'"$DCTL_LIB_DIR"'/config.sh"; '"$*"
+    bash -c 'source "'"$DCTL_LIB_DIR"'/_lib/source.sh"; __dctl_require _lib/log.sh; __dctl_require _lib/paths.sh; __dctl_require _lib/workspace/canonical_name.sh; __dctl_require _lib/workspace/resolve_config.sh; __dctl_require _lib/workspace/sibling.sh; __dctl_require _lib/registry/lookup_manifest.sh; __dctl_require _lib/registry/lookup_discovery.sh; __dctl_require _lib/registry/register_project_defaults.sh; __dctl_require _lib/registry/validate.sh; __dctl_require commands/config/_dispatch.sh; '"$*"
 }
 
 # --- Canonical name derivation ---

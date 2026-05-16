@@ -49,11 +49,10 @@ __dctl_dispatch() {
 
   shift
 
-  # Allow-list of real CLI command groups. Internal shims like `common`,
-  # `auth`, `lifecycle`, or `runtime/*` must not be reachable via the
-  # dispatcher even though their flat files are readable under
-  # ${DCTL_LIB_DIR}. Round 15b will replace this with `commands/<group>/`
-  # discovery once each group has its own `_dispatch.sh`.
+  # Allow-list of real CLI command groups. Internal helpers like `_lib/*`,
+  # `lifecycle.sh`, or `runtime/*` must not be reachable via the dispatcher.
+  # Post-15b, every public command group routes only through
+  # `commands/<group>/_dispatch.sh`.
   case "$group" in
     init | deploy | test | doctor | ws | image | config) ;;
     *)
@@ -62,20 +61,6 @@ __dctl_dispatch() {
       ;;
   esac
 
-  local cmd_dispatch="${DCTL_LIB_DIR}/commands/${group}/_dispatch.sh"
-  if [[ -r $cmd_dispatch ]]; then
-    __dctl_require "commands/${group}/_dispatch.sh"
-    "main_${group}" "$@"
-    return $?
-  fi
-
-  local flat="${DCTL_LIB_DIR}/${group}.sh"
-  if [[ -r $flat ]]; then
-    __dctl_require "${group}.sh"
-    "main_${group}" "$@"
-    return $?
-  fi
-
-  printf '\033[1;31mERROR:\033[0m Unknown command group: %s\n' "$group" >&2
-  exit 1
+  __dctl_require "commands/${group}/_dispatch.sh"
+  "main_${group}" "$@"
 }

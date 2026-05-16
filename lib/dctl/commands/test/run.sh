@@ -1,70 +1,20 @@
 # shellcheck shell=bash
-# Setup smoke-test command for dctl (sourced, not executed directly)
 
-[[ -n ${_DCTL_TEST_LOADED:-} ]] && return 0
-readonly _DCTL_TEST_LOADED=1
+[[ -n ${_DCTL_COMMANDS_TEST_RUN_LOADED:-} ]] && return 0
+readonly _DCTL_COMMANDS_TEST_RUN_LOADED=1
 
-: "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)}"
+: "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)}"
 
 # shellcheck source=/dev/null
-source "${DCTL_LIB_DIR}/common.sh"
-# shellcheck source=/dev/null
-source "${DCTL_LIB_DIR}/ws.sh"
-# shellcheck source=/dev/null
-source "${DCTL_LIB_DIR}/image.sh"
+source "${DCTL_LIB_DIR}/_lib/source.sh"
 
-usage_test() {
-  cat <<'EOF'
-Usage: dctl test [options]
-
-Validate the current workspace devcontainer setup with a smoke test.
-
-Options:
-  --help, -h    Show this help text
-
-Examples:
-  dctl test
-EOF
-}
-
-_check_names=()
-_check_results=()
-
-check_pass() {
-  _check_names+=("$1")
-  _check_results+=("PASS")
-  printf '\033[1;32mPASS:\033[0m %s\n' "$1"
-}
-
-check_fail() {
-  _check_names+=("$1")
-  _check_results+=("FAIL")
-  printf '\033[1;31mFAIL:\033[0m %s\n' "$1"
-}
-
-_print_summary() {
-  local passed=0 failed=0
-  local i
-
-  printf '\n\033[1m── Summary ──────────────────────────────\033[0m\n'
-  if [[ -n ${DCTL_CONFIG_STATUS:-} ]]; then
-    case "$DCTL_CONFIG_STATUS" in
-      cached) printf '  \033[1;36mℹ\033[0m Config: using cached devcontainer.json\n' ;;
-      generated) printf '  \033[1;36mℹ\033[0m Config: generated new devcontainer.json\n' ;;
-      existing) printf '  \033[1;36mℹ\033[0m Config: using existing registered config\n' ;;
-    esac
-  fi
-  for i in "${!_check_names[@]}"; do
-    if [[ ${_check_results[$i]} == "PASS" ]]; then
-      printf '  \033[1;32m✔\033[0m %s\n' "${_check_names[$i]}"
-      passed=$((passed + 1))
-    else
-      printf '  \033[1;31m✘\033[0m %s\n' "${_check_names[$i]}"
-      failed=$((failed + 1))
-    fi
-  done
-  printf '\033[1m── %d passed, %d failed ──────────────────\033[0m\n' "$passed" "$failed"
-}
+__dctl_require _lib/log.sh
+__dctl_require _lib/paths.sh
+__dctl_require _lib/json/strip_comments.sh
+__dctl_require commands/ws/_helpers.sh
+__dctl_require commands/image/_helpers.sh
+__dctl_require commands/image/build.sh
+__dctl_require commands/test/_summary.sh
 
 extract_workspace_image() {
   local config_path="${1:-$(workspace_devcontainer_file)}"
@@ -188,7 +138,7 @@ build_workspace_image_if_managed() {
   log "Skipping image build for external image: $image"
 }
 
-cmd_test() {
+cmd_test_run() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --help | -h)
@@ -283,9 +233,4 @@ cmd_test() {
   fi
 
   log "Smoke test passed"
-}
-
-main_test() {
-  warn "'dctl test' will be rewired to podman in Phase 2; use 'dctl doctor' to verify host setup."
-  cmd_test "$@"
 }

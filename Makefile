@@ -8,7 +8,7 @@ INSTALL := install
 IMAGE_NAMES := agents python-dev rust-dev zig-dev
 DEVCONTAINER_DIRS := agents python rust zig general coordinator base
 DEVCONTAINER_MANIFESTS := general coordinator python rust zig
-LIB_FILES := common.sh ws.sh image.sh deploy.sh init.sh test.sh auth.sh config.sh doctor.sh lifecycle.sh
+LIB_FILES := lifecycle.sh
 
 .PHONY: install uninstall install-systemd uninstall-systemd test test-unit test-integration lint check gate-no-eval gate-no-raw-ansi gate-one-public-fn-per-file
 
@@ -18,6 +18,18 @@ install:
 	$(INSTALL) -d "$(LIB_DIR)"
 	for lib in $(LIB_FILES); do \
 		$(INSTALL) -m 644 "lib/dctl/$$lib" "$(LIB_DIR)/$$lib"; \
+	done
+	$(INSTALL) -d "$(LIB_DIR)/_lib"
+	find lib/dctl/_lib -type f -name '*.sh' | while read -r file; do \
+		dest="$(LIB_DIR)/$${file#lib/dctl/}"; \
+		$(INSTALL) -d "$$(dirname "$$dest")"; \
+		$(INSTALL) -m 644 "$$file" "$$dest"; \
+	done
+	$(INSTALL) -d "$(LIB_DIR)/commands"
+	find lib/dctl/commands -type f -name '*.sh' | while read -r file; do \
+		dest="$(LIB_DIR)/$${file#lib/dctl/}"; \
+		$(INSTALL) -d "$$(dirname "$$dest")"; \
+		$(INSTALL) -m 644 "$$file" "$$dest"; \
 	done
 	$(INSTALL) -d "$(LIB_DIR)/runtime"
 	$(INSTALL) -m 644 "lib/dctl/runtime/common.sh" "$(LIB_DIR)/runtime/common.sh"
@@ -56,6 +68,8 @@ uninstall:
 	for lib in $(LIB_FILES); do \
 		rm -f "$(LIB_DIR)/$$lib"; \
 	done
+	rm -rf "$(LIB_DIR)/_lib"
+	rm -rf "$(LIB_DIR)/commands"
 	rm -f "$(LIB_DIR)/runtime/common.sh"
 	rm -f "$(LIB_DIR)/runtime/krun.sh"
 	rmdir "$(LIB_DIR)/runtime" 2>/dev/null || true

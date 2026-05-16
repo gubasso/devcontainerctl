@@ -35,7 +35,7 @@ The cross-round dependencies are encoded in each brief's `Depends on:` header. *
 | 00 | preflight-doctor | Done — <commit-sha-pending> — 2026-05-15 | — | Host preflight + `dctl doctor` + `docs/INSTALL.md`. |
 | 10 | runtime-adapter-and-lifecycle | Done — pending — 2026-05-15 | — | `lib/dctl/runtime/{common,krun}.sh` + `lib/dctl/lifecycle.sh`. |
 | 15a | helper-tree-and-autoload | Done — TBD — 2026-05-16 | — | Extract `lib/dctl/_lib/`; rewrite `bin/dctl`; new `lib/dctl/CLAUDE.md`. |
-| 15b | [command-tree-extraction](15b-command-tree-extraction.md) | Pending | — | Extract `commands/{ws,image,init,test,doctor,deploy,config}/`; add `tests/structure_test.bats`; re-anchor remaining briefs. |
+| 15b | command-tree-extraction | Done — <commit-sha-pending> — 2026-05-16 | — | Extract `commands/{ws,image,init,test,doctor,deploy,config}/`; add `tests/structure_test.bats`; re-anchor remaining briefs. |
 | 20 | [ws-and-image-adapter-rewire](20-ws-and-image-adapter-rewire.md) | Pending | — | Route `dctl ws` + `dctl image` through `rt_*`. |
 | 40 | [tier0-hygiene-and-egress](40-tier0-hygiene-and-egress.md) | Pending | — | Tier 0 hygiene + `commands/net/*` + in-VM nftables. |
 | 60 | [test-suite](60-test-suite.md) | Pending | — | Bats refactor + 3 new test files. |

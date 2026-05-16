@@ -1,95 +1,18 @@
 # shellcheck shell=bash
-# Image commands for dctl (sourced, not executed directly)
 
-[[ -n ${_DCTL_IMAGE_LOADED:-} ]] && return 0
-readonly _DCTL_IMAGE_LOADED=1
+[[ -n ${_DCTL_COMMANDS_IMAGE_BUILD_LOADED:-} ]] && return 0
+readonly _DCTL_COMMANDS_IMAGE_BUILD_LOADED=1
 
-: "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)}"
+: "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)}"
 
 # shellcheck source=/dev/null
-source "${DCTL_LIB_DIR}/common.sh"
-# shellcheck source=/dev/null
-source "${DCTL_LIB_DIR}/auth.sh"
+source "${DCTL_LIB_DIR}/_lib/source.sh"
 
-usage_image() {
-  cat <<'EOF'
-Usage: dctl image <command> [options]
-
-Commands:
-  build [OPTIONS] [IMAGE...]
-      Build devcontainer base images from $XDG_CONFIG_HOME/dctl/images.
-      If no image is specified, launches an interactive fzf picker over
-      the deployed managed images under ~/.config/dctl/images/.
-
-      Options:
-        --all              Build all discovered images
-        --full-rebuild     Rebuild all images from scratch
-        --refresh-agents   Cache-bust the agents CLI layer
-        --dry-run, -n      Show what would be built without building
-        --help, -h         Show build help
-
-  list
-      List available images and exit.
-
-  help
-      Show this help text.
-
-Examples:
-  dctl image build
-  dctl image build agents
-  dctl image build --all
-  dctl image build --full-rebuild
-  dctl image build --refresh-agents agents
-  dctl image build --dry-run
-  dctl image list
-EOF
-}
-
-discover_image_targets() {
-  local targets=()
-  shopt -s nullglob
-  local dir name
-  for dir in "$DCTL_IMAGES_DIR"/*/; do
-    if [[ -f "${dir}Dockerfile" ]]; then
-      name="$(basename "$dir")"
-      targets+=("$name")
-    fi
-  done
-  shopt -u nullglob
-
-  printf '%s\n' "${targets[@]}"
-}
-
-resolve_dockerfile() {
-  local target="$1"
-  local user_path
-  user_path="$(config_image_path "$target")"
-  if [[ -f $user_path ]]; then
-    printf '%s\n' "$user_path"
-    return 0
-  fi
-  return 1
-}
-
-get_image_tag() {
-  printf 'devimg/%s:latest\n' "$1"
-}
-
-ensure_image_dir_exists() {
-  if [[ ! -d $DCTL_IMAGES_DIR ]]; then
-    log "No user image config found"
-    log "Run: dctl deploy image <name> or dctl deploy --all-images"
-    return 1
-  fi
-}
-
-cmd_image_list() {
-  if ! ensure_image_dir_exists; then
-    return 0
-  fi
-
-  discover_image_targets
-}
+__dctl_require _lib/log.sh
+__dctl_require _lib/paths.sh
+__dctl_require _lib/fzf.sh
+__dctl_require _lib/auth/gh_token.sh
+__dctl_require commands/image/_helpers.sh
 
 cmd_image_build() {
   local all=false
@@ -201,7 +124,7 @@ cmd_image_build() {
   local gh_token_file=""
   if [[ $dry_run != true ]]; then
     local gh_token
-    if gh_token=$(_extract_gh_token 2>/dev/null) && [[ -n $gh_token ]]; then
+    if gh_token="$(_extract_gh_token 2>/dev/null)" && [[ -n $gh_token ]]; then
       gh_token_file=$(mktemp)
       printf '%s' "$gh_token" >"$gh_token_file"
       secret_flag=(--secret "id=gh_token,src=${gh_token_file}")
@@ -277,25 +200,4 @@ cmd_image_build() {
 
   log "Build complete"
   docker images | grep -E '^devimg/' || true
-}
-
-main_image() {
-  local command="${1:-help}"
-
-  case "$command" in
-    build)
-      shift
-      cmd_image_build "$@"
-      ;;
-    list)
-      shift
-      cmd_image_list "$@"
-      ;;
-    help | -h | --help)
-      usage_image
-      ;;
-    *)
-      err "Unknown image command: $command"
-      ;;
-  esac
 }

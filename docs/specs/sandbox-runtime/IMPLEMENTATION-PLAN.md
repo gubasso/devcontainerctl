@@ -48,9 +48,9 @@ lib/dctl/
   ├── commands/                       (one verb per file — autoloaded on demand)
   │     ├── ws/                       (_dispatch, up, reup, exec, shell, run, status, down)
   │     ├── image/                    (_dispatch, build, list, _helpers)
-  │     ├── init/                     (_dispatch, do, select_interactive, generate_cache)
+  │     ├── init/                     (_dispatch, do, _select_interactive, _generate_cache)
   │     ├── deploy/                   (_dispatch, all, list, plan, apply, reset, _discover)
-  │     ├── config/                   (_dispatch, register, unregister, list, show)
+  │     ├── config/                   (_dispatch only post-15b; register_project_defaults lives in _lib/registry/. Subverbs may land in a later round.)
   │     ├── test/                     (_dispatch, run, _summary)
   │     ├── doctor/                   (_dispatch, crun_libkrun, kvm, libkrun, subid, cgroups, podman_info, network_backend, userns, nested_virt — Phase 0)
   │     └── net/                      (_dispatch, allow, show, _default_allowlist, _user_allowlist, _compose — Phase 5)
@@ -80,8 +80,8 @@ Each `/prex` round consumes one brief from [`plans/`](plans/). Status is tracked
 - [x] **[00 — preflight-doctor](plans/00-preflight-doctor.md)** — Host preflight (`+LIBKRUN` build flag, `/dev/kvm`, kvm group, subuid/subgid, cgroups v2, network backend, nested-virt warn) + new `dctl doctor` sibling subcommand + new `docs/INSTALL.md`. Companion edits: `docs/QUICKSTART.md` Prerequisites block, `docs/CLAUDE.md` Quick Orientation block, `dctl test` deprecation banner.
 - [x] **10 — runtime-adapter-and-lifecycle** — `lib/dctl/runtime/{common,krun}.sh` (the only backend) + `lib/dctl/lifecycle.sh` (the self-owned devcontainer.json interpreter) + close the `init.sh:84` merge-logic gap so `runArgs`/`workspaceMount`/`workspaceFolder` are first-class. Smoke verifies `init.krun` kernel separation.
 - [x] **15a — helper-tree-and-autoload** — Phase 1.5 part A: extract `lib/dctl/_lib/` (one function per file), rewrite `bin/dctl` around `__dctl_dispatch`, ship `lib/dctl/CLAUDE.md`.
-- [ ] **[15b — command-tree-extraction](plans/15b-command-tree-extraction.md)** — Phase 1.5 part B: extract `commands/{ws,image,init,test,doctor,deploy,config}/` (one verb per file), add `tests/structure_test.bats` enforcing the layout invariants, re-anchor pre-reorg line numbers in subsequent briefs. `deploy.sh` (594 LOC) is the heaviest single module.
-- [ ] **[20 — ws-and-image-adapter-rewire](plans/20-ws-and-image-adapter-rewire.md)** — Phases 2 + 3 combined: route every `dctl ws` and `dctl image` shell-out through `rt_*`. `commands/init/generate_cache.sh` emits the `--runtime krun` overlay + default krun resource annotations.
+- [x] **15b — command-tree-extraction** — Phase 1.5 part B: extract `commands/{ws,image,init,test,doctor,deploy,config}/` (one verb per file), add `tests/structure_test.bats` enforcing the layout invariants, re-anchor pre-reorg line numbers in subsequent briefs. `deploy.sh` (594 LOC) is the heaviest single module.
+- [ ] **[20 — ws-and-image-adapter-rewire](plans/20-ws-and-image-adapter-rewire.md)** — Phases 2 + 3 combined: route every `dctl ws` and `dctl image` shell-out through `rt_*`. `commands/init/_generate_cache.sh` emits the `--runtime krun` overlay + default krun resource annotations.
 - [ ] **[40 — tier0-hygiene-and-egress](plans/40-tier0-hygiene-and-egress.md)** — Phases 4 + 5 combined: drop /tmp host bind, `--cap-drop=ALL`, `--security-opt=no-new-privileges`, ephemeral token forwarding (`_lib/auth/ephemeral_creds.sh`), new `docs/SECURITY.md`, default-deny egress allowlist via new `commands/net/*` + in-VM nftables (Option A).
 - [ ] **[60 — test-suite](plans/60-test-suite.md)** — Phase 6: refactor `tests/dctl_test.bats` (1,749 LOC) to call into the adapter via mocks; add `tests/{runtime_krun,auth_token_forwarding,net_allowlist}_test.bats`; add a KVM-required `integration` smoke target.
 - [ ] **[70 — renames-and-docs-sweep](plans/70-renames-and-docs-sweep.md)** — Phase 7: schema extensions (`runtime`, `runtime.resources`, `network.allow`), `git mv` Dockerfile → Containerfile (4 image files), top-level + sub-docs + legacy `spec/` sweep, final `Docker(file)?` grep gate (CI-enforced).

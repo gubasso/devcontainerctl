@@ -12,21 +12,55 @@ source_dctl_functions() {
   readonly DCTL_LIB_DIR="${repo_root}/lib/dctl"
   set -euo pipefail
   # shellcheck source=/dev/null
-  source "${DCTL_LIB_DIR}/common.sh"
-  # shellcheck source=/dev/null
-  source "${DCTL_LIB_DIR}/auth.sh"
-  # shellcheck source=/dev/null
-  source "${DCTL_LIB_DIR}/ws.sh"
-  # shellcheck source=/dev/null
-  source "${DCTL_LIB_DIR}/image.sh"
-  # shellcheck source=/dev/null
-  source "${DCTL_LIB_DIR}/deploy.sh"
-  # shellcheck source=/dev/null
-  source "${DCTL_LIB_DIR}/init.sh"
-  # shellcheck source=/dev/null
-  source "${DCTL_LIB_DIR}/test.sh"
-  # shellcheck source=/dev/null
-  source "${DCTL_LIB_DIR}/config.sh"
+  source "${DCTL_LIB_DIR}/_lib/source.sh"
+  __dctl_require _lib/log.sh
+  __dctl_require _lib/paths.sh
+  __dctl_require _lib/auth/gh_token.sh
+  __dctl_require _lib/auth/glab_token.sh
+  __dctl_require _lib/auth/collect_env.sh
+  __dctl_require _lib/workspace/git_worktree.sh
+  __dctl_require _lib/workspace/resolve_config.sh
+  __dctl_require _lib/workspace/canonical_name.sh
+  __dctl_require _lib/workspace/sibling.sh
+  __dctl_require _lib/workspace/label_filter.sh
+  __dctl_require _lib/term/collect_env.sh
+  __dctl_require _lib/fzf.sh
+  __dctl_require _lib/json/strip_comments.sh
+  __dctl_require _lib/json/validate_layer.sh
+  __dctl_require _lib/json/merge_runargs.sh
+  __dctl_require _lib/json/merge_configs.sh
+  __dctl_require _lib/registry/file.sh
+  __dctl_require _lib/registry/exists.sh
+  __dctl_require _lib/registry/validate_manifest.sh
+  __dctl_require _lib/registry/validate.sh
+  __dctl_require _lib/registry/read_manifest_layers.sh
+  __dctl_require _lib/registry/read_field.sh
+  __dctl_require _lib/registry/lookup_manifest.sh
+  __dctl_require _lib/registry/lookup_discovery.sh
+  __dctl_require _lib/registry/ensure_file.sh
+  __dctl_require _lib/registry/has_project.sh
+  __dctl_require _lib/registry/register_project_defaults.sh
+  __dctl_require commands/ws/_helpers.sh
+  __dctl_require commands/ws/_dispatch.sh
+  __dctl_require commands/ws/up.sh
+  __dctl_require commands/ws/reup.sh
+  __dctl_require commands/ws/exec.sh
+  __dctl_require commands/ws/shell.sh
+  __dctl_require commands/ws/run.sh
+  __dctl_require commands/ws/status.sh
+  __dctl_require commands/ws/down.sh
+  __dctl_require commands/image/_helpers.sh
+  __dctl_require commands/image/_dispatch.sh
+  __dctl_require commands/image/build.sh
+  __dctl_require commands/image/list.sh
+  __dctl_require commands/deploy/_dispatch.sh
+  __dctl_require commands/init/_dispatch.sh
+  __dctl_require commands/init/do.sh
+  __dctl_require commands/init/_select_interactive.sh
+  __dctl_require commands/init/_generate_cache.sh
+  __dctl_require commands/test/_dispatch.sh
+  __dctl_require commands/test/run.sh
+  __dctl_require commands/config/_dispatch.sh
 }
 
 create_template_fixture() {
@@ -439,7 +473,7 @@ YAML
   enable_mocks
   create_mock fzf 0 "python-dev"
 
-  run script -qec "env PATH='${PATH}' XDG_DATA_HOME='${XDG_DATA_HOME}' XDG_CONFIG_HOME='${XDG_CONFIG_HOME}' XDG_CACHE_HOME='${XDG_CACHE_HOME}' WORKSPACE_FOLDER='${WORKSPACE_FOLDER}' DCTL_LIB_DIR='${DCTL_LIB_DIR}' bash -lc 'set -euo pipefail; source \"${DCTL_LIB_DIR}/common.sh\"; source \"${DCTL_LIB_DIR}/auth.sh\"; source \"${DCTL_LIB_DIR}/image.sh\"; cmd_image_build --dry-run'" /dev/null
+  run script -qec "env PATH='${PATH}' XDG_DATA_HOME='${XDG_DATA_HOME}' XDG_CONFIG_HOME='${XDG_CONFIG_HOME}' XDG_CACHE_HOME='${XDG_CACHE_HOME}' WORKSPACE_FOLDER='${WORKSPACE_FOLDER}' DCTL_LIB_DIR='${DCTL_LIB_DIR}' bash -lc 'set -euo pipefail; source \"${DCTL_LIB_DIR}/_lib/source.sh\"; __dctl_require _lib/log.sh; __dctl_require _lib/paths.sh; __dctl_require _lib/fzf.sh; __dctl_require _lib/auth/gh_token.sh; __dctl_require _lib/auth/collect_env.sh; __dctl_require commands/image/build.sh; cmd_image_build --dry-run'" /dev/null
   [ "$status" -eq 0 ]
   [[ $output == *"[dry-run] Would build: devimg/python-dev:latest"* ]]
 }
@@ -495,8 +529,8 @@ YAML
     LIB_DIR="$lib_dir"
   [ "$status" -eq 0 ]
 
-  [ -f "${lib_dir}/common.sh" ]
-  [ -f "${lib_dir}/deploy.sh" ]
+  [ -d "${lib_dir}/commands" ]
+  [ -f "${lib_dir}/commands/deploy/_dispatch.sh" ]
   [ -f "${data_home}/dctl/images/agents/Dockerfile" ]
   [ -f "${data_home}/dctl/images/zig-dev/zig-zls-init" ]
   [ -x "${data_home}/dctl/images/zig-dev/zig-zls-init" ]
@@ -507,14 +541,14 @@ YAML
 }
 
 @test "cmd_init errors when no devcontainers are deployed" {
-  run cmd_init
+  run cmd_init_do
   [ "$status" -ne 0 ]
   [[ $output == *"No devcontainers deployed"* ]]
   [[ $output == *"dctl deploy"* ]]
 }
 
 @test "cmd_init --help only documents slim flags" {
-  run cmd_init --help
+  run cmd_init_do --help
   [ "$status" -eq 0 ]
   [[ $output == *"--devcontainer"* ]]
   [[ $output == *"--force"* ]]
@@ -528,13 +562,13 @@ YAML
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
 
-  run cmd_init --devcontainer missing
+  run cmd_init_do --devcontainer missing
   [ "$status" -ne 0 ]
   [[ $output == *"Unknown deployed devcontainer: missing"* ]]
 }
 
 @test "cmd_test fails with init guidance when config is missing" {
-  run cmd_test
+  run cmd_test_run
   [ "$status" -ne 0 ]
   [[ $output == *"Run 'dctl init' or pass --config"* ]]
 }
@@ -546,7 +580,7 @@ YAML
   create_mock docker 0 "container123"
   local sanitized
   sanitized="$(sanitized_bin_excluding devcontainer)"
-  PATH="${TEST_TMPDIR}/bin:${sanitized}" run cmd_test
+  PATH="${TEST_TMPDIR}/bin:${sanitized}" run cmd_test_run
   [ "$status" -ne 0 ]
   [[ $output == *"Missing required command: devcontainer"* ]]
 }
@@ -559,7 +593,7 @@ YAML
   create_mock docker 0 "container123"
   create_mock devcontainer 0 ""
 
-  run cmd_test
+  run cmd_test_run
   [ "$status" -eq 0 ]
   assert_mock_called "docker buildx build"
   assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config"
@@ -574,7 +608,7 @@ YAML
   create_mock docker 0 "container123"
   create_mock devcontainer 0 ""
 
-  run cmd_test
+  run cmd_test_run
   [ "$status" -eq 0 ]
   assert_mock_not_called "docker buildx build"
   assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config"
@@ -803,7 +837,7 @@ MOCK
 
   run env WORKSPACE_FOLDER="$work_clone" XDG_DATA_HOME="$XDG_DATA_HOME" \
     XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
-    bash -c 'source "'"$DCTL_LIB_DIR"'/common.sh"; source "'"$DCTL_LIB_DIR"'/config.sh"; resolve_devcontainer_config'
+    bash -c 'DCTL_LIB_DIR="'"$DCTL_LIB_DIR"'"; source "'"$DCTL_LIB_DIR"'/_lib/source.sh"; __dctl_require _lib/log.sh; __dctl_require _lib/paths.sh; __dctl_require _lib/workspace/resolve_config.sh; __dctl_require _lib/workspace/canonical_name.sh; __dctl_require _lib/workspace/sibling.sh; __dctl_require _lib/registry/lookup_manifest.sh; __dctl_require _lib/registry/lookup_discovery.sh; resolve_devcontainer_config'
   [ "$status" -eq 0 ]
   [[ $output == *"repo/.devcontainer/devcontainer.json" ]]
 }
@@ -819,7 +853,7 @@ MOCK
 
   run env WORKSPACE_FOLDER="$work_clone" XDG_DATA_HOME="$XDG_DATA_HOME" \
     XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
-    bash -c 'source "'"$DCTL_LIB_DIR"'/common.sh"; source "'"$DCTL_LIB_DIR"'/config.sh"; resolve_devcontainer_config'
+    bash -c 'DCTL_LIB_DIR="'"$DCTL_LIB_DIR"'"; source "'"$DCTL_LIB_DIR"'/_lib/source.sh"; __dctl_require _lib/log.sh; __dctl_require _lib/paths.sh; __dctl_require _lib/workspace/resolve_config.sh; __dctl_require _lib/workspace/canonical_name.sh; __dctl_require _lib/workspace/sibling.sh; __dctl_require _lib/registry/lookup_manifest.sh; __dctl_require _lib/registry/lookup_discovery.sh; resolve_devcontainer_config'
   [ "$status" -ne 0 ]
   [[ $output == *"No devcontainer config found"* ]]
 }
@@ -1443,9 +1477,9 @@ JSON
   enable_mocks
   create_mock docker 0 ""
   # shellcheck disable=SC2329
-  cmd_test() { :; }
+  cmd_test_run() { :; }
 
-  run cmd_init --devcontainer python
+  run cmd_init_do --devcontainer python
   [ "$status" -eq 0 ]
   [ "$(jq -r '.image' "${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json")" = "devimg/python-dev:latest" ]
 }
@@ -1454,7 +1488,7 @@ JSON
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
 
-  run cmd_init --devcontainer python
+  run cmd_init_do --devcontainer python
   [ "$status" -ne 0 ]
   [[ $output == *"Image 'python-dev' is not deployed"* ]]
 }
@@ -1468,9 +1502,9 @@ JSON
   # shellcheck disable=SC2329
   cmd_image_build() { echo "CMD_IMAGE_BUILD_CALLED $*" >>"${TEST_TMPDIR}/mock_calls.log"; }
   # shellcheck disable=SC2329
-  cmd_test() { :; }
+  cmd_test_run() { :; }
 
-  run cmd_init --devcontainer python
+  run cmd_init_do --devcontainer python
   [ "$status" -eq 0 ]
   assert_mock_called "docker image inspect devimg/python-dev:latest"
   assert_mock_called "CMD_IMAGE_BUILD_CALLED python-dev"
@@ -1485,9 +1519,9 @@ JSON
   # shellcheck disable=SC2329
   cmd_image_build() { echo "CMD_IMAGE_BUILD_CALLED $*" >>"${TEST_TMPDIR}/mock_calls.log"; }
   # shellcheck disable=SC2329
-  cmd_test() { :; }
+  cmd_test_run() { :; }
 
-  run cmd_init --devcontainer python
+  run cmd_init_do --devcontainer python
   [ "$status" -eq 0 ]
   assert_mock_called "docker image inspect devimg/python-dev:latest"
   assert_mock_not_called "CMD_IMAGE_BUILD_CALLED python-dev"
@@ -1500,9 +1534,9 @@ JSON
   enable_mocks
   create_mock docker 0 ""
   # shellcheck disable=SC2329
-  cmd_test() { :; }
+  cmd_test_run() { :; }
 
-  run cmd_init --devcontainer python
+  run cmd_init_do --devcontainer python
   [ "$status" -eq 0 ]
 
   local deployed="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
@@ -1539,9 +1573,9 @@ other-project:
   sibling_discovery: false
 YAML
   # shellcheck disable=SC2329
-  cmd_test() { :; }
+  cmd_test_run() { :; }
 
-  run cmd_init --force --devcontainer python
+  run cmd_init_do --force --devcontainer python
   [ "$status" -eq 0 ]
   [ "$(yq -r ".\"${canonical}\"[\"devcontainer-manifest\"]" "$registry")" = "python" ]
   [ "$(yq -r ".\"${canonical}\" | has(\"devcontainer\")" "$registry")" = "false" ]
@@ -1571,9 +1605,9 @@ ${canonical}:
   sibling_discovery: false
 YAML
   # shellcheck disable=SC2329
-  cmd_test() { :; }
+  cmd_test_run() { :; }
 
-  run cmd_init --force --devcontainer python
+  run cmd_init_do --force --devcontainer python
   [ "$status" -eq 0 ]
   [ "$(yq -r ".\"${canonical}\"[\"devcontainer-manifest\"]" "$registry")" = "python" ]
   [ "$(yq -r ".\"${canonical}\" | has(\"devcontainer\")" "$registry")" = "false" ]
@@ -1595,9 +1629,9 @@ ${canonical}:
   sibling_discovery: false
 YAML
   # shellcheck disable=SC2329
-  cmd_test() { :; }
+  cmd_test_run() { :; }
 
-  run cmd_init --force --devcontainer python
+  run cmd_init_do --force --devcontainer python
   [ "$status" -eq 0 ]
   [ "$(yq -r ".\"${canonical}\"[\"devcontainer-manifest\"]" "$registry")" = "python" ]
   [ "$(yq -r ".\"${canonical}\".dockerfile // \"\"" "$registry")" = "" ]
@@ -1614,16 +1648,16 @@ YAML
   enable_mocks
   create_mock docker 0 ""
   # shellcheck disable=SC2329
-  cmd_test() { :; }
+  cmd_test_run() { :; }
 
-  run cmd_init --devcontainer python
+  run cmd_init_do --devcontainer python
   [ "$status" -eq 0 ]
 
   local canonical
   canonical="$(resolve_canonical_project_name)"
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
 
-  run cmd_init --devcontainer rust
+  run cmd_init_do --devcontainer rust
   [ "$status" -eq 0 ]
   [[ $output == *"Switching project"* ]]
   [ "$(yq -r ".\"${canonical}\"[\"devcontainer-manifest\"]" "$registry")" = "rust" ]
@@ -1636,9 +1670,9 @@ YAML
   enable_mocks
   create_mock docker 0 ""
   # shellcheck disable=SC2329
-  cmd_test() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+  cmd_test_run() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
 
-  run cmd_init --devcontainer python
+  run cmd_init_do --devcontainer python
   [ "$status" -eq 0 ]
   assert_mock_called "CMD_TEST_CALLED"
   [[ $output == *"=== dctl init summary ==="* ]]
@@ -1652,9 +1686,9 @@ YAML
   enable_mocks
   create_mock docker 0 ""
   # shellcheck disable=SC2329
-  cmd_test() { return 1; }
+  cmd_test_run() { return 1; }
 
-  run cmd_init --devcontainer python
+  run cmd_init_do --devcontainer python
   [ "$status" -ne 0 ]
   [[ $output == *"Smoke test: failed"* ]]
 }
@@ -1665,9 +1699,9 @@ YAML
   # shellcheck disable=SC2329
   cmd_image_build() { echo "CMD_IMAGE_BUILD_CALLED $*" >>"${TEST_TMPDIR}/mock_calls.log"; }
   # shellcheck disable=SC2329
-  cmd_test() { :; }
+  cmd_test_run() { :; }
 
-  run cmd_init --devcontainer python
+  run cmd_init_do --devcontainer python
   [ "$status" -eq 0 ]
   [[ $output == *"Image status: external"* ]]
   assert_mock_not_called "CMD_IMAGE_BUILD_CALLED"
@@ -1812,7 +1846,7 @@ EOF
   create_mock docker 0 "container123"
   create_mock devcontainer 0 ""
 
-  run cmd_test
+  run cmd_test_run
   [ "$status" -ne 0 ]
   [[ $output == *"Missing bind mount source(s) on host"* ]]
   [[ $output == *"$missing"* ]]
