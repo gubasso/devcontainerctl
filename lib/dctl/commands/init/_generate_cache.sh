@@ -18,6 +18,8 @@ __dctl_require _lib/registry/validate_manifest.sh
 __dctl_require _lib/registry/read_manifest_layers.sh
 __dctl_require commands/image/build.sh
 __dctl_require commands/image/_helpers.sh
+__dctl_require runtime/common.sh
+__dctl_require runtime/krun.sh
 
 discover_config_layers() {
   local config_name="$1"
@@ -118,6 +120,18 @@ generate_cached_devcontainer() {
   done
 
   mv "$tmp_acc" "$tmp_path"
+  # TODO(70): honor manifest runtime.resources block when schema support lands.
+  if ! jq '
+    .runArgs = (
+      (.runArgs // []) as $args
+      | if ($args | index("--runtime")) then $args
+        else $args + ["--runtime", "krun"] end
+    )
+  ' "$tmp_path" >"${tmp_path}.overlay"; then
+    rm -f "$tmp_path" "${tmp_path}.overlay"
+    err "Failed to append runtime overlay for '$template'"
+  fi
+  mv "${tmp_path}.overlay" "$tmp_path"
   mv "$tmp_path" "$cached_path"
   printf '%s\n' "$cached_path"
   printf 'generated\n'
@@ -157,8 +171,7 @@ ensure_image_available_for_devcontainer() {
     err "Image '$image_name' is not deployed. Run: dctl deploy image $image_name"
   fi
 
-  require_cmd docker
-  if docker image inspect "$image_ref" >/dev/null 2>&1; then
+  if rt_image_inspect "$image_ref"; then
     DCTL_INIT_IMAGE_STATUS="already-built"
     return 0
   fi

@@ -11,8 +11,9 @@ source "${DCTL_LIB_DIR}/_lib/source.sh"
 __dctl_require _lib/log.sh
 __dctl_require _lib/paths.sh
 __dctl_require _lib/fzf.sh
-__dctl_require _lib/auth/gh_token.sh
 __dctl_require commands/image/_helpers.sh
+__dctl_require runtime/common.sh
+__dctl_require runtime/krun.sh
 
 cmd_image_build() {
   local all=false
@@ -67,16 +68,6 @@ cmd_image_build() {
     err "Do not run as root (would bake UID 0 into images)"
   fi
 
-  if [[ $dry_run != true ]]; then
-    require_cmd docker
-    if ! docker info >/dev/null 2>&1; then
-      err "Docker daemon not running or not accessible"
-    fi
-    if ! docker buildx version >/dev/null 2>&1; then
-      err "docker buildx not found (required for BuildKit builds)"
-    fi
-  fi
-
   if [[ $all == true ]]; then
     mapfile -t targets < <(discover_image_targets)
     if [[ ${#targets[@]} -eq 0 ]]; then
@@ -118,20 +109,6 @@ cmd_image_build() {
   username="${USER:-$(id -un)}"
   local -a build_args
   build_args=(--build-arg "USERNAME=${username}" --build-arg "USER_UID=$(id -u)" --build-arg "USER_GID=$(id -g)")
-
-  # GitHub token for mise installs (avoids 60 req/hr anonymous rate limit)
-  local -a secret_flag=()
-  local gh_token_file=""
-  if [[ $dry_run != true ]]; then
-    local gh_token
-    if gh_token="$(_extract_gh_token 2>/dev/null)" && [[ -n $gh_token ]]; then
-      gh_token_file=$(mktemp)
-      printf '%s' "$gh_token" >"$gh_token_file"
-      secret_flag=(--secret "id=gh_token,src=${gh_token_file}")
-    else
-      warn "No GitHub token found — builds may hit API rate limits (see: gh auth login)"
-    fi
-  fi
 
   local -a failed
   failed=()
@@ -175,20 +152,15 @@ cmd_image_build() {
       no_cache_flag=(--no-cache)
     fi
 
-    if ! docker buildx build --load \
+    if ! rt_build "$target" "$build_context" \
       "${pull_flag[@]}" \
       "${no_cache_flag[@]}" \
       "${refresh_flag[@]}" \
-      "${build_args[@]}" \
-      "${secret_flag[@]}" \
-      -t "$tag" \
-      "${build_context}/"; then
+      "${build_args[@]}"; then
       warn "Failed to build: $target"
       failed+=("$target")
     fi
   done
-
-  [[ -n $gh_token_file ]] && rm -f "$gh_token_file"
 
   if [[ $dry_run == true ]]; then
     log "Dry-run complete"
@@ -199,5 +171,5 @@ cmd_image_build() {
   fi
 
   log "Build complete"
-  docker images | grep -E '^devimg/' || true
+  podman images --filter "reference=devimg/*" || true
 }

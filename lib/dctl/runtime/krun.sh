@@ -13,6 +13,7 @@ __dctl_require _lib/log.sh
 __dctl_require _lib/paths.sh
 __dctl_require _lib/auth/gh_token.sh
 __dctl_require _lib/auth/glab_token.sh
+__dctl_require _lib/workspace/label_filter.sh
 __dctl_require commands/doctor/_helpers.sh
 __dctl_require commands/doctor/kvm.sh
 # shellcheck source=/dev/null
@@ -54,10 +55,8 @@ _krun_resolve_config() {
 
 _krun_workspace_label_filter() {
   local workspace_folder="$1"
-  local workspace_abs
-
-  workspace_abs="$(cd -- "$workspace_folder" && pwd -P)"
-  printf 'label=devcontainer.local_folder=%s' "$workspace_abs"
+  [[ -n $workspace_folder ]] || err "_krun_workspace_label_filter requires a workspace folder"
+  printf 'label=devcontainer.local_folder=%s' "$(cd -- "$workspace_folder" && pwd -P)"
 }
 
 _krun_default_annotations() {
@@ -373,21 +372,52 @@ _krun_rt_exec() {
 }
 
 _krun_rt_ps() {
+  # ps/rm only need `podman` (no KVM); gate so callers get the standard diagnostic.
+  require_cmd podman
+
   local quiet=false
+  local running=false
+  local format_template=""
   local workspace_folder
   local -a cmd
 
-  if [[ ${1:-} == "--quiet" ]]; then
-    quiet=true
-    shift
-  fi
+  while [[ $# -gt 0 ]]; do
+    case "${1:-}" in
+      --quiet)
+        quiet=true
+        shift
+        ;;
+      --format)
+        [[ $# -ge 2 ]] || err "rt_ps --format requires a template"
+        format_template="$2"
+        shift 2
+        ;;
+      --running)
+        running=true
+        shift
+        ;;
+      --)
+        shift
+        break
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
 
   workspace_folder="${1:-}"
   [[ -n $workspace_folder ]] || err "rt_ps requires a workspace folder"
+  [[ $quiet == false || -z $format_template ]] || err "rt_ps --quiet and --format are mutually exclusive"
 
-  cmd=(podman ps -a --filter "$(_krun_workspace_label_filter "$workspace_folder")")
+  cmd=(podman ps --filter "$(_krun_workspace_label_filter "$workspace_folder")")
+  if [[ $running != true ]]; then
+    cmd+=(-a)
+  fi
   if [[ $quiet == true ]]; then
     cmd+=(-q)
+  elif [[ -n $format_template ]]; then
+    cmd+=(--format "$format_template")
   else
     cmd+=(--format '{{.ID}}')
   fi
@@ -409,6 +439,9 @@ _krun_rt_build() {
   local image_name="$1"
   local context_dir="$2"
   shift 2
+
+  # build does not need KVM/libkrun (no microvm); full preflight stays on rt_run/rt_exec.
+  require_cmd podman
 
   # Optional leading `--dockerfile <path>` lets internal callers pass a
   # pre-resolved Dockerfile without colliding with the public
@@ -462,5 +495,6 @@ _krun_rt_build() {
 }
 
 _krun_rt_image_inspect() {
+  require_cmd podman
   podman image inspect "$1" >/dev/null 2>&1
 }

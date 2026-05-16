@@ -15,6 +15,8 @@ __dctl_require commands/ws/_helpers.sh
 __dctl_require commands/image/_helpers.sh
 __dctl_require commands/image/build.sh
 __dctl_require commands/test/_summary.sh
+__dctl_require runtime/common.sh
+__dctl_require runtime/krun.sh
 
 extract_workspace_image() {
   local config_path="${1:-$(workspace_devcontainer_file)}"
@@ -29,7 +31,7 @@ extract_workspace_image() {
 }
 
 cleanup_test_workspace_containers() {
-  list_ws_containers | xargs -r docker rm -f
+  rt_rm "$WORKSPACE_FOLDER"
 }
 
 _resolve_local_env() {
@@ -102,7 +104,7 @@ check_bind_mount_sources() {
     printf '    - (unresolved) %s\n' "$path" >&2
   done
   if [[ ${#missing_paths[@]} -gt 0 ]]; then
-    printf '  Create the missing path(s) on the host before running devcontainer up, e.g.:\n' >&2
+    printf '  Create the missing path(s) on the host before starting the workspace container, e.g.:\n' >&2
     printf '    mkdir -p' >&2
     for path in "${missing_paths[@]}"; do
       printf ' %q' "$path"
@@ -110,7 +112,7 @@ check_bind_mount_sources() {
     printf '\n' >&2
   fi
   if [[ ${#unresolved[@]} -gt 0 ]]; then
-    printf '  Set the referenced localEnv variable(s) on the host before running devcontainer up.\n' >&2
+    printf '  Set the referenced localEnv variable(s) on the host before starting the workspace container.\n' >&2
   fi
   return 1
 }
@@ -159,71 +161,45 @@ cmd_test_run() {
   _check_names=()
   _check_results=()
   local failures=0
-  local docker_ready=false
-  local devcontainer_ready=false
   local container_started=false
 
-  if command -v docker >/dev/null 2>&1; then
-    check_pass "docker command found"
-    if docker info >/dev/null 2>&1; then
-      check_pass "Docker daemon is accessible"
-      docker_ready=true
-    else
-      check_fail "Docker daemon not running or not accessible"
-      failures=$((failures + 1))
-    fi
+  if build_workspace_image_if_managed "$config_path"; then
+    check_pass "Workspace image is ready"
   else
-    check_fail "Missing required command: docker"
+    check_fail "Failed to build managed workspace image"
     failures=$((failures + 1))
   fi
 
-  if command -v devcontainer >/dev/null 2>&1; then
-    check_pass "devcontainer command found"
-    devcontainer_ready=true
-  else
-    check_fail "Missing required command: devcontainer"
+  local bind_sources_ok=true
+  if ! check_bind_mount_sources "$config_path"; then
     failures=$((failures + 1))
+    bind_sources_ok=false
   fi
 
-  if [[ $docker_ready == true && $devcontainer_ready == true ]]; then
-    if build_workspace_image_if_managed "$config_path"; then
-      check_pass "Workspace image is ready"
+  if [[ $bind_sources_ok == true ]]; then
+    if rt_run "$WORKSPACE_FOLDER" "$config_path" >/dev/null; then
+      check_pass "workspace container start succeeded"
+      container_started=true
     else
-      check_fail "Failed to build managed workspace image"
+      check_fail "workspace container start failed"
       failures=$((failures + 1))
     fi
+  fi
 
-    local bind_sources_ok=true
-    if ! check_bind_mount_sources "$config_path"; then
-      failures=$((failures + 1))
-      bind_sources_ok=false
-    fi
-
-    if [[ $bind_sources_ok == true ]]; then
-      if devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path"; then
-        check_pass "devcontainer up succeeded"
-        container_started=true
-      else
-        check_fail "devcontainer up failed"
-        failures=$((failures + 1))
-      fi
-    fi
-
-    if [[ $container_started == true ]]; then
-      if devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" printf 'dctl-smoke\n' >/dev/null; then
-        check_pass "devcontainer exec succeeded"
-      else
-        check_fail "devcontainer exec failed"
-        failures=$((failures + 1))
-      fi
-    fi
-
-    if cleanup_test_workspace_containers; then
-      check_pass "Workspace containers cleaned up"
+  if [[ $container_started == true ]]; then
+    if rt_exec "$WORKSPACE_FOLDER" "$config_path" -- printf 'dctl-smoke\n' >/dev/null; then
+      check_pass "workspace exec succeeded"
     else
-      check_fail "Failed to clean up workspace containers"
+      check_fail "workspace exec failed"
       failures=$((failures + 1))
     fi
+  fi
+
+  if cleanup_test_workspace_containers; then
+    check_pass "Workspace containers cleaned up"
+  else
+    check_fail "Failed to clean up workspace containers"
+    failures=$((failures + 1))
   fi
 
   _print_summary

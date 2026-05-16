@@ -158,6 +158,8 @@ setup() {
   create_image_fixture rust-dev
   create_image_fixture zig-dev
   # shellcheck disable=SC2329
+  _dctl_krun_preflight() { :; }
+  # shellcheck disable=SC2329
   workspace_path() { printf '%s\n' "$WORKSPACE_FOLDER"; }
   # shellcheck disable=SC2329
   workspace_devcontainer_dir() { printf '%s/.devcontainer\n' "$WORKSPACE_FOLDER"; }
@@ -178,37 +180,37 @@ teardown() {
   teardown_test_fixtures
 }
 
-@test "workspace_label_filter formats docker filter correctly" {
+@test "workspace_label_filter formats podman filter correctly" {
   run workspace_label_filter
   [ "$status" -eq 0 ]
   [ "$output" = "label=devcontainer.local_folder=${WORKSPACE_FOLDER}" ]
 }
 
-@test "list_ws_containers uses docker ps -a" {
+@test "list_ws_containers uses podman ps -a" {
   enable_mocks
-  create_mock docker 0 "abc123"
+  create_mock podman 0 "abc123"
 
   run list_ws_containers
   [ "$status" -eq 0 ]
   [ "$output" = "abc123" ]
-  assert_mock_called "docker ps -a"
+  assert_mock_called "podman ps --filter"
+  assert_mock_called " -a -q"
 }
 
-@test "list_running_ws_containers uses docker ps without -a" {
+@test "list_running_ws_containers uses podman ps without -a" {
   enable_mocks
-  create_mock docker 0 "def456"
+  create_mock podman 0 "def456"
 
   run list_running_ws_containers
   [ "$status" -eq 0 ]
   [ "$output" = "def456" ]
-  assert_mock_called "docker ps --filter"
-  assert_mock_not_called "docker ps -a"
+  assert_mock_called "podman ps --filter"
+  assert_mock_not_called " -a -q"
 }
 
 @test "ensure_ws_container_running skips startup when container is running" {
   enable_mocks
-  create_mock docker 0 "running123"
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "running123"
 
   cmd_ws_up() { echo "CMD_WS_UP_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
 
@@ -221,24 +223,31 @@ teardown() {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
-  create_mock docker 0 ""
-  create_mock devcontainer 0 ""
+  cat >"${TEST_TMPDIR}/bin/podman" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$(basename "\$0") \$*" >>"${TEST_TMPDIR}/mock_calls.log"
+if [[ "\$1" == "ps" ]]; then
+  exit 0
+fi
+printf '%s\n' "container123"
+exit 0
+EOF
+  chmod +x "${TEST_TMPDIR}/bin/podman"
 
   run ensure_ws_container_running
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer up"
+  assert_mock_called "podman run --runtime krun --detach"
 }
 
 @test "cmd_ws_exec defaults to bash" {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
-  create_mock docker 0 "running"
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "running"
 
   run cmd_ws_exec
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer exec"
+  assert_mock_called "podman exec"
   assert_mock_called "bash"
 }
 
@@ -246,12 +255,11 @@ teardown() {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
-  create_mock docker 0 "running"
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "running"
 
   run cmd_ws_exec -- id
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer exec"
+  assert_mock_called "podman exec"
   assert_mock_called "id"
 }
 
@@ -259,12 +267,11 @@ teardown() {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
-  create_mock docker 0 "running"
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "running"
 
   run cmd_ws_shell codex
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer exec"
+  assert_mock_called "podman exec"
   assert_mock_called "bash -lic codex"
 }
 
@@ -272,8 +279,7 @@ teardown() {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
-  create_mock docker 0 "running"
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "running"
 
   run cmd_ws_run
   [ "$status" -ne 0 ]
@@ -284,53 +290,54 @@ teardown() {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
-  create_mock docker 0 "running"
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "running"
 
   run cmd_ws_run -- pytest -q
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer exec"
+  assert_mock_called "podman exec"
   assert_mock_called "bash -lc pytest -q"
 }
 
 @test "cmd_ws_status does not auto-start a container" {
   enable_mocks
-  create_mock docker 0 "abc123"
+  create_mock podman 0 "abc123"
 
   run cmd_ws_status
   [ "$status" -eq 0 ]
-  assert_mock_not_called "devcontainer up"
+  assert_mock_not_called "CMD_WS_UP_CALLED"
 }
 
 @test "cmd_ws_down warns when nothing matches" {
   enable_mocks
-  create_mock docker 0 ""
+  create_mock podman 0 ""
 
   run cmd_ws_down
   [ "$status" -eq 0 ]
   [[ $output == *"No devcontainer to remove"* ]]
 }
 
-@test "cmd_ws_up passes args to devcontainer up" {
+@test "cmd_ws_up passes args to rt_run" {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "container123"
 
-  run cmd_ws_up -- --build-no-cache
+  run cmd_ws_up -- --env FOO=bar
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config $(workspace_devcontainer_file) --build-no-cache"
+  assert_mock_called "podman run --runtime krun --detach"
+  assert_mock_called "--env FOO=bar"
 }
 
-@test "cmd_ws_reup adds remove-existing-container" {
+@test "cmd_ws_reup removes then reruns the workspace container" {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "container123"
 
   run cmd_ws_reup
   [ "$status" -eq 0 ]
-  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config $(workspace_devcontainer_file) --remove-existing-container"
+  assert_mock_called "podman rm -f"
+  assert_mock_called "podman run --runtime krun --detach"
 }
 
 @test "cmd_ws_reup regenerates cached config when a layer mtime is newer" {
@@ -346,12 +353,13 @@ teardown() {
   touch "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
 
   enable_mocks
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "container123"
 
   DCTL_CLI_CONFIG="$cached" run cmd_ws_reup
   [ "$status" -eq 0 ]
   [[ $output == *"Config cache status: generated"* ]]
-  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config ${cached} --remove-existing-container"
+  assert_mock_called "podman rm -f"
+  assert_mock_called "podman run --runtime krun --detach"
 }
 
 @test "cmd_ws_reup regenerates manifest-backed cache via registry" {
@@ -373,12 +381,13 @@ YAML
   touch "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
 
   enable_mocks
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "container123"
 
   run cmd_ws_reup
   [ "$status" -eq 0 ]
   [[ $output == *"Config cache status: generated"* ]]
-  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config ${cached} --remove-existing-container"
+  assert_mock_called "podman rm -f"
+  assert_mock_called "podman run --runtime krun --detach"
 }
 
 @test "cmd_ws_reup reuses cached config when all inputs are older" {
@@ -391,24 +400,26 @@ YAML
   [ -f "$cached" ]
 
   enable_mocks
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "container123"
 
   DCTL_CLI_CONFIG="$cached" run cmd_ws_reup
   [ "$status" -eq 0 ]
   [[ $output == *"Config cache status: cached"* ]]
-  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config ${cached} --remove-existing-container"
+  assert_mock_called "podman rm -f"
+  assert_mock_called "podman run --runtime krun --detach"
 }
 
 @test "cmd_ws_reup does not regenerate when resolved config is outside cache dir" {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "container123"
 
   run cmd_ws_reup
   [ "$status" -eq 0 ]
   [[ $output != *"Config cache status:"* ]]
-  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config $(workspace_devcontainer_file) --remove-existing-container"
+  assert_mock_called "podman rm -f"
+  assert_mock_called "podman run --runtime krun --detach"
 }
 
 @test "collect_term_env includes remote env flags for set vars" {
@@ -433,23 +444,21 @@ YAML
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
-  create_mock docker 0 "running"
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "running"
 
   TERM=xterm-256color COLORTERM=truecolor run cmd_ws_run -- codex
   [ "$status" -eq 0 ]
-  assert_mock_called "--remote-env TERM=xterm-256color"
-  assert_mock_called "--remote-env COLORTERM=truecolor"
+  assert_mock_called "--env TERM=xterm-256color"
+  assert_mock_called "--env COLORTERM=truecolor"
 }
 
-@test "cmd_image_list prints discovered targets from user config dir" {
-  create_user_image_fixture agents
-  create_user_image_fixture python-dev
+@test "cmd_image_list prints podman images output" {
+  enable_mocks
+  create_mock podman 0 $'REPOSITORY:TAG\tIMAGE ID\tCREATED\n devimg/agents:latest\tabc123\tnow'
 
   run cmd_image_list
   [ "$status" -eq 0 ]
-  [[ $output == *"agents"* ]]
-  [[ $output == *"python-dev"* ]]
+  [[ $output == *"devimg/agents:latest"* ]]
 }
 
 @test "cmd_image_build dry-run uses user config dir" {
@@ -573,16 +582,17 @@ YAML
   [[ $output == *"Run 'dctl init' or pass --config"* ]]
 }
 
-@test "cmd_test fails when devcontainer command is missing" {
+@test "cmd_test surfaces krun preflight failures from rt_run" {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{\n  "image": "devimg/python-dev:latest"\n}\n' >"$(workspace_devcontainer_file)"
-  enable_mocks
-  create_mock docker 0 "container123"
-  local sanitized
-  sanitized="$(sanitized_bin_excluding devcontainer)"
-  PATH="${TEST_TMPDIR}/bin:${sanitized}" run cmd_test_run
+  # shellcheck disable=SC2329
+  _dctl_krun_preflight() {
+    err "krun runtime preflight failed. Run 'dctl doctor' for full diagnostics."
+  }
+
+  run cmd_test_run
   [ "$status" -ne 0 ]
-  [[ $output == *"Missing required command: devcontainer"* ]]
+  [[ $output == *"krun runtime preflight failed"* ]]
 }
 
 @test "cmd_test builds managed images before starting the devcontainer" {
@@ -590,28 +600,26 @@ YAML
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{\n  "image": "devimg/python-dev:latest"\n}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
-  create_mock docker 0 "container123"
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "container123"
 
   run cmd_test_run
   [ "$status" -eq 0 ]
-  assert_mock_called "docker buildx build"
-  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config"
-  assert_mock_called "devcontainer exec --workspace-folder ${WORKSPACE_FOLDER} --config"
-  assert_mock_called "docker rm -f"
+  assert_mock_called "podman build --tag devimg/python-dev:latest"
+  assert_mock_called "podman run --runtime krun --detach"
+  assert_mock_called "podman exec"
+  assert_mock_called "podman rm -f"
 }
 
 @test "cmd_test skips managed image build for external images" {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{\n  "image": "ghcr.io/acme/project:latest"\n}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
-  create_mock docker 0 "container123"
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "container123"
 
   run cmd_test_run
   [ "$status" -eq 0 ]
-  assert_mock_not_called "docker buildx build"
-  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config"
+  assert_mock_not_called "podman build --tag"
+  assert_mock_called "podman run --runtime krun --detach"
 }
 
 # bats test_tags=integration
@@ -681,21 +689,20 @@ YAML
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
 
   enable_mocks
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "container123"
 
   run cmd_ws_up
   [ "$status" -eq 0 ]
   assert_mock_called "--mount type=bind,source=${main_repo}/.git,target=${main_repo}/.git"
 }
 
-# --- Auth token forwarding via devcontainer exec ---
+# --- Auth token forwarding via rt_exec ---
 
 @test "cmd_ws_shell forwards GH_TOKEN via remote-env" {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
-  create_mock docker 0 "running"
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "running"
   cat >"${TEST_TMPDIR}/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 [[ "$1" == "auth" && "$2" == "status" ]] && exit 0
@@ -706,15 +713,14 @@ MOCK
 
   run cmd_ws_shell
   [ "$status" -eq 0 ]
-  assert_mock_called "--remote-env GH_TOKEN=ghp_testXYZ"
+  assert_mock_called "--env GH_TOKEN=ghp_testXYZ"
 }
 
 @test "cmd_ws_shell forwards GITLAB_TOKEN via remote-env" {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
-  create_mock docker 0 "running"
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "running"
   cat >"${TEST_TMPDIR}/bin/glab" <<'MOCK'
 #!/usr/bin/env bash
 [[ "$1" == "auth" && "$2" == "status" && "$3" != "--show-token" ]] && exit 0
@@ -725,15 +731,14 @@ MOCK
 
   run cmd_ws_shell
   [ "$status" -eq 0 ]
-  assert_mock_called "--remote-env GITLAB_TOKEN=glpat_testABC"
+  assert_mock_called "--env GITLAB_TOKEN=glpat_testABC"
 }
 
 @test "cmd_ws_shell forwards both tokens when both CLIs authenticated" {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
-  create_mock docker 0 "running"
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "running"
   cat >"${TEST_TMPDIR}/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 [[ "$1" == "auth" && "$2" == "status" ]] && exit 0
@@ -751,8 +756,8 @@ MOCK
 
   run cmd_ws_shell
   [ "$status" -eq 0 ]
-  assert_mock_called "--remote-env GH_TOKEN=ghp_both999"
-  assert_mock_called "--remote-env GITLAB_TOKEN=glpat_both888"
+  assert_mock_called "--env GH_TOKEN=ghp_both999"
+  assert_mock_called "--env GITLAB_TOKEN=glpat_both888"
 }
 
 # --- Config resolution chain ---
@@ -1434,7 +1439,7 @@ JSON
   [ "$(jq -r '.workspaceFolder' "$cached")" = "/ws-c" ]
   # --cgroup-parent must be present exactly once (last-wins on a keyed flag whose
   # bracket-subscript key was previously mangled by shfmt).
-  [ "$(jq -c '.runArgs' "$cached")" = '["--name","bar","--label","k=v2","--cap-add","SYS_PTRACE","--memory","4g","--cgroup-parent","user.slice"]' ]
+  [ "$(jq -c '.runArgs' "$cached")" = '["--name","bar","--label","k=v2","--cap-add","SYS_PTRACE","--memory","4g","--cgroup-parent","user.slice","--runtime","krun"]' ]
 }
 
 @test "generate_cached_devcontainer errors on unknown top-level keys" {
@@ -1475,7 +1480,7 @@ JSON
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
   create_user_image_fixture python-dev
   enable_mocks
-  create_mock docker 0 ""
+  create_mock podman 0 ""
   # shellcheck disable=SC2329
   cmd_test_run() { :; }
 
@@ -1498,7 +1503,7 @@ JSON
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
   create_user_image_fixture python-dev
   enable_mocks
-  create_mock docker 1 ""
+  create_mock podman 1 ""
   # shellcheck disable=SC2329
   cmd_image_build() { echo "CMD_IMAGE_BUILD_CALLED $*" >>"${TEST_TMPDIR}/mock_calls.log"; }
   # shellcheck disable=SC2329
@@ -1506,7 +1511,7 @@ JSON
 
   run cmd_init_do --devcontainer python
   [ "$status" -eq 0 ]
-  assert_mock_called "docker image inspect devimg/python-dev:latest"
+  assert_mock_called "podman image inspect devimg/python-dev:latest"
   assert_mock_called "CMD_IMAGE_BUILD_CALLED python-dev"
 }
 
@@ -1515,7 +1520,7 @@ JSON
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
   create_user_image_fixture python-dev
   enable_mocks
-  create_mock docker 0 ""
+  create_mock podman 0 ""
   # shellcheck disable=SC2329
   cmd_image_build() { echo "CMD_IMAGE_BUILD_CALLED $*" >>"${TEST_TMPDIR}/mock_calls.log"; }
   # shellcheck disable=SC2329
@@ -1523,7 +1528,7 @@ JSON
 
   run cmd_init_do --devcontainer python
   [ "$status" -eq 0 ]
-  assert_mock_called "docker image inspect devimg/python-dev:latest"
+  assert_mock_called "podman image inspect devimg/python-dev:latest"
   assert_mock_not_called "CMD_IMAGE_BUILD_CALLED python-dev"
 }
 
@@ -1532,7 +1537,7 @@ JSON
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
   create_user_image_fixture python-dev
   enable_mocks
-  create_mock docker 0 ""
+  create_mock podman 0 ""
   # shellcheck disable=SC2329
   cmd_test_run() { :; }
 
@@ -1557,7 +1562,7 @@ JSON
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
   create_user_image_fixture python-dev
   enable_mocks
-  create_mock docker 0 ""
+  create_mock podman 0 ""
   local canonical
   canonical="$(resolve_canonical_project_name)"
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
@@ -1591,7 +1596,7 @@ YAML
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
   create_user_image_fixture python-dev
   enable_mocks
-  create_mock docker 0 ""
+  create_mock podman 0 ""
   local canonical
   canonical="$(resolve_canonical_project_name)"
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
@@ -1619,7 +1624,7 @@ YAML
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
   create_user_image_fixture python-dev
   enable_mocks
-  create_mock docker 0 ""
+  create_mock podman 0 ""
   local canonical
   canonical="$(resolve_canonical_project_name)"
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
@@ -1646,7 +1651,7 @@ YAML
   create_user_image_fixture python-dev
   create_user_image_fixture rust-dev
   enable_mocks
-  create_mock docker 0 ""
+  create_mock podman 0 ""
   # shellcheck disable=SC2329
   cmd_test_run() { :; }
 
@@ -1668,7 +1673,7 @@ YAML
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
   create_user_image_fixture python-dev
   enable_mocks
-  create_mock docker 0 ""
+  create_mock podman 0 ""
   # shellcheck disable=SC2329
   cmd_test_run() { echo "CMD_TEST_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
 
@@ -1684,7 +1689,7 @@ YAML
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
   create_user_image_fixture python-dev
   enable_mocks
-  create_mock docker 0 ""
+  create_mock podman 0 ""
   # shellcheck disable=SC2329
   cmd_test_run() { return 1; }
 
@@ -1830,7 +1835,7 @@ EOF
   [[ $output == *"Failed to parse bind mounts"* ]]
 }
 
-@test "cmd_test skips devcontainer up when a bind mount source is missing" {
+@test "cmd_test skips rt_run when a bind mount source is missing" {
   create_user_image_fixture python-dev
   mkdir -p "$(workspace_devcontainer_dir)"
   local missing="${TEST_TMPDIR}/never-created"
@@ -1840,15 +1845,14 @@ EOF
   "mounts": [
     {"source": "${missing}", "target": "/mnt/x", "type": "bind"}
   ]
-}
+  }
 EOF
   enable_mocks
-  create_mock docker 0 "container123"
-  create_mock devcontainer 0 ""
+  create_mock podman 0 "container123"
 
   run cmd_test_run
   [ "$status" -ne 0 ]
   [[ $output == *"Missing bind mount source(s) on host"* ]]
   [[ $output == *"$missing"* ]]
-  assert_mock_not_called "devcontainer up"
+  assert_mock_not_called "podman run --runtime krun --detach"
 }

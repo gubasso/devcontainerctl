@@ -13,9 +13,8 @@ __dctl_require _lib/paths.sh
 __dctl_require commands/image/_helpers.sh
 
 cmd_image_list() {
-  if ! ensure_image_dir_exists; then
-    return 0
-  fi
-
-  discover_image_targets
+  require_cmd podman
+  podman images \
+    --filter "reference=devimg/*" \
+    --format 'table {{.Repository}}:{{.Tag}}\t{{.ID}}\t{{.CreatedSince}}'
 }

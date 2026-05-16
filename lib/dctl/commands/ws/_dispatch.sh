@@ -17,37 +17,43 @@ usage_ws() {
 Usage: dctl ws <command> [options]
 
 Commands:
-  up [-- <devcontainer up args...>]
-      Start or attach to the current workspace's devcontainer.
+  up [-- <runtime args...>]
+      Start or attach to the current workspace container.
 
-  reup [-- <devcontainer up args...>]
-      Recreate the current workspace's devcontainer.
+  reup [-- <runtime args...>]
+      Recreate the current workspace container.
 
   exec [-- <command...>]
-      Execute a command in the current workspace's devcontainer.
+      Execute a command in the current workspace container.
       Defaults to: bash
 
   shell [<command...>]
       Open an interactive shell, or run a command in an interactive login shell.
 
   run [--] <command...>
-      Execute a command via bash -lc inside the devcontainer.
+      Execute a command via bash -lc inside the workspace container.
 
   status
-      Show devcontainer(s) associated with the current workspace.
+      Show container(s) associated with the current workspace.
 
   down
-      Stop and remove devcontainer(s) associated with the current workspace.
+      Stop and remove container(s) associated with the current workspace.
 
   help
       Show this help text.
 
 Examples:
   dctl ws up
-  dctl ws reup -- --build-no-cache
+  dctl ws up -- --env FOO=bar
+  dctl ws reup
   dctl ws exec -- id
   dctl ws shell codex
   dctl ws run -- pytest -q
+
+Notes:
+  Anything after `--` is forwarded to `podman run`. To rebuild the image
+  before `dctl ws reup`, run `dctl image build <image>` (or `dctl image
+  build --full-rebuild` to rebuild every managed image from scratch).
 EOF
 }
 

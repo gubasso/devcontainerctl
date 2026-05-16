@@ -30,7 +30,8 @@ Commands:
         --help, -h         Show build help
 
   list
-      List available images and exit.
+      List locally built devimg/* images (podman repository, tag, ID,
+      age) and exit.
 
   help
       Show this help text.

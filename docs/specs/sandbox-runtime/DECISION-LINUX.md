@@ -208,6 +208,8 @@ This decision narrows [SPEC.md §5–6](./SPEC.md) but does not change its tier 
 
 **Concrete next step:** implement `lib/dctl/runtime/krun.sh` against the [SPEC.md §5.5](./SPEC.md) adapter sketch and run the standard smoke-test against it on a KVM-capable Linux host. The numbers (cold-start, mount latency, devcontainer-feature parity, smoke-test pass rate) close the prototyping milestone in [SPEC.md §4.4 / §6 T2.0](./SPEC.md).
 
+Round 20 intentionally leaves Podman rootless network backend selection unpinned in `rt_run`. Under the chosen libkrun design, TSI already removes the host-side TAP/bridge/NAT plumbing class discussed above ([§2.1](#21-what-it-is), [§2.2](#22-why-it-wins-on-each-criterion)), so there is no round-20 evidence forcing a `slirp4netns` vs `pasta` override on the krun path. A later smoke pass can revisit pinning if a concrete compatibility or performance preference emerges, but for now the implementation keeps the runtime unpinned and treats backend choice as deferred rather than guessed.
+
 ---
 
 ## 8. References

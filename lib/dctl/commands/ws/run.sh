@@ -12,6 +12,8 @@ __dctl_require _lib/log.sh
 __dctl_require _lib/paths.sh
 __dctl_require _lib/term/collect_env.sh
 __dctl_require commands/ws/_helpers.sh
+__dctl_require runtime/common.sh
+__dctl_require runtime/krun.sh
 
 cmd_ws_run() {
   ensure_ws_container_running
@@ -21,5 +23,5 @@ cmd_ws_run() {
   fi
   [[ $# -gt 0 ]] || err "run requires a command. Example: dctl ws run -- claude-session"
 
-  devcontainer_exec bash -lc "$*"
+  devcontainer_exec -- bash -lc "$*"
 }

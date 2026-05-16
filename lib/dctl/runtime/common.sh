@@ -24,8 +24,11 @@ readonly DCTL_DOCTOR_SMOKE_IMAGE="quay.io/quay/busybox:1.36"
 #   rt_exec           <workspace_folder> <config_path> [--env K=V ...] -- <cmd...>
 #     Execute a command inside the workspace container under the active runtime.
 #
-#   rt_ps             [--quiet] <workspace_folder>
-#     List containers managed by dctl for the workspace. With --quiet, emit IDs only.
+#   rt_ps             [--quiet | --format <go-template>] [--running] <workspace_folder>
+#     List containers managed by dctl for the workspace.
+#       --quiet              IDs only.
+#       --format <template>  Pass-through to `podman ps --format`.
+#       --running            Only list running containers (omit `-a`).
 #
 #   rt_rm             <workspace_folder>
 #     Remove all containers managed by dctl for the workspace.

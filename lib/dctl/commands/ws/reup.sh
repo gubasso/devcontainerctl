@@ -17,9 +17,10 @@ __dctl_require _lib/auth/collect_env.sh
 __dctl_require _lib/registry/lookup_manifest.sh
 __dctl_require commands/ws/_helpers.sh
 __dctl_require commands/init/_generate_cache.sh
+__dctl_require runtime/common.sh
+__dctl_require runtime/krun.sh
 
 cmd_ws_reup() {
-  require_cmd devcontainer
   local args=("$@")
   if [[ ${#args[@]} -gt 0 && ${args[0]} == "--" ]]; then
     args=("${args[@]:1}")
@@ -67,5 +68,8 @@ cmd_ws_reup() {
   local -a git_wt_mounts=()
   collect_git_worktree_mounts git_wt_mounts
   log "Recreating devcontainer for $(workspace_path)"
-  devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" --remove-existing-container "${git_wt_mounts[@]}" "${args[@]}"
+  # rt_rm returns 0 when no containers match (handled inside the adapter),
+  # so we surface real removal failures instead of masking them.
+  rt_rm "$WORKSPACE_FOLDER" >/dev/null
+  rt_run "$WORKSPACE_FOLDER" "$config_path" "${git_wt_mounts[@]}" "${args[@]}"
 }
