@@ -4,8 +4,17 @@ Pre-built Podman/libkrun images and the unified `dctl` CLI for AI-agent devconta
 
 ## Quick Orientation
 
-- `bin/dctl` — thin CLI entrypoint (bootstrap, source modules, dispatch)
-- `lib/dctl/` — shell library modules (`common`, `ws`, `image`, `init`, `test`, `auth`, `config`)
+- `bin/dctl` — dispatcher-only CLI entrypoint
+- `lib/dctl/` layout:
+
+| What | Where |
+|---|---|
+| Internal helpers | `lib/dctl/_lib/<topic>/<name>.sh` |
+| Transitional flat shims | `lib/dctl/{common,auth,config,init,ws,image,deploy,test,doctor}.sh` |
+| Command tree | `lib/dctl/commands/<group>/` (round 15b) |
+| Runtime adapter | `lib/dctl/runtime/{common,krun}.sh` |
+| Lifecycle interpreter | `lib/dctl/lifecycle.sh` |
+
 - `images/` — managed Containerfiles, one subdir per image
 - `devcontainers/` — layer directories plus YAML composition manifests (validated by `schemas/compose.schema.yaml`)
 - `systemd/` — weekly image rebuild timer + service

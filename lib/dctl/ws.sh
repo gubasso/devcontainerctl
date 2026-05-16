@@ -7,6 +7,16 @@ readonly _DCTL_WS_LOADED=1
 : "${DCTL_LIB_DIR:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)}"
 
 # shellcheck source=/dev/null
+source "${DCTL_LIB_DIR}/_lib/source.sh"
+
+__dctl_require _lib/log.sh
+__dctl_require _lib/paths.sh
+__dctl_require _lib/workspace/git_worktree.sh
+__dctl_require _lib/workspace/resolve_config.sh
+__dctl_require _lib/term/collect_env.sh
+__dctl_require _lib/auth/collect_env.sh
+
+# shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/common.sh"
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/auth.sh"
@@ -76,43 +86,6 @@ ensure_ws_container_running() {
 
   log "No running devcontainer for $(workspace_path); starting one now..."
   cmd_ws_up
-}
-
-# If the workspace is a git linked worktree, populate mount args for the
-# shared .git directory so git operations work inside the container.
-# Usage: local -a git_wt_mounts=(); collect_git_worktree_mounts git_wt_mounts
-collect_git_worktree_mounts() {
-  local -n _out="$1"
-  _out=()
-
-  command -v git &>/dev/null || return 0
-
-  local git_dir common_dir
-  git_dir="$(git -C "$WORKSPACE_FOLDER" rev-parse --git-dir 2>/dev/null)" || return 0
-  common_dir="$(git -C "$WORKSPACE_FOLDER" rev-parse --git-common-dir 2>/dev/null)" || return 0
-
-  # Resolve to absolute paths
-  git_dir="$(cd -- "$WORKSPACE_FOLDER" && cd -- "$git_dir" && pwd -P)"
-  common_dir="$(cd -- "$WORKSPACE_FOLDER" && cd -- "$common_dir" && pwd -P)"
-
-  # Not a linked worktree — git dir and common dir are identical
-  [[ $git_dir != "$common_dir" ]] || return 0
-
-  # Mount the shared .git directory at the same host path inside the container
-  # so the absolute gitdir reference in the worktree's .git file resolves
-  _out=(--mount "type=bind,source=${common_dir},target=${common_dir}")
-}
-
-collect_term_env() {
-  local -n out="$1"
-  out=()
-
-  local var_name
-  for var_name in TERM COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION KITTY_WINDOW_ID KITTY_LISTEN_ON; do
-    if [[ -n ${!var_name:-} ]]; then
-      out+=(--remote-env "${var_name}=${!var_name}")
-    fi
-  done
 }
 
 devcontainer_exec() {
