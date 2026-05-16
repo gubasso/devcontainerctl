@@ -1351,6 +1351,77 @@ JSON
   [ "$(jq -r '.runArgs[1]' "$deployed")" = 'seccomp=${localEnv:HOME}/.config/dctl/devcontainer/agents/seccomp-bwrap.json' ]
 }
 
+@test "generate_cached_devcontainer merges runArgs/workspaceMount/workspaceFolder across three layers" {
+  create_user_base_layer_fixture
+
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/layer-a"
+  cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/layer-a/devcontainer.json" <<'JSON'
+{
+  "workspaceMount": "type=bind,source=ws-a,target=/workspace-a",
+  "workspaceFolder": "/ws-a",
+  "runArgs": [
+    "--name", "foo",
+    "--label", "k=v1",
+    "--cap-add", "SYS_PTRACE"
+  ]
+}
+JSON
+
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/layer-b"
+  cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/layer-b/devcontainer.json" <<'JSON'
+{
+  "workspaceMount": "type=bind,source=ws-b,target=/workspace-b",
+  "runArgs": [
+    "--label", "k=v2",
+    "--cap-add", "SYS_PTRACE"
+  ]
+}
+JSON
+
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/testmix"
+  cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/testmix/devcontainer.json" <<'JSON'
+{
+  "workspaceFolder": "/ws-c",
+  "runArgs": [
+    "--name", "bar",
+    "--memory", "4g",
+    "--cgroup-parent", "user.slice"
+  ]
+}
+JSON
+
+  create_user_manifest_fixture testmix base layer-a layer-b testmix
+
+  run generate_cached_devcontainer testmix
+  [ "$status" -eq 0 ]
+
+  local cached="${XDG_CACHE_HOME}/dctl/devcontainer/testmix/devcontainer.json"
+  [ "$(jq -r '.workspaceMount' "$cached")" = "type=bind,source=ws-b,target=/workspace-b" ]
+  [ "$(jq -r '.workspaceFolder' "$cached")" = "/ws-c" ]
+  # --cgroup-parent must be present exactly once (last-wins on a keyed flag whose
+  # bracket-subscript key was previously mangled by shfmt).
+  [ "$(jq -c '.runArgs' "$cached")" = '["--name","bar","--label","k=v2","--cap-add","SYS_PTRACE","--memory","4g","--cgroup-parent","user.slice"]' ]
+}
+
+@test "generate_cached_devcontainer errors on unknown top-level keys" {
+  create_user_base_layer_fixture
+
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/testbadkey"
+  cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/testbadkey/devcontainer.json" <<'JSON'
+{
+  "image": "devimg/python-dev:latest",
+  "unknown_key": 42
+}
+JSON
+
+  create_user_manifest_fixture testbadkey base testbadkey
+
+  run generate_cached_devcontainer testbadkey
+  [ "$status" -ne 0 ]
+  [[ $output == *"Unsupported devcontainer.json key: unknown_key"* ]]
+  [[ $output == *"testbadkey"* ]]
+}
+
 @test "generate_cached_devcontainer reuses cache when fresh" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"

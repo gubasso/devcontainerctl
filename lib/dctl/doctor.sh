@@ -267,6 +267,52 @@ _doctor_probe_5b_kvm_acl() {
   _doctor_check_warn "$label" "Standard 'kvm' group membership may be insufficient for krun (crun#1894). If probe 3 fails, run 'sudo setfacl -m u:\$USER:rw /dev/kvm'. Note: ACLs are not persistent across reboots on some distros."
 }
 
+_doctor_minimal_preflight() {
+  local failed=0
+
+  if ! (
+    _doctor_names=()
+    _doctor_results=()
+    _doctor_remediations=()
+    _doctor_crun_ok=false
+    _doctor_krun_ok=false
+
+    _doctor_check_pass() {
+      _doctor_names+=("$1")
+      _doctor_results+=("PASS")
+      _doctor_remediations+=("")
+    }
+
+    _doctor_check_fail() {
+      _doctor_names+=("$1")
+      _doctor_results+=("FAIL")
+      _doctor_remediations+=("$2")
+    }
+
+    _doctor_check_warn() {
+      _doctor_names+=("$1")
+      _doctor_results+=("WARN")
+      _doctor_remediations+=("$2")
+    }
+
+    _doctor_probe_1_crun_libkrun >/dev/null 2>&1
+    _doctor_probe_2_krun_symlink >/dev/null 2>&1
+    _doctor_probe_4_libkrun_version >/dev/null 2>&1
+    _doctor_probe_5_kvm_access >/dev/null 2>&1
+    _doctor_probe_5b_kvm_acl >/dev/null 2>&1
+
+    local result
+    for result in "${_doctor_results[@]}"; do
+      [[ $result == "FAIL" ]] && exit 1
+    done
+    exit 0
+  ); then
+    failed=1
+  fi
+
+  [[ $failed -eq 0 ]]
+}
+
 _doctor_probe_6_kvm_group() {
   local label="current user is in the kvm group"
   local current_user=""

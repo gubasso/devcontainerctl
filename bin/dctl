@@ -19,6 +19,9 @@ source "${DCTL_LIB_DIR}/init.sh"
 source "${DCTL_LIB_DIR}/test.sh"
 source "${DCTL_LIB_DIR}/doctor.sh"
 source "${DCTL_LIB_DIR}/config.sh"
+source "${DCTL_LIB_DIR}/runtime/common.sh"
+source "${DCTL_LIB_DIR}/runtime/krun.sh"
+source "${DCTL_LIB_DIR}/lifecycle.sh"
 
 usage() {
   cat <<'EOF'

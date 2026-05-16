@@ -63,11 +63,157 @@ _strip_jsonc_comments() {
   sed '/^[[:space:]]*\/\//d' "$1"
 }
 
+_validate_devcontainer_layer() {
+  local layer_path="$1"
+  local layer_json="$2"
+  local key runtime_value
+  # Allowlist tracks the Microsoft devcontainer.json schema (general dev
+  # container properties + non-compose properties) plus dctl's `runtime` key.
+  # See https://containers.dev/implementors/json_reference/ — keys present in
+  # spec-conformant configs must not error here even when dctl ignores them at
+  # runtime.
+  local -A allowed_keys=(
+    [name]=1
+    [image]=1
+    [build]=1
+    [entrypoint]=1
+    [secrets]=1
+    [workspaceFolder]=1
+    [workspaceMount]=1
+    [mounts]=1
+    [runArgs]=1
+    [containerEnv]=1
+    [remoteEnv]=1
+    [remoteUser]=1
+    [containerUser]=1
+    [updateRemoteUserUID]=1
+    [containerName]=1
+    [waitFor]=1
+    [postCreateCommand]=1
+    [postStartCommand]=1
+    [postAttachCommand]=1
+    [initializeCommand]=1
+    [onCreateCommand]=1
+    [updateContentCommand]=1
+    [shutdownAction]=1
+    [features]=1
+    [overrideFeatureInstallOrder]=1
+    [customizations]=1
+    [forwardPorts]=1
+    [portsAttributes]=1
+    [otherPortsAttributes]=1
+    [appPort]=1
+    [hostRequirements]=1
+    [capAdd]=1
+    [securityOpt]=1
+    [privileged]=1
+    [init]=1
+    [overrideCommand]=1
+    [userEnvProbe]=1
+    [runtime]=1
+  )
+  # Add the JSON Schema marker key separately: shfmt rewrites a
+  # double-quoted key inside the array literal back to single quotes,
+  # which then triggers shellcheck SC2016.
+  # shellcheck disable=SC2016
+  allowed_keys['$schema']=1
+
+  while IFS= read -r key; do
+    [[ -n $key ]] || continue
+    if [[ -z ${allowed_keys[$key]:-} ]]; then
+      printf 'Unsupported devcontainer.json key: %s (layer: %s)\n' "$key" "$layer_path" >&2
+      return 1
+    fi
+  done < <(jq -r 'keys[]' <<<"$layer_json")
+
+  runtime_value="$(jq -r '.runtime // empty' <<<"$layer_json")"
+  if [[ -n $runtime_value && $runtime_value != "krun" ]]; then
+    printf 'Unsupported devcontainer.json key: runtime=%s (layer: %s)\n' "$runtime_value" "$layer_path" >&2
+    return 1
+  fi
+}
+
+_merge_runargs_json() {
+  local base_json="$1"
+  local tmpl_json="$2"
+  local -a items ordered_ids
+  local -A keyed_flags seen_ids id_flag id_value
+  local idx flag value identity
+
+  # Quote the keys so shfmt does not insert spaces around the dashes inside
+  # the bracket subscripts (which produces literal "--cgroup - parent" keys).
+  keyed_flags=(
+    ["--name"]=1
+    ["--hostname"]=1
+    ["--label"]=1
+    ["--user"]=1
+    ["--workdir"]=1
+    ["--network"]=1
+    ["--ipc"]=1
+    ["--pid"]=1
+    ["--uts"]=1
+    ["--cgroup-parent"]=1
+    ["--memory"]=1
+    ["--cpus"]=1
+    ["--cpuset-cpus"]=1
+    ["--cpuset-mems"]=1
+  )
+
+  mapfile -t items < <(
+    jq -sr '((.[0].runArgs // []) + (.[1].runArgs // []))[]' \
+      <(printf '%s\n' "$base_json") \
+      <(printf '%s\n' "$tmpl_json")
+  )
+
+  if ((${#items[@]} % 2 != 0)); then
+    printf 'runArgs must contain flag/value pairs; got odd-length array (%d entries)\n' "${#items[@]}" >&2
+    return 1
+  fi
+
+  ordered_ids=()
+  for ((idx = 0; idx < ${#items[@]}; idx += 2)); do
+    flag="${items[idx]}"
+    value="${items[idx + 1]}"
+
+    if [[ -n ${keyed_flags[$flag]:-} ]]; then
+      identity="keyed:${flag}"
+      if [[ -z ${seen_ids[$identity]:-} ]]; then
+        ordered_ids+=("$identity")
+        seen_ids[$identity]=1
+      fi
+      id_flag[$identity]="$flag"
+      id_value[$identity]="$value"
+      continue
+    fi
+
+    identity="pair:${flag}"$'\x1f'"$value"
+    if [[ -n ${seen_ids[$identity]:-} ]]; then
+      continue
+    fi
+    ordered_ids+=("$identity")
+    seen_ids[$identity]=1
+    id_flag[$identity]="$flag"
+    id_value[$identity]="$value"
+  done
+
+  {
+    printf '['
+    for idx in "${!ordered_ids[@]}"; do
+      identity="${ordered_ids[$idx]}"
+      ((idx > 0)) && printf ','
+      printf '%s\n' "${id_flag[$identity]}" | jq -R .
+      printf ','
+      printf '%s\n' "${id_value[$identity]}" | jq -R .
+    done
+    printf ']'
+  }
+}
+
 merge_two_configs() {
   local base_path="$1"
   local template_path="$2"
 
-  local base_json tmpl_json jq_err
+  local base_json tmpl_json jq_err runargs_json
 
   base_json="$(_strip_jsonc_comments "$base_path")" || return 1
   tmpl_json="$(_strip_jsonc_comments "$template_path")" || return 1
@@ -81,14 +227,31 @@ merge_two_configs() {
     return 1
   fi
 
-  jq -s '
-    .[0] as $base | .[1] as $tmpl |
-    $base * $tmpl |
-    .mounts = (($base.mounts // []) + ($tmpl.mounts // [])) |
-    .postCreateCommand = (($base.postCreateCommand // {}) * ($tmpl.postCreateCommand // {})) |
-    .containerEnv = (($base.containerEnv // {}) * ($tmpl.containerEnv // {})) |
-    .remoteEnv = (($base.remoteEnv // {}) * ($tmpl.remoteEnv // {}))
-  ' <(echo "$base_json") <(echo "$tmpl_json")
+  _validate_devcontainer_layer "$base_path" "$base_json" || return 1
+  _validate_devcontainer_layer "$template_path" "$tmpl_json" || return 1
+
+  runargs_json="$(_merge_runargs_json "$base_json" "$tmpl_json")" || return 1
+
+  jq -n \
+    --argjson base "$base_json" \
+    --argjson tmpl "$tmpl_json" \
+    --argjson runargs "$runargs_json" '
+      $base as $base |
+      $tmpl as $tmpl |
+      ($base * $tmpl) |
+      .mounts = (($base.mounts // []) + ($tmpl.mounts // [])) |
+      .postCreateCommand =
+        if (($base.postCreateCommand // null) | type) == "object"
+          and (($tmpl.postCreateCommand // null) | type) == "object"
+        then (($base.postCreateCommand // {}) * ($tmpl.postCreateCommand // {}))
+        else ($tmpl.postCreateCommand // $base.postCreateCommand)
+        end |
+      .containerEnv = (($base.containerEnv // {}) * ($tmpl.containerEnv // {})) |
+      .remoteEnv = (($base.remoteEnv // {}) * ($tmpl.remoteEnv // {})) |
+      .runArgs = $runargs |
+      if $tmpl.workspaceMount != null then .workspaceMount = $tmpl.workspaceMount else . end |
+      if $tmpl.workspaceFolder != null then .workspaceFolder = $tmpl.workspaceFolder else . end
+    '
 }
 
 discover_config_layers() {
