@@ -1,9 +1,10 @@
 // AGENTS-PERMISSIVE LAYER — explicit fallback for nested bwrap workflows.
 //
 // Use this layer instead of `agents` when a project needs the looser outer
-// container posture for inner bubblewrap sandboxes. It retains the same
-// seccomp/AppArmor/systempaths settings as the original agents layer but omits
-// cap-drop and no-new-privileges.
+// container posture for inner bubblewrap sandboxes (e.g. Codex CLI's). It
+// relaxes seccomp/AppArmor/systempaths and omits the `agents` layer's
+// cap-drop=ALL and no-new-privileges. The hypervisor remains the load-bearing
+// isolation boundary.
 {
   "runArgs": [
     "--security-opt", "seccomp=${localEnv:HOME}/.config/dctl/devcontainer/agents/seccomp-bwrap.json",

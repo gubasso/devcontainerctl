@@ -14,12 +14,12 @@ The default path now applies the low-cost controls required by round 40:
 - `/tmp` is a tmpfs (`--tmpfs /tmp:rw,nosuid,nodev,size=1g`), not a host bind.
 - The agents layer adds `--cap-drop=ALL`.
 - The agents layer adds `--security-opt no-new-privileges`.
-- The bwrap-oriented seccomp and AppArmor settings remain for Codex CLI
-  compatibility, but under libkrun they are no longer the load-bearing
-  isolation boundary. The hypervisor boundary is.
 
-Tier 3 cleanup of the inner seccomp/AppArmor posture remains deferred per
-`docs/specs/sandbox-runtime/SPEC.md` section 5.4.
+The bwrap-oriented seccomp and AppArmor relaxations are no longer in the
+default `agents` layer. The hypervisor is the load-bearing isolation boundary
+under libkrun. Workflows that need a looser outer posture for an inner bwrap
+sandbox (e.g. Codex CLI's) should opt into `devcontainers/agents-permissive/`
+instead — see the Permissive Profile section below.
 
 ## Token Forwarding
 
@@ -54,8 +54,10 @@ cache is deleted by `dctl ws down`, including the no-container cleanup path.
 ## Egress Allowlist
 
 Default container egress is deny-by-default and enforced inside the guest with
-`nftables`, not on the host. The bootstrap script is
-`/usr/local/bin/dctl-egress`, launched by the base layer's `postStartCommand`.
+`nftables`, not on the host. The bootstrap script is the in-guest path
+`/usr/local/bin/dctl-egress` (baked into the agents image at build time via
+`images/agents/Dockerfile`; it is not installed on the host), launched by the
+base layer's `postStartCommand`.
 
 The default allowlist includes:
 
@@ -74,9 +76,13 @@ The default allowlist includes:
 - `*.gitlab.io`
 - the workspace's git remote hosts
 
-Users extend the set with `dctl net allow <host>`. The in-guest allowlist is
-refreshed every 300 seconds. If nftables cannot be installed, container startup
-fails closed and `dctl` removes the container.
+Users extend the set with `dctl net allow <host>`, which writes to the active
+manifest's user-owned leaf at
+`$XDG_CONFIG_HOME/dctl/devcontainer/<leaf>/devcontainer.json` (never to the
+shipped templates under `$XDG_DATA_HOME/dctl/devcontainers/`). Inspect the
+effective set with `dctl net show`. The in-guest allowlist is refreshed every
+300 seconds. If nftables cannot be installed, container startup fails closed
+and `dctl` removes the container.
 
 Wildcard DNS entries are intentionally limited. The current implementation does
 not expand wildcard hostnames into concrete DNS names; add the concrete host

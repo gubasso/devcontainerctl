@@ -1,17 +1,13 @@
 // AGENTS LAYER — AI coding agent defaults
 //
-// This layer keeps the bwrap-friendly seccomp/AppArmor/systempaths settings
-// needed by Codex CLI's inner sandbox while adding Tier 0 hygiene on the outer
-// libkrun boundary: cap-drop=ALL, no-new-privileges, and no live host auth-dir
-// mounts. Credential forwarding now happens via env vars (GH/GitLab) or
-// per-session read-only ephemeral copies (Claude/Codex/Gemini). See
-// docs/SECURITY.md for the runtime threat-model details and the permissive
-// profile rationale.
+// Tier 0 hygiene on the outer libkrun boundary: cap-drop=ALL,
+// no-new-privileges, and no live host auth-dir mounts. Credential forwarding
+// happens via env vars (GH/GitLab) or per-session read-only ephemeral copies
+// (Claude/Codex/Gemini). For workflows that run an inner bwrap sandbox (e.g.
+// Codex CLI's), use the opt-in `agents-permissive` layer instead. See
+// docs/SECURITY.md for the runtime threat-model details.
 {
   "runArgs": [
-    "--security-opt", "seccomp=${localEnv:HOME}/.config/dctl/devcontainer/agents/seccomp-bwrap.json",
-    "--security-opt", "apparmor=unconfined",
-    "--security-opt", "systempaths=unconfined",
     "--cap-drop", "ALL",
     "--security-opt", "no-new-privileges"
   ]

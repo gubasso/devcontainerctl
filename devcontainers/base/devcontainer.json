@@ -2,8 +2,6 @@
   "remoteUser": "${localEnv:USER}",
   "updateRemoteUserUID": false,
   "init": true,
-  // Extend with: dctl net allow <host>
-  "network": { "allow": [] },
   "shutdownAction": "none",
   "postStartCommand": "sudo --preserve-env=DCTL_NETWORK_ALLOWLIST_JSON /usr/local/bin/dctl-egress --daemon",
   "containerEnv": {
