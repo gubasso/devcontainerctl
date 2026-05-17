@@ -31,7 +31,7 @@ ENV ZYPP_PCK_PRELOAD=0
 
 # System dependencies + build tools for native extensions
 # Package names follow openSUSE conventions. Verify availability with:
-#   docker run --rm opensuse/tumbleweed bash -c "zypper --non-interactive refresh && zypper info <pkg>"
+#   podman run --rm opensuse/tumbleweed bash -c "zypper --non-interactive refresh && zypper info <pkg>"
 # Or check: https://software.opensuse.org/package/<pkg>
 # clang-devel/llvm-devel are unversioned metapackages — they pull whatever
 # LLVM major version is current in the snapshot.

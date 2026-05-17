@@ -10,7 +10,27 @@ DEVCONTAINER_DIRS := agents agents-permissive python rust zig general coordinato
 DEVCONTAINER_MANIFESTS := general coordinator python rust zig
 LIB_FILES := lifecycle.sh
 
-.PHONY: install uninstall install-systemd uninstall-systemd test test-unit test-integration lint check gate-no-eval gate-no-raw-ansi gate-one-public-fn-per-file
+CHECK_NO_DOCKER_GLOBS := --include='*.sh' --include='*.bats' --include='*.md' \
+	--include='*.yaml' --include='*.yml' --include='*.json' \
+	--include='Makefile' --include='Containerfile' --include='post-stow'
+# Content-token whitelist: legitimate author content that must survive.
+# See docs/specs/sandbox-runtime/IMPLEMENTATION-PLAN.md refactor history.
+#  - build\.dockerfile   upstream Microsoft devcontainer.json schema key
+#  - CVE-2025-9074, Leaky Vessels, outcoldman, firedocker   factual security history
+#  - is-docker   npm transitive dep in slides/package-lock.json (not author-controlled)
+#  - Docker Hub        the openSUSE/Tumbleweed image is published to Docker Hub; the
+#                       phrase names the upstream registry, not a docker dependency.
+CHECK_NO_DOCKER_WHITELIST := build\.dockerfile|CVE-2025-9074|Leaky Vessels|outcoldman|firedocker|is-docker|Docker Hub
+# Path exclusions: whole-file survivors that contain the gate's own machinery
+# or the legacy `dockerfile` registry-key migration path. Excluding by path
+# (rather than enlarging the regex whitelist) keeps the content token list
+# small and stops new prose drift from sneaking in via a shared regex.
+CHECK_NO_DOCKER_PATH_EXCLUDES := \
+	-e '^(\./)?Makefile:' \
+	-e '^(\./)?lib/dctl/_lib/registry/register_project_defaults\.sh:' \
+	-e '^(\./)?tests/config_test\.bats:'
+
+.PHONY: install uninstall install-systemd uninstall-systemd test test-unit test-integration lint check check-no-docker gate-no-eval gate-no-raw-ansi gate-one-public-fn-per-file
 
 install:
 	$(INSTALL) -d "$(BIN_DIR)"
@@ -130,6 +150,24 @@ check:
 	bash -O globstar -c 'shellcheck -x bin/* lib/**/*.sh'
 	shfmt -d -i 2 -ci -bn -s bin/ lib/ hooks/ tests/
 	bats -r tests/
+	$(MAKE) check-no-docker
+
+# `.plan/` is a developer-local scratch directory (not committed) used by
+# planning tools (e.g. prex, review-loop). It is excluded here so transient
+# planning artifacts cannot trip the grep gate; keep this filter in place.
+check-no-docker:
+	@hits=$$(grep -rniE 'docker(file)?' $(CHECK_NO_DOCKER_GLOBS) . \
+	  | grep -v '/.git/' \
+	  | grep -v '/.plan/' \
+	  | grep -v '/node_modules/' \
+	  | grep -vE $(CHECK_NO_DOCKER_PATH_EXCLUDES) \
+	  | grep -vE '$(CHECK_NO_DOCKER_WHITELIST)' \
+	  || true); \
+	if [ -n "$$hits" ]; then \
+	  echo "check-no-docker: forbidden docker/Dockerfile references:" >&2; \
+	  echo "$$hits" >&2; \
+	  exit 1; \
+	fi
 
 gate-no-eval:
 	! grep -rn --include='*.sh' -E '^[[:space:]]*eval\b' bin lib hooks | grep -v '# allow-eval'

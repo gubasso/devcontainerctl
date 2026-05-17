@@ -139,13 +139,13 @@ BASEJSON
 create_image_fixture() {
   local name="$1"
   mkdir -p "${XDG_DATA_HOME}/dctl/images/${name}"
-  touch "${XDG_DATA_HOME}/dctl/images/${name}/Dockerfile"
+  touch "${XDG_DATA_HOME}/dctl/images/${name}/Containerfile"
 }
 
 create_user_image_fixture() {
   local name="$1"
   mkdir -p "${XDG_CONFIG_HOME}/dctl/images/${name}"
-  touch "${XDG_CONFIG_HOME}/dctl/images/${name}/Dockerfile"
+  touch "${XDG_CONFIG_HOME}/dctl/images/${name}/Containerfile"
 }
 
 setup() {
@@ -531,7 +531,7 @@ YAML
 }
 
 # bats test_tags=integration
-@test "make install puts Dockerfiles in DATA_DIR/images" {
+@test "make install puts Containerfiles in DATA_DIR/images" {
   local bin_dir data_home lib_dir
   bin_dir="${TEST_TMPDIR}/bin"
   data_home="${TEST_TMPDIR}/data-home"
@@ -545,7 +545,7 @@ YAML
 
   [ -d "${lib_dir}/commands" ]
   [ -f "${lib_dir}/commands/deploy/_dispatch.sh" ]
-  [ -f "${data_home}/dctl/images/agents/Dockerfile" ]
+  [ -f "${data_home}/dctl/images/agents/Containerfile" ]
   [ -f "${data_home}/dctl/images/zig-dev/zig-zls-init" ]
   [ -x "${data_home}/dctl/images/zig-dev/zig-zls-init" ]
   [ -f "${data_home}/dctl/devcontainers/python/devcontainer.json" ]
@@ -804,7 +804,7 @@ YAML
   [[ $output == *"No devcontainer config found"* ]]
 }
 
-# --- Deploy / init / Dockerfile resolution ---
+# --- Deploy / init / Containerfile resolution ---
 
 @test "cmd_deploy --help lists new subcommands and flags" {
   run cmd_deploy --help
@@ -864,14 +864,14 @@ YAML
 
 @test "cmd_deploy image copies recursive supporting files and preserves executable bits" {
   create_image_fixture zig-dev
-  printf 'FROM alpine\n' >"${XDG_DATA_HOME}/dctl/images/zig-dev/Dockerfile"
+  printf 'FROM alpine\n' >"${XDG_DATA_HOME}/dctl/images/zig-dev/Containerfile"
   mkdir -p "${XDG_DATA_HOME}/dctl/images/zig-dev/hooks"
   printf '#!/usr/bin/env bash\nexit 0\n' >"${XDG_DATA_HOME}/dctl/images/zig-dev/hooks/bootstrap.sh"
   chmod 755 "${XDG_DATA_HOME}/dctl/images/zig-dev/hooks/bootstrap.sh"
 
   run cmd_deploy image zig-dev
   [ "$status" -eq 0 ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/images/zig-dev/Dockerfile" ]
+  [ -f "${XDG_CONFIG_HOME}/dctl/images/zig-dev/Containerfile" ]
   [ -f "${XDG_CONFIG_HOME}/dctl/images/zig-dev/hooks/bootstrap.sh" ]
   [ -x "${XDG_CONFIG_HOME}/dctl/images/zig-dev/hooks/bootstrap.sh" ]
 }
@@ -889,24 +889,24 @@ YAML
 
 @test "cmd_deploy --reset backs up and overwrites shipped files but preserves user-only siblings" {
   create_image_fixture agents
-  printf 'FROM installed\n' >"${XDG_DATA_HOME}/dctl/images/agents/Dockerfile"
+  printf 'FROM installed\n' >"${XDG_DATA_HOME}/dctl/images/agents/Containerfile"
   mkdir -p "${XDG_CONFIG_HOME}/dctl/images/agents"
-  printf 'FROM custom\n' >"${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile"
+  printf 'FROM custom\n' >"${XDG_CONFIG_HOME}/dctl/images/agents/Containerfile"
   printf 'notes\n' >"${XDG_CONFIG_HOME}/dctl/images/agents/notes.txt"
 
   run cmd_deploy image agents --reset
   [ "$status" -eq 0 ]
-  [ "$(cat "${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile")" = "FROM installed" ]
+  [ "$(cat "${XDG_CONFIG_HOME}/dctl/images/agents/Containerfile")" = "FROM installed" ]
   [ -f "${XDG_CONFIG_HOME}/dctl/images/agents/notes.txt" ]
   [ "$(cat "${XDG_CONFIG_HOME}/dctl/images/agents/notes.txt")" = "notes" ]
   # Backup must live next to the original (same parent dir), not somewhere else.
   local backups
-  backups=("${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile.bak."*)
+  backups=("${XDG_CONFIG_HOME}/dctl/images/agents/Containerfile.bak."*)
   [ "${#backups[@]}" -eq 1 ]
   [ -f "${backups[0]}" ]
   [ "$(cat "${backups[0]}")" = "FROM custom" ]
   # Backup timestamp suffix must match `date -u '+%Y-%m-%dT%H-%M-%SZ'` exactly.
-  local suffix="${backups[0]##*Dockerfile.bak.}"
+  local suffix="${backups[0]##*Containerfile.bak.}"
   [[ $suffix =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z$ ]]
   # No stray backups in unrelated directories.
   run ! compgen -G "${XDG_CONFIG_HOME}/dctl/images/agents/notes.txt.bak.*"
@@ -1029,54 +1029,54 @@ YAML
 
 @test "cmd_deploy --all deploys both categories and managed shared layers" {
   create_template_fixture python "devimg/python-dev:latest"
-  printf 'FROM alpine\n' >"${XDG_DATA_HOME}/dctl/images/agents/Dockerfile"
+  printf 'FROM alpine\n' >"${XDG_DATA_HOME}/dctl/images/agents/Containerfile"
 
   run cmd_deploy --all
   [ "$status" -eq 0 ]
   [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json" ]
   [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json" ]
   [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml" ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile" ]
+  [ -f "${XDG_CONFIG_HOME}/dctl/images/agents/Containerfile" ]
 }
 
 @test "cmd_deploy --all-devcontainers deploys selectable manifests and managed shared layers only" {
   create_template_fixture python "devimg/python-dev:latest"
-  printf 'FROM alpine\n' >"${XDG_DATA_HOME}/dctl/images/agents/Dockerfile"
+  printf 'FROM alpine\n' >"${XDG_DATA_HOME}/dctl/images/agents/Containerfile"
 
   run cmd_deploy --all-devcontainers
   [ "$status" -eq 0 ]
   [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json" ]
   [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json" ]
   [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml" ]
-  [ ! -e "${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile" ]
+  [ ! -e "${XDG_CONFIG_HOME}/dctl/images/agents/Containerfile" ]
 }
 
 @test "cmd_deploy --all-images deploys images only" {
-  printf 'FROM alpine\n' >"${XDG_DATA_HOME}/dctl/images/agents/Dockerfile"
+  printf 'FROM alpine\n' >"${XDG_DATA_HOME}/dctl/images/agents/Containerfile"
 
   run cmd_deploy --all-images
   [ "$status" -eq 0 ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile" ]
+  [ -f "${XDG_CONFIG_HOME}/dctl/images/agents/Containerfile" ]
   [ ! -e "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json" ]
 }
 
-@test "resolve_dockerfile fails when only installed image exists" {
+@test "resolve_containerfile fails when only installed image exists" {
   create_image_fixture agents
 
-  run resolve_dockerfile agents
+  run resolve_containerfile agents
   [ "$status" -ne 0 ]
 }
 
-@test "resolve_dockerfile returns user config path" {
+@test "resolve_containerfile returns user config path" {
   create_user_image_fixture agents
 
-  run resolve_dockerfile agents
+  run resolve_containerfile agents
   [ "$status" -eq 0 ]
   [[ $output == *"xdg-config"* ]]
 }
 
-@test "resolve_dockerfile fails for unknown target" {
-  run resolve_dockerfile nonexistent
+@test "resolve_containerfile fails for unknown target" {
+  run resolve_containerfile nonexistent
   [ "$status" -ne 0 ]
 }
 
@@ -1430,7 +1430,7 @@ JSON
   [ "$(jq -r '.image' "${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json")" = "devimg/python-dev:latest" ]
 }
 
-@test "cmd_init errors when managed image Dockerfile is not deployed" {
+@test "cmd_init errors when managed image Containerfile is not deployed" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
 
@@ -1493,8 +1493,7 @@ JSON
   [ -f "$deployed" ]
   [ -f "$registry" ]
   [ "$(yq -r ".\"${canonical}\"[\"devcontainer-manifest\"]" "$registry")" = "python" ]
-  [ "$(yq -r ".\"${canonical}\".dockerfile // \"\"" "$registry")" = "" ]
-  [ "$(yq -r ".\"${canonical}\".image // \"\"" "$registry")" = "" ]
+  [ "$(yq -r ".\"${canonical}\" | keys | join(\",\")" "$registry")" = "devcontainer-manifest" ]
   [ "$(yq -r ".\"${canonical}\" | has(\"sibling_discovery\")" "$registry")" = "false" ]
 }
 
@@ -1580,8 +1579,7 @@ YAML
   run cmd_init_do --force --devcontainer python
   [ "$status" -eq 0 ]
   [ "$(yq -r ".\"${canonical}\"[\"devcontainer-manifest\"]" "$registry")" = "python" ]
-  [ "$(yq -r ".\"${canonical}\".dockerfile // \"\"" "$registry")" = "" ]
-  [ "$(yq -r ".\"${canonical}\".image // \"\"" "$registry")" = "" ]
+  [ "$(yq -r ".\"${canonical}\" | keys | join(\",\")" "$registry")" = "devcontainer-manifest,sibling_discovery" ]
   [ "$(yq -r ".\"${canonical}\".sibling_discovery" "$registry")" = "false" ]
 }
 

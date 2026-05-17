@@ -40,7 +40,7 @@ _discover_installed_images() {
   shopt -s nullglob
   local dir name
   for dir in "$IMAGES_DIR"/*/; do
-    [[ -f "${dir}Dockerfile" ]] || continue
+    [[ -f "${dir}Containerfile" ]] || continue
     name="$(basename "$dir")"
     targets+=("$name")
   done
@@ -53,7 +53,7 @@ _discover_deployed_images() {
   shopt -s nullglob
   local dir name
   for dir in "$DCTL_IMAGES_DIR"/*/; do
-    [[ -f "${dir}Dockerfile" ]] || continue
+    [[ -f "${dir}Containerfile" ]] || continue
     name="$(basename "$dir")"
     targets+=("$name")
   done
@@ -88,7 +88,7 @@ _category_deployed_root() {
 _preview_file_for_category() {
   case "$1" in
     devcontainer) printf 'devcontainer.json\n' ;;
-    image) printf 'Dockerfile\n' ;;
+    image) printf 'Containerfile\n' ;;
     *) err "Unknown deploy category: $1" ;;
   esac
 }

@@ -10,7 +10,7 @@ devcontainer settings into the template system.
 ## Problem Solved
 
 The old approach mixed image-building concerns with shared devcontainer config.
-That made the agents Dockerfile carry mounts, environment, and lifecycle
+That made the agents Containerfile carry mounts, environment, and lifecycle
 settings that belonged in templates instead.
 
 ## Landed Architecture
@@ -28,7 +28,7 @@ The implemented system now uses:
 - `general` became the user-facing generic template name
 - `dctl init` now seeds config into XDG config, merges into XDG cache, and
   registers the generated path
-- the agents Dockerfile is now a pure container builder
+- the agents Containerfile is now a pure container builder
 - documentation and acceptance criteria were updated to the cache-based model
 
 ## Migration Note

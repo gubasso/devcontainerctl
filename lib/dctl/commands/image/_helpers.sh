@@ -16,7 +16,7 @@ discover_image_targets() {
   shopt -s nullglob
   local dir name
   for dir in "$DCTL_IMAGES_DIR"/*/; do
-    if [[ -f "${dir}Dockerfile" ]]; then
+    if [[ -f "${dir}Containerfile" ]]; then
       name="$(basename "$dir")"
       targets+=("$name")
     fi
@@ -26,7 +26,7 @@ discover_image_targets() {
   printf '%s\n' "${targets[@]}"
 }
 
-resolve_dockerfile() {
+resolve_containerfile() {
   local target="$1"
   local user_path
   user_path="$(config_image_path "$target")"

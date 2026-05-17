@@ -135,7 +135,7 @@ generate_cached_devcontainer() {
     err "Failed to merge allowlist into cache for '$template'"
   fi
   mv "${tmp_path}.allow" "$tmp_path"
-  # TODO(70): honor manifest runtime.resources block when schema support lands.
+  # TODO(post-70): honor manifest runtime.resources block; schema support added in round 70.
   if ! jq '
     .runArgs = (
       (.runArgs // []) as $args

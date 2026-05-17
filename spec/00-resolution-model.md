@@ -6,7 +6,7 @@
 
 This document defines the implemented config resolution model used by `dctl`.
 It covers `devcontainer.json` resolution, managed asset deployment, and the
-Dockerfile resolution used by `dctl image build`.
+Containerfile resolution used by `dctl image build`.
 
 ## Goals
 
@@ -39,10 +39,10 @@ The implemented split is:
   - project registry
   - user defaults
   - deployed devcontainer config
-  - user Dockerfile overrides
+  - user Containerfile overrides
 - `~/.local/share/dctl/`
   - installed templates
-  - installed managed Dockerfiles
+  - installed managed Containerfiles
   - schemas
 - `~/.cache/dctl/`
   - generated merged `devcontainer.json` files
@@ -57,7 +57,7 @@ If files are not in `~/.config/dctl/`, they cannot be used at runtime.
 - `dctl deploy` copies managed assets from installed data into user config
 - Runtime operations read only from user config and cache
 
-This rule applies to both managed Dockerfiles and managed devcontainer
+This rule applies to both managed Containerfiles and managed devcontainer
 templates.
 
 ## Path Normalization
@@ -74,7 +74,7 @@ workspace folder itself.
 - `Using devcontainer config from CLI flag: ...`
 - `Using devcontainer config from project registry: <project> (manifest: <name>) -> ...`
 - `Using devcontainer config from sibling repo: ...`
-- `Using Dockerfile override from ...`
+- `Using Containerfile override from ...`
 
 ## Dev Container CLI Integration
 
@@ -95,16 +95,16 @@ Sibling discovery is deterministic:
 Sibling discovery is skipped when the project registry sets
 `sibling_discovery: false`.
 
-## Dockerfile Resolution Scope
+## Containerfile Resolution Scope
 
-Dockerfile resolution applies only to `dctl image build`.
+Containerfile resolution applies only to `dctl image build`.
 
 For a managed target, resolution is:
 
-1. `~/.config/dctl/images/<target>/Dockerfile`
+1. `~/.config/dctl/images/<target>/Containerfile`
 
 No-arg `dctl image build` presents an interactive picker over deployed managed
-images and never consults the project registry. Installed Dockerfiles are seed
+images and never consults the project registry. Installed Containerfiles are seed
 sources only and must be copied into user config by `dctl deploy image ...` or
 `dctl deploy --all-images`.
 

@@ -127,7 +127,7 @@ Both projects exist to run AI coding agents (Copilot, Gemini, Claude Code) insid
 
 ### 7.3 Structural subset
 
-ai-agents-sandbox's feature set is expressible inside `dctl` as a single `runtime: krun` manifest plus a slim image whose `Containerfile` mirrors `image/Containerfile`. The inverse direction — folding `dctl` into ai-agents-sandbox — would require rebuilding the manifest/composition layer that [SPEC.md §1.3](./SPEC.md) commits to, i.e., reconstructing most of what `dctl` is.
+ai-agents-sandbox's feature set is expressible inside `dctl` as a single `runtime: { name: krun }` manifest plus a slim image whose `Containerfile` mirrors `image/Containerfile`. The inverse direction — folding `dctl` into ai-agents-sandbox — would require rebuilding the manifest/composition layer that [SPEC.md §1.3](./SPEC.md) commits to, i.e., reconstructing most of what `dctl` is.
 
 The one structural axis that does not map cleanly: ai-agents-sandbox's "single persistent home across all projects" model contradicts `dctl`'s per-project workspace premise ([SPEC.md §1.3](./SPEC.md)). Reconciliation requires either a shared-home leaf pattern in the manifest or accepting a per-project volume model in a `dctl` agent preset.
 

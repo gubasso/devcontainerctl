@@ -1,12 +1,12 @@
 # Sandbox Runtime — Implementation Plan (overview)
 
-> Status: Active (execution in progress via per-round briefs under [`plans/`](plans/))
-> Date: 2026-05-13
+> Status: Complete
+> Date: 2026-05-17
 > Scope: Implement the `dctl` container runtime as **libkrun via `crun --krun`, fronted by rootless Podman** — podman-first throughout. The adapter shells out to `podman` directly; `dctl` interprets `devcontainer.json` itself.
 > Companions: [SPEC.md](./SPEC.md), [DECISION.md](./DECISION.md), [DECISION-LINUX.md](./DECISION-LINUX.md), [RUNTIMES.md](./RUNTIMES.md), [COMPARISON-AI-AGENTS-SANDBOX.md](./COMPARISON-AI-AGENTS-SANDBOX.md)
 > Reference implementation mined for working code: [`val4oss/ai-agents-sandbox`](https://github.com/val4oss/ai-agents-sandbox).
 
-This document is the **stable overview** of the sandbox-runtime refactor. The per-phase execution detail lives in [`plans/`](plans/) as one `/prex` task brief per round. The briefs are ephemeral — each is deleted after its round merges, with durable content promoted to its permanent home elsewhere in the repo. See [`plans/README.md`](plans/README.md) for invocation, run order, and status.
+This document is the **stable overview** of the sandbox-runtime refactor. The per-phase execution briefs were ephemeral working notes used during implementation; durable outcomes are captured here and in the companion docs listed above.
 
 ## Context
 
@@ -73,18 +73,18 @@ Inside `krun.sh`, the lifecycle (all calls go to `podman` directly; no other con
 - `rt_build`: `podman build --build-arg ... -t <tag> <path>`.
 - `rt_image_inspect`: `podman image inspect <ref>` returning 0 on hit.
 
-## Per-round briefs
+## Refactor history
 
-Each `/prex` round consumes one brief from [`plans/`](plans/). Status is tracked in [`plans/README.md`](plans/README.md). Run sequentially:
+The sandbox-runtime refactor landed in these implementation rounds:
 
-- [x] **[00 — preflight-doctor](plans/00-preflight-doctor.md)** — Host preflight (`+LIBKRUN` build flag, `/dev/kvm`, kvm group, subuid/subgid, cgroups v2, network backend, nested-virt warn) + new `dctl doctor` sibling subcommand + new `docs/INSTALL.md`. Companion edits: `docs/QUICKSTART.md` Prerequisites block, `docs/CLAUDE.md` Quick Orientation block, `dctl test` deprecation banner.
-- [x] **10 — runtime-adapter-and-lifecycle** — `lib/dctl/runtime/{common,krun}.sh` (the only backend) + `lib/dctl/lifecycle.sh` (the self-owned devcontainer.json interpreter) + close the `init.sh:84` merge-logic gap so `runArgs`/`workspaceMount`/`workspaceFolder` are first-class. Smoke verifies `init.krun` kernel separation.
-- [x] **15a — helper-tree-and-autoload** — Phase 1.5 part A: extract `lib/dctl/_lib/` (one function per file), rewrite `bin/dctl` around `__dctl_dispatch`, ship `lib/dctl/CLAUDE.md`.
-- [x] **15b — command-tree-extraction** — Phase 1.5 part B: extract `commands/{ws,image,init,test,doctor,deploy,config}/` (one verb per file), add `tests/structure_test.bats` enforcing the layout invariants, re-anchor pre-reorg line numbers in subsequent briefs. `deploy.sh` (594 LOC) is the heaviest single module.
-- [x] **20 — ws-and-image-adapter-rewire** — Phases 2 + 3 combined: route every `dctl ws` and `dctl image` shell-out through `rt_*`. `commands/init/_generate_cache.sh` emits the `--runtime krun` runArgs overlay; default krun resource annotations (`krun.ram_mib`, `krun.cpus`) are injected by the `rt_run` adapter (`runtime/krun.sh:_krun_default_annotations`). Moving the annotations into the cached config is deferred to plan 70 when the `runtime.resources` schema lands.
-- [x] **40 — tier0-hygiene-and-egress** — Phases 4 + 5 combined: drop /tmp host bind, `--cap-drop=ALL`, `--security-opt=no-new-privileges`, ephemeral token forwarding (`_lib/auth/ephemeral_creds.sh`), new `docs/SECURITY.md`, default-deny egress allowlist via new `commands/net/*` + in-VM nftables (Option A).
-- [x] **60 — test-suite** — Phase 6: refactor `tests/dctl_test.bats` (1,749 LOC) to call into the adapter via mocks; add `tests/{runtime_krun,auth_token_forwarding,net_allowlist}_test.bats`; add a KVM-required `integration` smoke target.
-- [ ] **[70 — renames-and-docs-sweep](plans/70-renames-and-docs-sweep.md)** — Phase 7: schema extensions (`runtime`, `runtime.resources`, `network.allow`), `git mv` Dockerfile → Containerfile (4 image files), top-level + sub-docs + legacy `spec/` sweep, final `Docker(file)?` grep gate (CI-enforced).
+- `00`: host preflight checks, `dctl doctor`, and install-path documentation.
+- `10`: runtime adapter and lifecycle interpreter on top of rootless Podman and libkrun.
+- `15a`: helper-tree extraction and lazy-loading dispatcher support.
+- `15b`: command-tree extraction and structure-test enforcement.
+- `20`: workspace and image commands rewired through the runtime adapter.
+- `40`: tier-0 hygiene, ephemeral credential forwarding, and default-deny egress controls.
+- `60`: test-suite expansion for runtime, auth-token forwarding, and network allowlists.
+- `70`: manifest schema extensions (`runtime`, `runtime.resources`, `network.allow`), managed image `Containerfile` renames, documentation/spec sweep, and the CI grep gate that keeps legacy engine terminology from re-entering the tree.
 
 ## Verification
 
@@ -118,8 +118,8 @@ The refactor is complete when **all** of the following pass on an openSUSE Tumbl
 
 ## Execution notes
 
-- This plan is **executed one round per `/prex` invocation**. Each phase is independently committable; commit cadence is one commit per round (the prex workflow may produce more than one commit if stage 4 review surfaces fixes).
+- This plan was executed one round per `/prex` invocation. Each phase was independently committable; the execution briefs are now removed because the refactor is complete.
 - **Round 10 (Phase 1) ships the lifecycle interpreter and the `podman` adapter together.** There is no fallback path — the lifecycle interpreter is the only path. `lib/dctl/lifecycle.sh` needs only the keys `dctl` actually consumes (`postCreateCommand`, `postStartCommand`, `remoteEnv`, `containerEnv`, `mounts`, `runArgs`, `remoteUser`, `workspaceFolder`, `workspaceMount`, `build`) — not the full Microsoft schema.
 - **Rounds 15a + 15b (Phase 1.5) must run before rounds 20–70 touch any module they're going to rewrite.** They are pure rename/extract passes with no behavior change, so they commit cleanly between two semantic phases. Round 15b includes a one-time edit pass that re-anchors every pre-reorg line-number reference in the subsequent briefs (20, 40, 60, 70) so later rounds work against accurate paths.
-- **Round 70 (Phase 7) is non-optional and not a doc-only afterthought.** The grep gate at round 70 §9 is the final acceptance bar: if any `docker`/`Docker` reference survives outside the documented whitelist, the implementation is not done. CI enforces this gate going forward.
+- **Round 70 (Phase 7) closed the rename-and-docs sweep.** The grep gate remains the final acceptance bar: if any legacy container-engine reference survives outside the documented whitelist, the implementation is not done. CI enforces this gate going forward.
 - ai-agents-sandbox is the closest available reference implementation of the same stack. Lift the preflight (`_check_microvm`), the libkrun version constant, the libkrun#674 workaround, and the resource-annotation defaults verbatim where they apply.

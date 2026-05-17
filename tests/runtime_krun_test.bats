@@ -116,16 +116,16 @@ teardown() {
   assert_argv_call podman 1 rm -f ctr123 ctr456
 }
 
-@test "rt_build emits podman build with dockerfile path and gh secret" {
+@test "rt_build emits podman build with containerfile path and gh secret" {
   mkdir -p "${TEST_TMPDIR}/context"
-  touch "${TEST_TMPDIR}/context/Dockerfile"
+  touch "${TEST_TMPDIR}/context/Containerfile"
   record_argv_mock podman 0
   # shellcheck disable=SC2329
   _extract_gh_token() { printf 'ghp_build'; }
 
   run rt_build agents "${TEST_TMPDIR}/context"
   [ "$status" -eq 0 ]
-  assert_argv_contains_sequence podman 1 build --tag devimg/agents:latest --file "${TEST_TMPDIR}/context/Dockerfile"
+  assert_argv_contains_sequence podman 1 build --tag devimg/agents:latest --file "${TEST_TMPDIR}/context/Containerfile"
   assert_mock_called "--secret id=gh_token,src="
   assert_mock_called "${TEST_TMPDIR}/context"
 }

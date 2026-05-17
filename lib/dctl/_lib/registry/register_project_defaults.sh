@@ -68,7 +68,12 @@ register_project_defaults() {
     # path of the form `<...>/<manifest>/devcontainer.json` (the only shape
     # the prior contract emitted), derive `devcontainer-manifest` from
     # basename(dirname(path)) when the manifest field is not already set.
-    # Then drop the legacy `devcontainer`, `dockerfile`, and `image` keys.
+    # Then drop the legacy `devcontainer`, `dockerfile`, and `image`
+    # keys. The `del(.dockerfile)` expression below is the migration
+    # path that strips the deprecated `dockerfile` key from project
+    # configs; do not rename it. This file is path-excluded from the
+    # check-no-docker grep gate (see Makefile) precisely so this
+    # legacy-migration code can stay plain-English.
     # Entries that have neither key are left untouched. Any derived manifest
     # name that does not match the schema pattern is caught by the post-write
     # _validate_registry call below.

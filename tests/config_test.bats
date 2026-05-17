@@ -139,6 +139,8 @@ YAML
   [ "$output" = "false" ]
 }
 
+# Exercises the legacy image-selector migration path in
+# register_project_defaults.sh. Do not rename -- see round 70 notes.
 @test "registry validation rejects dockerfile key" {
   cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<'YAML'
 proj:

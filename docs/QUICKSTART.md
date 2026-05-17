@@ -2,7 +2,11 @@
 
 ## Prerequisites
 
-- Podman (rootless) + libkrun + crun-krun (run `dctl doctor` to verify)
+- openSUSE Tumbleweed with rootless Podman
+- `crun` built with `+LIBKRUN`, plus `libkrun` and `libkrunfw`
+- `pasta` or `slirp4netns` for rootless networking
+- `/dev/kvm` access for your user (`kvm` group on openSUSE)
+- Run `dctl doctor` before the first workspace start to verify the host
 
 ## Setup
 
@@ -15,6 +19,8 @@ dctl init --devcontainer python
 dctl ws up
 dctl ws shell
 ```
+
+See [INSTALL.md](INSTALL.md) for the package, networking, and KVM setup details.
 
 ## How Composition Works
 
@@ -38,8 +44,9 @@ project-specific settings and is protected from overwrites on deploy. All
 preceding layers are **shared** and reconciled automatically.
 
 Manifests are validated against `schemas/compose.schema.yaml` (JSON Schema
-Draft 2020-12). The only field is `layers` (non-empty array of strings);
-the filename stem is the manifest name.
+Draft 2020-12). `layers` is required, and optional `runtime` / `network`
+policy keys can be added at the manifest root when needed. The filename stem
+is the manifest name.
 
 ## Available Configs
 
@@ -57,7 +64,6 @@ To compose a custom layer stack, create a manifest in user config:
 
 ```yaml
 # ~/.config/dctl/devcontainer/myproject.yaml
-name: myproject
 layers:
   - base
   - agents      # include if you want the bundled seccomp profile + agent mounts
@@ -86,4 +92,4 @@ dctl test
 
 ## Full Documentation
 
-See [README.md](../README.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
+See [README.md](../README.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [INSTALL.md](INSTALL.md).

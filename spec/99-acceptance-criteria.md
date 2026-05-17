@@ -12,7 +12,7 @@ The current bats suite covers the main acceptance areas:
 - config precedence and error handling
 - registry parsing, validation, and sibling-discovery opt-out
 - template discovery, merge behavior, and cache invalidation
-- Dockerfile hierarchy behavior
+- Containerfile hierarchy behavior
 - install and systemd integration paths
 
 ## Acceptance Scenarios
@@ -143,32 +143,32 @@ Expected result:
 - The global default is selected
 - Resolution logging identifies the source as the user global default
 
-### 11. Dockerfile user override
+### 11. Containerfile user override
 
 Scenario:
 
-- `~/.config/dctl/images/agents/Dockerfile` exists
+- `~/.config/dctl/images/agents/Containerfile` exists
 - User runs `dctl image build agents`
 
 Expected result:
 
-- The user Dockerfile is used
+- The user Containerfile is used
 - Installed files are not consulted at runtime
 
 ### 12. Image build target selection
 
 Scenario:
 
-- `~/.config/dctl/images/agents/Dockerfile` exists
+- `~/.config/dctl/images/agents/Containerfile` exists
 - User runs `dctl image build agents`
 
 Expected result:
 
-- `devimg/agents:latest` is built from the deployed managed Dockerfile
+- `devimg/agents:latest` is built from the deployed managed Containerfile
 
 Scenario:
 
-- `~/.config/dctl/images/agents/Dockerfile` exists
+- `~/.config/dctl/images/agents/Containerfile` exists
 - User runs `dctl image build` in a TTY with `fzf` available
 
 Expected result:
@@ -179,7 +179,7 @@ Expected result:
 
 Scenario:
 
-- `~/.config/dctl/images/agents/Dockerfile` exists
+- `~/.config/dctl/images/agents/Containerfile` exists
 - User runs `dctl image build` with no args and `fzf` is missing
 
 Expected result:
@@ -188,7 +188,7 @@ Expected result:
 
 Scenario:
 
-- `~/.config/dctl/images/agents/Dockerfile` exists
+- `~/.config/dctl/images/agents/Containerfile` exists
 - User runs `dctl image build` with no args and stdin is not a TTY
 
 Expected result:
@@ -293,16 +293,16 @@ Expected result:
 - `dctl` regenerates the cached config without error
 - Behavior is identical to a fresh install
 
-### 22. Dockerfile is a pure container builder
+### 22. Containerfile is a pure container builder
 
 Scenario:
 
-- Docker image is built from `images/agents/Dockerfile`
+- Podman image is built from `images/agents/Containerfile`
 
 Expected result:
 
-- Shared devcontainer config lives in templates, not in the Dockerfile
-- The Dockerfile focuses on image construction only
+- Shared devcontainer config lives in templates, not in the Containerfile
+- The Containerfile focuses on image construction only
 
 ### 23. Shared layers are excluded from config discovery
 
@@ -357,14 +357,14 @@ Expected result:
 
 Scenario:
 
-- `~/.config/dctl/images/python-dev/Dockerfile` exists and differs from the
+- `~/.config/dctl/images/python-dev/Containerfile` exists and differs from the
   installed copy
 - User runs `dctl deploy image python-dev --reset`
 
 Expected result:
 
-- The existing file is backed up to `Dockerfile.bak.<UTC-ISO-DATE>`
-- The shipped Dockerfile is copied into place
+- The existing file is backed up to `Containerfile.bak.<UTC-ISO-DATE>`
+- The shipped Containerfile is copied into place
 - user-only neighboring files are untouched
 
 ### 28. `init` registers from deployed config only
@@ -372,7 +372,7 @@ Expected result:
 Scenario:
 
 - `~/.config/dctl/devcontainer/python/devcontainer.json` exists
-- `~/.config/dctl/images/python-dev/Dockerfile` exists
+- `~/.config/dctl/images/python-dev/Containerfile` exists
 - User runs `dctl init --devcontainer python`
 
 Expected result:
@@ -400,8 +400,8 @@ Scenario:
 
 - `~/.config/dctl/devcontainer/python/devcontainer.json` references
   `devimg/python-dev:latest`
-- `~/.config/dctl/images/python-dev/Dockerfile` exists
-- `docker image inspect devimg/python-dev:latest` fails
+- `~/.config/dctl/images/python-dev/Containerfile` exists
+- `podman image inspect devimg/python-dev:latest` fails
 - User runs `dctl init --devcontainer python`
 
 Expected result:

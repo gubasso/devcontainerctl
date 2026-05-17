@@ -10,6 +10,40 @@ properties:
       minLength: 1
     minItems: 1
     description: Ordered list of layer directory names to compose (last wins for scalars)
+  runtime:
+    type: object
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+        enum:
+          - krun
+        description: Sandbox runtime backend (currently only krun; gvisor/kata-ch reserved)
+      resources:
+        type: object
+        additionalProperties: false
+        properties:
+          memory_mib:
+            type: integer
+            minimum: 256
+            description: Microvm memory budget in MiB (default 4096; not yet honored -- round-70 schema-only)
+          cpus:
+            type: integer
+            minimum: 1
+            description: Microvm vCPU count (default 2; not yet honored -- round-70 schema-only)
+  network:
+    type: object
+    additionalProperties: false
+    properties:
+      allow:
+        type: array
+        items:
+          type: string
+          minLength: 1
+        description: >
+          Host allowlist; entries are validated by
+          lib/dctl/commands/net/_compose.sh:_net_allowlist_entry_valid
+          (the schema deliberately keeps the type loose to avoid two sources of truth).
 required:
   - layers
 additionalProperties: false

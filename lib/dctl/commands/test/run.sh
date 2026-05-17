@@ -129,7 +129,7 @@ build_workspace_image_if_managed() {
 
   if [[ $image =~ ^devimg/([[:alnum:]._-]+):latest$ ]]; then
     local target="${BASH_REMATCH[1]}"
-    if resolve_dockerfile "$target" >/dev/null 2>&1; then
+    if resolve_containerfile "$target" >/dev/null 2>&1; then
       (cmd_image_build "$target")
       return $?
     fi

@@ -96,7 +96,7 @@ cmd_image_build() {
 
   local target
   for target in "${targets[@]}"; do
-    if ! resolve_dockerfile "$target" >/dev/null 2>&1; then
+    if ! resolve_containerfile "$target" >/dev/null 2>&1; then
       printf '\033[1;31mERROR:\033[0m Unknown image: %s (not seeded in %s)\n' "$target" "$DCTL_IMAGES_DIR" >&2
       printf "Run: dctl deploy image <name> or dctl deploy --all-images\n" >&2
       printf 'Available images:\n' >&2
@@ -134,10 +134,10 @@ cmd_image_build() {
       continue
     fi
 
-    local dockerfile_path
-    dockerfile_path="$(resolve_dockerfile "$target")"
+    local containerfile_path
+    containerfile_path="$(resolve_containerfile "$target")"
     local build_context
-    build_context="$(dirname "$dockerfile_path")"
+    build_context="$(dirname "$containerfile_path")"
     log "Building ${tag} from ${build_context}/"
 
     local -a pull_flag

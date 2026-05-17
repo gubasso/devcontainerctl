@@ -56,5 +56,5 @@ Tests are written with `bats`.
 
 - [README.md](../README.md) — product overview, install, CLI, XDG layout
 - [QUICKSTART.md](QUICKSTART.md) — shortest setup path
-- [ARCHITECTURE.md](ARCHITECTURE.md) — deeper technical rationale and troubleshooting
+- [ARCHITECTURE.md](ARCHITECTURE.md) — Podman/libkrun architecture overview and runtime model
 - [spec/README.md](../spec/README.md) — implemented design/spec set

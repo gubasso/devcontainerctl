@@ -96,7 +96,7 @@ Networking uses **TSI (Transparent Socket Impersonation)**: in-guest sockets are
 | Owned by `dctl` | Owned upstream |
 |---|---|
 | `lib/dctl/runtime/krun.sh` adapter (~80–150 LOC bash). | Rootfs construction (handled inside `crun-krun`). |
-| `runtime: krun` value in `schemas/compose.schema.yaml`. | Kernel image (libkrun bundles or fetches it). |
+| `runtime.name: krun` value in `schemas/compose.schema.yaml`. | Kernel image (libkrun bundles or fetches it). |
 | KVM-detection probe with a clear error message when KVM is missing. | In-guest init / agent. |
 | Tier-0 policies (egress allowlist, scoped/ephemeral mounts, `no-new-privileges`, `cap-drop=ALL`). Runtime-agnostic. | KVM interface, virtio devices. |
 | Rootless-Podman defaults (pasta networking, `userns=auto:size=65536`) — already needed for [SPEC.md §5.2 Tier 1](./SPEC.md). | TSI networking (no TAP/bridge plumbing). |
@@ -155,7 +155,7 @@ This resolves [SPEC.md §8 — "CI parity"](./SPEC.md): **gVisor on KVM-less CI 
 | **Kata-FC** | Containerd dependency; devmapper snapshotter friction; no security delta. | Dropped in [DECISION.md §7](./DECISION.md). |
 | **Kata-CH** | Containerd dependency; no security delta. Reserved as a deferred contingency adapter in case libkrun governance deteriorates. | Catalog-only in [DECISION.md §7](./DECISION.md). |
 | **libkrun-on-HVF parity tracking** | macOS-specific; not relevant when macOS is out of scope. | Tracked upstream; ignored here. |
-| **Multi-backend manifest selection** | This implementation ships one backend value (`runtime: krun`) plus the documented CI fallback (`runtime: gvisor`); the manifest schema can accommodate more values when additional adapters land. | Schema future-compatible; not exposed here. |
+| **Multi-backend manifest selection** | This implementation ships exactly one accepted backend value (`runtime.name: krun`); the gvisor CI fallback is described in prose only and will be added to the schema enum when the adapter lands. | Schema future-compatible; not exposed here. |
 
 ---
 
@@ -168,7 +168,7 @@ The following questions from [SPEC.md §8](./SPEC.md) are resolved:
 | Final §4.1 backend choice | **libkrun via `crun --krun`** on Linux. |
 | CI parity default | **gVisor** on no-KVM CI runners; **libkrun** where KVM is available. |
 | Image distribution: Kata-specific or libkrun-specific build target? | **No new build target.** libkrun consumes the existing `images/` OCI artifacts unchanged via `crun --krun`. |
-| Multi-backend selection at the manifest level | Schema-ready; **not exposed** in this implementation. Only `runtime: krun` (default) and `runtime: gvisor` (documented CI fallback) are surfaced. |
+| Multi-backend selection at the manifest level | Schema-ready; **not exposed** in this implementation. Only `runtime.name: krun` is accepted by `schemas/compose.schema.yaml`; the gvisor CI fallback is documented in prose and will be added to the schema enum together with its adapter. |
 
 These remain unaffected by this decision and apply runtime-agnostically:
 

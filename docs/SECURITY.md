@@ -56,7 +56,7 @@ cache is deleted by `dctl ws down`, including the no-container cleanup path.
 Default container egress is deny-by-default and enforced inside the guest with
 `nftables`, not on the host. The bootstrap script is the in-guest path
 `/usr/local/bin/dctl-egress` (baked into the agents image at build time via
-`images/agents/Dockerfile`; it is not installed on the host), launched by the
+`images/agents/Containerfile`; it is not installed on the host), launched by the
 base layer's `postStartCommand`.
 
 The default allowlist includes:

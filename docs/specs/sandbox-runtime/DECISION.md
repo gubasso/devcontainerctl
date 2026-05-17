@@ -76,7 +76,7 @@ Networking uses **TSI (Transparent Socket Impersonation)**: in-guest sockets are
 | Owned by `dctl` | Owned upstream |
 |---|---|
 | `lib/dctl/runtime/krun.sh` adapter (~80–150 LOC bash). | Rootfs construction (handled inside `crun-krun`). |
-| `runtime: krun` value in `schemas/compose.schema.yaml`. | Kernel image (libkrun bundles or fetches it). |
+| `runtime.name: krun` value in `schemas/compose.schema.yaml`. | Kernel image (libkrun bundles or fetches it). |
 | KVM-detection probe with a clear error message when KVM is missing. | In-guest init / agent. |
 | Tier-0 policies (egress allowlist, scoped/ephemeral mounts, `no-new-privileges`, `cap-drop=ALL`). These are runtime-agnostic anyway. | KVM/HVF interface, virtio devices. |
 | Rootless-Podman defaults (pasta networking, `userns=auto:size=65536`) — already needed for [SPEC.md §5.2 Tier 1](./SPEC.md). | TSI networking (no TAP/bridge plumbing). |

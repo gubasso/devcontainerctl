@@ -61,10 +61,10 @@ config_compose_manifest_path() {
 
 config_image_path() {
   local name="$1"
-  printf '%s/%s/Dockerfile\n' "$DCTL_IMAGES_DIR" "$name"
+  printf '%s/%s/Containerfile\n' "$DCTL_IMAGES_DIR" "$name"
 }
 
 installed_image_path() {
   local name="$1"
-  printf '%s/%s/Dockerfile\n' "$IMAGES_DIR" "$name"
+  printf '%s/%s/Containerfile\n' "$IMAGES_DIR" "$name"
 }

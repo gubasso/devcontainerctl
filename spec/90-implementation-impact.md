@@ -20,11 +20,11 @@ This document records how the approved design work landed in the repository.
 - `lib/dctl/test.sh` resolves config before smoke-test validation
 - `lib/dctl/init.sh` works with deployed config and generated cache paths
 
-### Templates and Dockerfiles
+### Templates and Containerfiles
 
 - `devcontainers/general/` and `devcontainers/coordinator/` are shipped and installed
 - `base` plus manifest-driven multi-layer merge is implemented
-- `lib/dctl/image.sh` resolves user-overridden versus installed Dockerfiles
+- `lib/dctl/image.sh` resolves user-overridden versus installed Containerfiles
 
 ### Project Registry
 
@@ -39,7 +39,7 @@ The bats suite now covers:
 - config precedence
 - registry parsing and validation
 - manifest-driven merge and cache invalidation
-- Dockerfile hierarchy behavior
+- Containerfile hierarchy behavior
 - install/systemd integration paths
 
 ## Result

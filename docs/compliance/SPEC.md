@@ -94,7 +94,7 @@ Symlink resolution is portable (a `while [[ -L ]]` loop). Do not use
 | 2    | Usage error — unknown flag, missing required arg, bad invocation |
 | 3    | Resource not found — project, image, container, config |
 | 4    | Validation error — schema mismatch, bad input |
-| 5    | External dependency failure — docker, devcontainer CLI, network |
+| 5    | External dependency failure — podman, devcontainer CLI, network |
 | 6    | Permission error — not authorized, file perms, EUID |
 | 7    | Precondition failed — already exists, already running, conflict |
 | 8    | Timeout |
@@ -148,7 +148,7 @@ Dumps the entire subcommand tree, flags, and examples in one stream.
 ### `dctl doctor`
 
 Health check. Verifies bash version, required binaries, registry file
-validity, docker daemon reachability, and write access to cache/config/
+validity, podman reachability, and write access to cache/config/
 state dirs. Exit 0 on pass, 5 otherwise. `--json` matches
 `schemas/doctor.schema.json`.
 
@@ -214,10 +214,10 @@ user could set.
   submodules under `test/test_helper/`.
 - One `.bats` file per command, mirroring `lib/dctl/commands/`.
 - `test/test_helper/common-setup.bash` provides shared fixtures
-  (`mock_docker`, `mock_devcontainer`, `tmp_registry`, ...).
+  (`mock_podman`, `mock_devcontainer`, `tmp_registry`, ...).
 - Integration tests are tagged `@integration` and run via
   `make test-integration`. `make test` (unit-only) must run offline
-  with no docker daemon.
+  with no podman service dependency.
 - Every error path has a test asserting the exact exit code.
 
 ## 11. Lint, format, CI

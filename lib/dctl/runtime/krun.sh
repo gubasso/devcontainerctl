@@ -73,7 +73,7 @@ _krun_emit_mount_flag() {
   mount_type="$(jq -r '.type // empty' <<<"$mount_json")"
   source="$(jq -r '.source // .src // empty' <<<"$mount_json")"
   target="$(jq -r '.target // .dst // .destination // empty' <<<"$mount_json")"
-  # `.consistency` is a Docker-Desktop-on-macOS metadata field and is silently
+  # `.consistency` is a macOS desktop-container metadata field and is silently
   # dropped; Podman's `--mount` does not accept it (would surface as a parse
   # error). Track for parity in DECISION-LINUX.md when relevant.
   options=""
@@ -143,33 +143,33 @@ _krun_build_context_dir() {
   printf '%s\n' "$config_dir"
 }
 
-_krun_build_dockerfile_path() {
+_krun_build_containerfile_path() {
   local context_dir="$1"
   local config_path="$2"
   local config_json="$3"
-  local dockerfile config_dir resolved
+  local containerfile config_dir resolved
 
-  dockerfile="$(jq -r '.build.dockerfile // empty' <<<"$config_json")"
-  [[ -n $dockerfile ]] || return 0
+  containerfile="$(jq -r '.build.dockerfile // empty' <<<"$config_json")"
+  [[ -n $containerfile ]] || return 0
 
-  if [[ $dockerfile == /* ]]; then
-    printf '%s\n' "$dockerfile"
+  if [[ $containerfile == /* ]]; then
+    printf '%s\n' "$containerfile"
     return 0
   fi
 
   # Per the Dev Container spec, `build.dockerfile` is relative to the
   # devcontainer.json file (not the build context). Resolve against
   # config_dir first; fall back to context_dir for layouts that store the
-  # Dockerfile alongside the build context (dctl `images/<name>/`).
+  # Containerfile alongside the build context (dctl `images/<name>/`).
   config_dir="$(dirname "$config_path")"
-  resolved="${config_dir}/${dockerfile}"
+  resolved="${config_dir}/${containerfile}"
   if [[ -f $resolved ]]; then
     printf '%s\n' "$resolved"
     return 0
   fi
 
-  if [[ -f "${context_dir}/${dockerfile}" ]]; then
-    printf '%s\n' "${context_dir}/${dockerfile}"
+  if [[ -f "${context_dir}/${containerfile}" ]]; then
+    printf '%s\n' "${context_dir}/${containerfile}"
     return 0
   fi
 
@@ -181,15 +181,15 @@ _krun_build_dockerfile_path() {
 _krun_build_image_name() {
   local config_path="$1"
   local config_json="$2"
-  local image_name dockerfile_path
+  local image_name containerfile_path
 
   image_name="$(basename "$(dirname "$config_path")")"
-  dockerfile_path="$(jq -r '.build.dockerfile // empty' <<<"$config_json")"
-  if [[ -n $dockerfile_path ]]; then
-    dockerfile_path="$(basename "$dockerfile_path")"
-    dockerfile_path="${dockerfile_path%.*}"
-    if [[ -n $dockerfile_path && $dockerfile_path != "Dockerfile" && $dockerfile_path != "Containerfile" ]]; then
-      image_name="$dockerfile_path"
+  containerfile_path="$(jq -r '.build.dockerfile // empty' <<<"$config_json")"
+  if [[ -n $containerfile_path ]]; then
+    containerfile_path="$(basename "$containerfile_path")"
+    containerfile_path="${containerfile_path%.*}"
+    if [[ -n $containerfile_path && $containerfile_path != "Containerfile" ]]; then
+      image_name="$containerfile_path"
     fi
   fi
 
@@ -254,16 +254,16 @@ _krun_rt_run() {
   extra_args=("$@")
 
   image="$(jq -r '.image // empty' <<<"$config_json")"
-  local build_dockerfile=""
-  local -a build_dockerfile_args
+  local build_containerfile=""
+  local -a build_containerfile_args
   if [[ -z $image ]]; then
     if [[ $(jq -r 'has("build")' <<<"$config_json") == "true" ]]; then
       image_name="$(_krun_build_image_name "$config_path" "$config_json")"
       context_dir="$(_krun_build_context_dir "$image_name" "$config_path" "$config_json")"
-      build_dockerfile="$(_krun_build_dockerfile_path "$context_dir" "$config_path" "$config_json")"
-      build_dockerfile_args=()
-      [[ -n $build_dockerfile ]] && build_dockerfile_args=(--dockerfile "$build_dockerfile")
-      _krun_rt_build "$image_name" "$context_dir" "${build_dockerfile_args[@]}"
+      build_containerfile="$(_krun_build_containerfile_path "$context_dir" "$config_path" "$config_json")"
+      build_containerfile_args=()
+      [[ -n $build_containerfile ]] && build_containerfile_args=(--containerfile "$build_containerfile")
+      _krun_rt_build "$image_name" "$context_dir" "${build_containerfile_args[@]}"
       image="$(_krun_get_image_tag "$image_name")"
     else
       err "Resolved devcontainer config has neither .image nor .build: $config_path"
@@ -274,10 +274,10 @@ _krun_rt_run() {
     if [[ $(jq -r 'has("build")' <<<"$config_json") == "true" ]]; then
       image_name="$(_krun_build_image_name "$config_path" "$config_json")"
       context_dir="$(_krun_build_context_dir "$image_name" "$config_path" "$config_json")"
-      build_dockerfile="$(_krun_build_dockerfile_path "$context_dir" "$config_path" "$config_json")"
-      build_dockerfile_args=()
-      [[ -n $build_dockerfile ]] && build_dockerfile_args=(--dockerfile "$build_dockerfile")
-      _krun_rt_build "$image_name" "$context_dir" "${build_dockerfile_args[@]}"
+      build_containerfile="$(_krun_build_containerfile_path "$context_dir" "$config_path" "$config_json")"
+      build_containerfile_args=()
+      [[ -n $build_containerfile ]] && build_containerfile_args=(--containerfile "$build_containerfile")
+      _krun_rt_build "$image_name" "$context_dir" "${build_containerfile_args[@]}"
       image="$(_krun_get_image_tag "$image_name")"
     else
       err "Image not found locally and no build block is available: $image"
@@ -437,18 +437,18 @@ _krun_rt_build() {
   # build does not need KVM/libkrun (no microvm); full preflight stays on rt_run/rt_exec.
   require_cmd podman
 
-  # Optional leading `--dockerfile <path>` lets internal callers pass a
-  # pre-resolved Dockerfile without colliding with the public
+  # Optional leading `--containerfile <path>` lets internal callers pass a
+  # pre-resolved Containerfile without colliding with the public
   # `rt_build <image_name> <context_dir> [--build-arg K=V ...]` contract,
   # which only documents `--build-arg` style flags after the context.
-  local dockerfile_arg=""
-  if [[ ${1:-} == "--dockerfile" ]]; then
-    [[ $# -ge 2 ]] || err "rt_build --dockerfile requires a path"
-    dockerfile_arg="$2"
+  local containerfile_arg=""
+  if [[ ${1:-} == "--containerfile" ]]; then
+    [[ $# -ge 2 ]] || err "rt_build --containerfile requires a path"
+    containerfile_arg="$2"
     shift 2
   fi
 
-  local tag secret_file dockerfile_path token
+  local tag secret_file containerfile_path token
   local -a secret_args build_cmd
 
   tag="$(_krun_get_image_tag "$image_name")"
@@ -461,18 +461,16 @@ _krun_rt_build() {
     secret_args=(--secret "id=gh_token,src=${secret_file}")
   fi
 
-  dockerfile_path=""
-  if [[ -n $dockerfile_arg ]]; then
-    dockerfile_path="$dockerfile_arg"
+  containerfile_path=""
+  if [[ -n $containerfile_arg ]]; then
+    containerfile_path="$containerfile_arg"
   elif [[ -f "${context_dir}/Containerfile" ]]; then
-    dockerfile_path="${context_dir}/Containerfile"
-  elif [[ -f "${context_dir}/Dockerfile" ]]; then
-    dockerfile_path="${context_dir}/Dockerfile"
+    containerfile_path="${context_dir}/Containerfile"
   fi
 
   build_cmd=(podman build --tag "$tag")
-  if [[ -n $dockerfile_path ]]; then
-    build_cmd+=(--file "$dockerfile_path")
+  if [[ -n $containerfile_path ]]; then
+    build_cmd+=(--file "$containerfile_path")
   fi
   build_cmd+=("${secret_args[@]}")
   build_cmd+=("$@")
