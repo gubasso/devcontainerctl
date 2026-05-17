@@ -33,7 +33,7 @@ Tests are written with `bats`.
 
 - Shell scripts use `bash`
 - Formatting and linting run through pre-commit
-- Hook set: `shellcheck`, `shfmt`, `shellharden`, `bashate`, `typos`
+- Hook set: `shellcheck`, `shfmt`, `shellharden`, `bashate`
 
 ## Key Invariants
 

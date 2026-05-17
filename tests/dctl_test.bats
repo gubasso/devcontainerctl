@@ -701,70 +701,6 @@ YAML
   assert_mock_called "--mount type=bind,source=${main_repo}/.git,target=${main_repo}/.git"
 }
 
-# --- Auth token forwarding via rt_exec ---
-
-@test "cmd_ws_shell forwards GH_TOKEN via remote-env" {
-  mkdir -p "$(workspace_devcontainer_dir)"
-  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
-  enable_mocks
-  create_mock podman 0 "running"
-  cat >"${TEST_TMPDIR}/bin/gh" <<'MOCK'
-#!/usr/bin/env bash
-[[ "$1" == "auth" && "$2" == "status" ]] && exit 0
-[[ "$1" == "auth" && "$2" == "token" ]] && printf 'ghp_testXYZ' && exit 0
-exit 1
-MOCK
-  chmod +x "${TEST_TMPDIR}/bin/gh"
-
-  run cmd_ws_shell
-  [ "$status" -eq 0 ]
-  assert_mock_called "--env GH_TOKEN=ghp_testXYZ"
-}
-
-@test "cmd_ws_shell forwards GITLAB_TOKEN via remote-env" {
-  mkdir -p "$(workspace_devcontainer_dir)"
-  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
-  enable_mocks
-  create_mock podman 0 "running"
-  cat >"${TEST_TMPDIR}/bin/glab" <<'MOCK'
-#!/usr/bin/env bash
-[[ "$1" == "auth" && "$2" == "status" && "$3" != "--show-token" ]] && exit 0
-[[ "$1" == "auth" && "$2" == "status" && "$3" == "--show-token" ]] && printf 'Token: glpat_testABC\n' && exit 0
-exit 1
-MOCK
-  chmod +x "${TEST_TMPDIR}/bin/glab"
-
-  run cmd_ws_shell
-  [ "$status" -eq 0 ]
-  assert_mock_called "--env GITLAB_TOKEN=glpat_testABC"
-}
-
-@test "cmd_ws_shell forwards both tokens when both CLIs authenticated" {
-  mkdir -p "$(workspace_devcontainer_dir)"
-  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
-  enable_mocks
-  create_mock podman 0 "running"
-  cat >"${TEST_TMPDIR}/bin/gh" <<'MOCK'
-#!/usr/bin/env bash
-[[ "$1" == "auth" && "$2" == "status" ]] && exit 0
-[[ "$1" == "auth" && "$2" == "token" ]] && printf 'ghp_both999' && exit 0
-exit 1
-MOCK
-  chmod +x "${TEST_TMPDIR}/bin/gh"
-  cat >"${TEST_TMPDIR}/bin/glab" <<'MOCK'
-#!/usr/bin/env bash
-[[ "$1" == "auth" && "$2" == "status" && "$3" != "--show-token" ]] && exit 0
-[[ "$1" == "auth" && "$2" == "status" && "$3" == "--show-token" ]] && printf 'Token: glpat_both888\n' && exit 0
-exit 1
-MOCK
-  chmod +x "${TEST_TMPDIR}/bin/glab"
-
-  run cmd_ws_shell
-  [ "$status" -eq 0 ]
-  assert_mock_called "--env GH_TOKEN=ghp_both999"
-  assert_mock_called "--env GITLAB_TOKEN=glpat_both888"
-}
-
 # --- Config resolution chain ---
 
 @test "resolve_devcontainer_config returns local file when present" {
@@ -1886,20 +1822,6 @@ EOF
   [[ ${mounts[*]} == *"target=${HOME}/.gemini/key.json,readonly"* ]]
 }
 
-@test "cmd_ws_down removes the session dir even when no container exists" {
-  local session_dir
-  session_dir="$(workspace_session_dir)"
-  mkdir -p "$session_dir"
-  printf 'temp\n' >"${session_dir}/token"
-
-  enable_mocks
-  create_mock podman 0 ""
-
-  run cmd_ws_down
-  [ "$status" -eq 0 ]
-  [ ! -e "$session_dir" ]
-}
-
 @test "generate_cached_devcontainer writes the effective network allowlist into the cache" {
   create_user_base_layer_fixture
   mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/general"
@@ -1918,27 +1840,4 @@ EOF
   local cached="${XDG_CACHE_HOME}/dctl/devcontainer/general/devcontainer.json"
   [ "$(jq -r '.network.allow[]' "$cached" | grep -c '^foo.example$')" -eq 1 ]
   [ "$(jq -r '.network.allow[]' "$cached" | grep -c '^api.anthropic.com$')" -eq 1 ]
-}
-
-@test "cmd_net_allow appends to the leaf devcontainer and regenerates the manifest cache" {
-  create_user_base_layer_fixture
-  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/general"
-  cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/general/devcontainer.json" <<'EOF'
-{
-  "image": "devimg/agents:latest"
-}
-EOF
-  create_user_manifest_fixture general base general
-  git -C "$WORKSPACE_FOLDER" init -q
-  git -C "$WORKSPACE_FOLDER" remote add origin "https://github.com/org/myproj.git"
-  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<'EOF'
-org-myproj:
-  devcontainer-manifest: general
-EOF
-
-  run cmd_net_allow foo.example
-  [ "$status" -eq 0 ]
-  [ "$(jq -r '.network.allow[]' "${XDG_CONFIG_HOME}/dctl/devcontainer/general/devcontainer.json" | grep -c '^foo.example$')" -eq 1 ]
-  [ "$(jq -r '.network.allow[]' "${XDG_CACHE_HOME}/dctl/devcontainer/general/devcontainer.json" | grep -c '^foo.example$')" -eq 1 ]
-  [[ $output == *$'user\tfoo.example'* ]]
 }

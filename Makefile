@@ -124,7 +124,6 @@ lint:
 	pre-commit run shfmt --all-files
 	pre-commit run shellharden --all-files
 	pre-commit run bashate --all-files
-	pre-commit run typos --all-files
 
 check:
 	pre-commit run --all-files

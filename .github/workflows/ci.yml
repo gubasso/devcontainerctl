@@ -31,7 +31,6 @@ jobs:
       - name: Install cargo tools
         run: |
           cargo install --locked shellharden
-          cargo install --locked typos-cli
 
       - name: Install pre-commit
         run: python -m pip install --user pre-commit

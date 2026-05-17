@@ -38,7 +38,7 @@ The cross-round dependencies are encoded in each brief's `Depends on:` header. *
 | 15b | command-tree-extraction | Done — <commit-sha-pending> — 2026-05-16 | — | Extract `commands/{ws,image,init,test,doctor,deploy,config}/`; add `tests/structure_test.bats`; re-anchor remaining briefs. |
 | 20 | ws-and-image-adapter-rewire | Done — pending — 2026-05-16 | — | Route `dctl ws` + `dctl image` through `rt_*`. |
 | 40 | tier0-hygiene-and-egress | Done — pending — 2026-05-16 | — | Tier 0 hygiene + `commands/net/*` + in-VM nftables. |
-| 60 | [test-suite](60-test-suite.md) | Pending | — | Bats refactor + 3 new test files. |
+| 60 | test-suite | Done — pending-orchestrator-sha — 2026-05-17 | — | Bats refactor + 3 new test files. |
 | 70 | [renames-and-docs-sweep](70-renames-and-docs-sweep.md) | Pending | — | Schema + Dockerfile→Containerfile + repo-wide docs sweep + final grep gate. |
 
 ## Contingency splits
