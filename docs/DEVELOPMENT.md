@@ -18,7 +18,7 @@ export DCTL_HOME=$PWD/.dctl-dev
 ./bin/dctl ws up
 
 # cleanup (production state is never touched)
-rm -rf "$HOME/.dctl-dev"
+rm -rf "$PWD/.dctl-dev"
 ```
 
 Details below.
@@ -74,14 +74,14 @@ installed `dctl`), it falls back to `$DCTL_HOME/share`.
 So this is all you need from the repo:
 
 ```bash
-export DCTL_HOME=$HOME/.dctl-dev
+export DCTL_HOME=$PWD/.dctl-dev
 ./bin/dctl init
 ./bin/dctl image build agents
 ./bin/dctl ws up
 ```
 
 Override the auto-detect by setting `DCTL_DATA_DIR` explicitly, e.g.
-`DCTL_DATA_DIR=$HOME/.dctl-dev/share` to use a populated install tree
+`DCTL_DATA_DIR=$PWD/.dctl-dev/share` to use a populated install tree
 under the sandbox instead of the repo.
 
 Precedence (highest → lowest): individual `DCTL_*_DIR` / `IMAGES_DIR`
@@ -100,7 +100,7 @@ Caveats:
 Cleanup is one `rm -rf`:
 
 ```bash
-rm -rf "$HOME/.dctl-dev"
+rm -rf "$PWD/.dctl-dev"
 ```
 
 Production state under `~/.config/dctl/`, `~/.cache/dctl/`, and
