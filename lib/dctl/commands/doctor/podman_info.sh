@@ -85,7 +85,18 @@ _doctor_probe_10_oci_runtime() {
   fi
 }
 
+_doctor_probe_10b_parallel() {
+  local label="GNU parallel (bats --jobs)"
+
+  if _doctor_require_cmd parallel; then
+    _doctor_check_pass "$label"
+  else
+    _doctor_check_warn "$label" "Install GNU parallel to enable 'bats --jobs N'. Without it, 'make test-unit' and the bats pre-commit hooks will fail under --jobs."
+  fi
+}
+
 cmd_doctor_podman_info() {
   _doctor_probe_3_podman_krun_smoke
   _doctor_probe_10_oci_runtime
+  _doctor_probe_10b_parallel
 }

@@ -175,4 +175,4 @@ left incompatible content behind.
 - [INSTALL.md](INSTALL.md) — host-package preflight (libkrun, rootless Podman).
 - [QUICKSTART.md](QUICKSTART.md) — shortest end-to-end path for an end user.
 - [ARCHITECTURE.md](ARCHITECTURE.md) — runtime/adapter model.
-- [CLAUDE.md](CLAUDE.md) — repo invariants and orientation.
+- [CLAUDE.md](../CLAUDE.md) — repo invariants and orientation.

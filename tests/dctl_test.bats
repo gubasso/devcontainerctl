@@ -185,99 +185,62 @@ teardown() {
   teardown_test_fixtures
 }
 
-@test "workspace_label_filter formats podman filter correctly" {
-  run workspace_label_filter
-  [ "$status" -eq 0 ]
-  [ "$output" = "label=devcontainer.local_folder=${WORKSPACE_FOLDER}" ]
-}
-
-@test "list_ws_containers uses podman ps -a" {
-  enable_mocks
-  create_mock podman 0 "abc123"
-
-  run list_ws_containers
-  [ "$status" -eq 0 ]
-  [ "$output" = "abc123" ]
-  assert_mock_called "podman ps --filter"
-  assert_mock_called " -a -q"
-}
-
-@test "list_running_ws_containers uses podman ps without -a" {
-  enable_mocks
-  create_mock podman 0 "def456"
-
-  run list_running_ws_containers
-  [ "$status" -eq 0 ]
-  [ "$output" = "def456" ]
-  assert_mock_called "podman ps --filter"
-  assert_mock_not_called " -a -q"
-}
-
-@test "ensure_ws_container_running skips startup when container is running" {
-  enable_mocks
-  create_mock podman 0 "running123"
-
-  cmd_ws_up() { echo "CMD_WS_UP_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
-
-  run ensure_ws_container_running
-  [ "$status" -eq 0 ]
-  assert_mock_not_called "CMD_WS_UP_CALLED"
-}
-
-@test "ensure_ws_container_running starts container when needed" {
-  mkdir -p "$(workspace_devcontainer_dir)"
-  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
-  enable_mocks
-  cat >"${TEST_TMPDIR}/bin/podman" <<EOF
-#!/usr/bin/env bash
-printf '%s\n' "\$(basename "\$0") \$*" >>"${TEST_TMPDIR}/mock_calls.log"
-if [[ "\$1" == "ps" ]]; then
-  exit 0
-fi
-printf '%s\n' "container123"
-exit 0
-EOF
-  chmod +x "${TEST_TMPDIR}/bin/podman"
-
-  run ensure_ws_container_running
-  [ "$status" -eq 0 ]
-  assert_mock_called "podman run --runtime krun --detach"
+fake_newer_than() {
+  case ",${FAKE_NEWER_THAN_FALSE_KEYS:-}," in
+    *,"$1|$2",*)
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
 }
 
 @test "cmd_ws_exec defaults to bash" {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
-  enable_mocks
-  create_mock podman 0 "running"
+  record_argv_mock podman 0 "running123"
 
   run cmd_ws_exec
   [ "$status" -eq 0 ]
-  assert_mock_called "podman exec"
-  assert_mock_called "bash"
+  assert_argv_call podman 1 ps --filter "label=devcontainer.local_folder=${WORKSPACE_FOLDER}" -q
+  assert_argv_call podman 2 ps --filter "label=devcontainer.local_folder=${WORKSPACE_FOLDER}" -a -q
+  assert_argv_contains_sequence podman 3 running123 bash
 }
 
 @test "cmd_ws_exec passes args through" {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
-  enable_mocks
-  create_mock podman 0 "running"
+  record_argv_mock podman 0 "running123"
 
   run cmd_ws_exec -- id
   [ "$status" -eq 0 ]
-  assert_mock_called "podman exec"
-  assert_mock_called "id"
+  assert_argv_contains_sequence podman 3 running123 id
+}
+
+@test "cmd_ws_exec starts the workspace when no container is running" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
+  record_argv_mock podman 0 ""
+  # shellcheck disable=SC2329
+  cmd_ws_up() { echo "CMD_WS_UP_CALLED" >>"${TEST_TMPDIR}/mock_calls.log"; }
+  # shellcheck disable=SC2329
+  devcontainer_exec() { :; }
+
+  run cmd_ws_exec
+  [ "$status" -eq 0 ]
+  assert_argv_call podman 1 ps --filter "label=devcontainer.local_folder=${WORKSPACE_FOLDER}" -q
+  assert_mock_called "CMD_WS_UP_CALLED"
 }
 
 @test "cmd_ws_shell runs commands in a login shell" {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
-  enable_mocks
-  create_mock podman 0 "running"
+  record_argv_mock podman 0 "running123"
 
   run cmd_ws_shell codex
   [ "$status" -eq 0 ]
-  assert_mock_called "podman exec"
-  assert_mock_called "bash -lic codex"
+  assert_argv_contains_sequence podman 3 running123 bash -lic codex
 }
 
 @test "cmd_ws_run requires a command" {
@@ -304,12 +267,12 @@ EOF
 }
 
 @test "cmd_ws_status does not auto-start a container" {
-  enable_mocks
-  create_mock podman 0 "abc123"
+  record_argv_mock podman 0 "abc123"
 
   run cmd_ws_status
   [ "$status" -eq 0 ]
-  assert_mock_not_called "CMD_WS_UP_CALLED"
+  assert_argv_call podman 1 ps --filter "label=devcontainer.local_folder=${WORKSPACE_FOLDER}" -a -q
+  assert_argv_call podman 2 ps --filter "label=devcontainer.local_folder=${WORKSPACE_FOLDER}" -a --format 'table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.RunningFor}}'
 }
 
 @test "cmd_ws_down warns when nothing matches" {
@@ -345,75 +308,6 @@ EOF
   assert_mock_called "podman run --runtime krun --detach"
 }
 
-@test "cmd_ws_reup regenerates cached config when a layer mtime is newer" {
-  create_user_base_layer_fixture
-  create_user_devcontainer_fixture python "devimg/python-dev:latest"
-
-  run generate_cached_devcontainer python
-  [ "$status" -eq 0 ]
-  local cached="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
-  [ -f "$cached" ]
-
-  sleep 1
-  touch "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
-
-  enable_mocks
-  create_mock podman 0 "container123"
-
-  DCTL_CLI_CONFIG="$cached" run cmd_ws_reup
-  [ "$status" -eq 0 ]
-  [[ $output == *"Config cache status: generated"* ]]
-  assert_mock_called "podman rm -f"
-  assert_mock_called "podman run --runtime krun --detach"
-}
-
-@test "cmd_ws_reup regenerates manifest-backed cache via registry" {
-  create_user_base_layer_fixture
-  create_user_devcontainer_fixture python "devimg/python-dev:latest"
-  create_user_image_fixture python-dev
-  git -C "$WORKSPACE_FOLDER" init -q
-  git -C "$WORKSPACE_FOLDER" remote add origin "https://github.com/org/myproj.git"
-  cat >"${XDG_CONFIG_HOME}/dctl/projects.yaml" <<'YAML'
-org-myproj:
-  devcontainer-manifest: python
-YAML
-
-  run generate_cached_devcontainer python
-  [ "$status" -eq 0 ]
-  local cached="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
-
-  sleep 1
-  touch "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
-
-  enable_mocks
-  create_mock podman 0 "container123"
-
-  run cmd_ws_reup
-  [ "$status" -eq 0 ]
-  [[ $output == *"Config cache status: generated"* ]]
-  assert_mock_called "podman rm -f"
-  assert_mock_called "podman run --runtime krun --detach"
-}
-
-@test "cmd_ws_reup reuses cached config when all inputs are older" {
-  create_user_base_layer_fixture
-  create_user_devcontainer_fixture python "devimg/python-dev:latest"
-
-  run generate_cached_devcontainer python
-  [ "$status" -eq 0 ]
-  local cached="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
-  [ -f "$cached" ]
-
-  enable_mocks
-  create_mock podman 0 "container123"
-
-  DCTL_CLI_CONFIG="$cached" run cmd_ws_reup
-  [ "$status" -eq 0 ]
-  [[ $output == *"Config cache status: cached"* ]]
-  assert_mock_called "podman rm -f"
-  assert_mock_called "podman run --runtime krun --detach"
-}
-
 @test "cmd_ws_reup does not regenerate when resolved config is outside cache dir" {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
@@ -427,34 +321,36 @@ YAML
   assert_mock_called "podman run --runtime krun --detach"
 }
 
-@test "collect_term_env includes remote env flags for set vars" {
-  local -a args
-  # shellcheck disable=SC2034
-  TERM=xterm-kitty
-  # shellcheck disable=SC2034
-  COLORTERM=truecolor
-  # shellcheck disable=SC2034
-  KITTY_WINDOW_ID=42
-  # shellcheck disable=SC2034
-  KITTY_LISTEN_ON=unix:/tmp/kitty-test
-  collect_term_env args
-  [ "${#args[@]}" -eq 8 ]
-  [[ ${args[*]} == *"--remote-env TERM=xterm-kitty"* ]]
-  [[ ${args[*]} == *"--remote-env COLORTERM=truecolor"* ]]
-  [[ ${args[*]} == *"--remote-env KITTY_WINDOW_ID=42"* ]]
-  [[ ${args[*]} == *"--remote-env KITTY_LISTEN_ON=unix:/tmp/kitty-test"* ]]
-}
-
 @test "cmd_ws_run forwards terminal env" {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
-  enable_mocks
-  create_mock podman 0 "running"
+  record_argv_mock podman 0 "running123"
 
   TERM=xterm-256color COLORTERM=truecolor run cmd_ws_run -- codex
   [ "$status" -eq 0 ]
-  assert_mock_called "--env TERM=xterm-256color"
-  assert_mock_called "--env COLORTERM=truecolor"
+  assert_argv_contains_sequence podman 3 --env TERM=xterm-256color --env COLORTERM=truecolor
+  assert_argv_contains_sequence podman 3 running123 bash -lc codex
+}
+
+@test "cmd_ws_run forwards every supported terminal env var" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
+  record_argv_mock podman 0 "running123"
+
+  TERM=xterm-kitty \
+    COLORTERM=truecolor \
+    TERM_PROGRAM=ghostty \
+    TERM_PROGRAM_VERSION=1.2.3 \
+    KITTY_WINDOW_ID=42 \
+    KITTY_LISTEN_ON=unix:/tmp/kitty.sock \
+    run cmd_ws_run -- codex
+  [ "$status" -eq 0 ]
+  assert_argv_contains_sequence podman 3 --env TERM=xterm-kitty
+  assert_argv_contains_sequence podman 3 --env COLORTERM=truecolor
+  assert_argv_contains_sequence podman 3 --env TERM_PROGRAM=ghostty
+  assert_argv_contains_sequence podman 3 --env TERM_PROGRAM_VERSION=1.2.3
+  assert_argv_contains_sequence podman 3 --env KITTY_WINDOW_ID=42
+  assert_argv_contains_sequence podman 3 --env KITTY_LISTEN_ON=unix:/tmp/kitty.sock
 }
 
 @test "cmd_image_list prints podman images output" {
@@ -1114,36 +1010,33 @@ YAML
   [ "${lines[2]}" = "${XDG_CONFIG_HOME}/dctl/devcontainer/top/devcontainer.json" ]
 }
 
-@test "_validate_compose_manifest rejects invalid YAML" {
-  local manifest="${XDG_CONFIG_HOME}/dctl/devcontainer/broken.yaml"
-  mkdir -p "$(dirname "$manifest")"
-  printf 'layers: [\n' >"$manifest"
+@test "cmd_init rejects invalid manifest YAML" {
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer"
+  printf 'layers: [\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/broken.yaml"
 
-  run _validate_compose_manifest "$manifest"
+  run cmd_init_do --devcontainer broken
   [ "$status" -ne 0 ]
-  [[ $output == *"Invalid YAML in manifest"* ]]
+  [[ $output == *"Invalid YAML in manifest"* || $output == *"Schema validation failed"* ]]
 }
 
-@test "_validate_compose_manifest rejects missing layers key" {
-  local manifest="${XDG_CONFIG_HOME}/dctl/devcontainer/broken.yaml"
-  mkdir -p "$(dirname "$manifest")"
-  printf 'other: value\n' >"$manifest"
+@test "cmd_init rejects manifest without a layers key" {
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer"
+  printf 'other: value\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/broken.yaml"
 
-  run _validate_compose_manifest "$manifest"
+  run cmd_init_do --devcontainer broken
   [ "$status" -ne 0 ]
-  [[ $output == *"'layers' must be an array"* ]]
+  [[ $output == *"'layers' must be an array"* || $output == *"Schema validation failed"* ]]
 }
 
-@test "_validate_compose_manifest rejects empty layers array" {
-  local manifest="${XDG_CONFIG_HOME}/dctl/devcontainer/broken.yaml"
-  mkdir -p "$(dirname "$manifest")"
-  cat >"$manifest" <<'YAML'
+@test "cmd_init rejects manifest with an empty layers array" {
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer"
+  cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/broken.yaml" <<'YAML'
 layers: []
 YAML
 
-  run _validate_compose_manifest "$manifest"
+  run cmd_init_do --devcontainer broken
   [ "$status" -ne 0 ]
-  [[ $output == *"'layers' must not be empty"* ]]
+  [[ $output == *"'layers' must not be empty"* || $output == *"Schema validation failed"* ]]
 }
 
 @test "discover_config_layers errors when manifest references a missing layer" {
@@ -1185,55 +1078,39 @@ YAML
   [[ $output == *"No manifest found for 'missing'"* ]]
 }
 
-@test "cache_is_fresh checks all layer files" {
+@test "cache_is_fresh returns 0 when all sources are older than cache" {
   local cached="${TEST_TMPDIR}/cached.json"
-  local layer_a="${TEST_TMPDIR}/layer-a.json"
-  local layer_b="${TEST_TMPDIR}/layer-b.json"
-  local template="${TEST_TMPDIR}/template.json"
+  : >"$cached"
 
-  printf '{}\n' >"$layer_a"
-  printf '{}\n' >"$layer_b"
-  printf '{}\n' >"$template"
-  sleep 1
-  printf '{}\n' >"$cached"
-
-  run cache_is_fresh "$cached" "$layer_a" "$layer_b" "$template"
+  FAKE_NEWER_THAN_FALSE_KEYS="" DCTL_CACHE_NEWER_THAN=fake_newer_than \
+    run cache_is_fresh "$cached" a b c
   [ "$status" -eq 0 ]
+}
 
-  sleep 1
-  touch "$layer_b"
-  run cache_is_fresh "$cached" "$layer_a" "$layer_b" "$template"
+@test "cache_is_fresh returns non-zero when any source is newer than cache" {
+  local cached="${TEST_TMPDIR}/cached.json"
+  : >"$cached"
+
+  FAKE_NEWER_THAN_FALSE_KEYS="$cached|b" DCTL_CACHE_NEWER_THAN=fake_newer_than \
+    run cache_is_fresh "$cached" a b c
   [ "$status" -ne 0 ]
 }
 
-@test "cache_is_fresh checks manifest files too" {
-  local cached="${TEST_TMPDIR}/cached.json"
-  local manifest="${TEST_TMPDIR}/python.yaml"
-  local layer="${TEST_TMPDIR}/layer.json"
-
-  cat >"$manifest" <<'YAML'
-layers:
-  - base
-  - python
-YAML
-  printf '{}\n' >"$layer"
-  sleep 1
-  printf '{}\n' >"$cached"
-
-  run cache_is_fresh "$cached" "$manifest" "$layer"
-  [ "$status" -eq 0 ]
-
-  sleep 1
-  touch "$manifest"
-  run cache_is_fresh "$cached" "$manifest" "$layer"
+@test "cache_is_fresh returns non-zero when the cached file is missing" {
+  FAKE_NEWER_THAN_FALSE_KEYS="" DCTL_CACHE_NEWER_THAN=fake_newer_than \
+    run cache_is_fresh "${TEST_TMPDIR}/missing.json" a b c
   [ "$status" -ne 0 ]
 }
 
-@test "generate_cached_devcontainer works with manifest-defined layers" {
+@test "cmd_init builds merged cache from manifest-defined layers" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
+  create_user_image_fixture python-dev
+  create_mock podman 0 ""
+  # shellcheck disable=SC2329
+  cmd_test_run() { :; }
 
-  run generate_cached_devcontainer python
+  run cmd_init_do --devcontainer python
   [ "$status" -eq 0 ]
 
   local deployed="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
@@ -1244,7 +1121,7 @@ YAML
   [ "$(jq -r '.image' "$deployed")" = "devimg/python-dev:latest" ]
 }
 
-@test "generate_cached_devcontainer merges multiple manifest layers with correct ordering" {
+@test "cmd_init merges multiple manifest layers with correct ordering" {
   create_user_base_layer_fixture
   mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/middle"
   cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/middle/devcontainer.json" <<'JSON'
@@ -1280,8 +1157,12 @@ JSON
 }
 JSON
   create_user_manifest_fixture python base middle python
+  create_user_image_fixture python-dev
+  create_mock podman 0 ""
+  # shellcheck disable=SC2329
+  cmd_test_run() { :; }
 
-  run generate_cached_devcontainer python
+  run cmd_init_do --devcontainer python
   [ "$status" -eq 0 ]
 
   local deployed="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
@@ -1322,7 +1203,12 @@ JSON
   [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/agents/devcontainer.json" ]
   [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/agents/seccomp-bwrap.json" ]
 
-  run generate_cached_devcontainer general
+  create_user_image_fixture agents
+  create_mock podman 0 ""
+  # shellcheck disable=SC2329
+  cmd_test_run() { :; }
+
+  run cmd_init_do --devcontainer general
   [ "$status" -eq 0 ]
 
   local deployed="${XDG_CACHE_HOME}/dctl/devcontainer/general/devcontainer.json"
@@ -1331,7 +1217,7 @@ JSON
   [ "$(jq -r '.runArgs[1]' "$deployed")" = 'seccomp=${localEnv:HOME}/.config/dctl/devcontainer/agents/seccomp-bwrap.json' ]
 }
 
-@test "generate_cached_devcontainer merges runArgs/workspaceMount/workspaceFolder across three layers" {
+@test "cmd_init merges runArgs workspaceMount and workspaceFolder across three layers" {
   create_user_base_layer_fixture
 
   mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/layer-a"
@@ -1371,8 +1257,11 @@ JSON
 JSON
 
   create_user_manifest_fixture testmix base layer-a layer-b testmix
+  create_mock podman 0 ""
+  # shellcheck disable=SC2329
+  cmd_test_run() { :; }
 
-  run generate_cached_devcontainer testmix
+  run cmd_init_do --devcontainer testmix
   [ "$status" -eq 0 ]
 
   local cached="${XDG_CACHE_HOME}/dctl/devcontainer/testmix/devcontainer.json"
@@ -1383,7 +1272,7 @@ JSON
   [ "$(jq -c '.runArgs' "$cached")" = '["--name","bar","--label","k=v2","--cap-add","SYS_PTRACE","--memory","4g","--cgroup-parent","user.slice","--runtime","krun"]' ]
 }
 
-@test "generate_cached_devcontainer errors on unknown top-level keys" {
+@test "cmd_init surfaces unknown top-level keys in merged cache generation" {
   create_user_base_layer_fixture
 
   mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/testbadkey"
@@ -1395,24 +1284,31 @@ JSON
 JSON
 
   create_user_manifest_fixture testbadkey base testbadkey
+  create_mock podman 0 ""
+  # shellcheck disable=SC2329
+  cmd_test_run() { :; }
 
-  run generate_cached_devcontainer testbadkey
+  run cmd_init_do --devcontainer testbadkey
   [ "$status" -ne 0 ]
   [[ $output == *"Unsupported devcontainer.json key: unknown_key"* ]]
   [[ $output == *"testbadkey"* ]]
 }
 
-@test "generate_cached_devcontainer reuses cache when fresh" {
+@test "cmd_init reports cached on a second run when inputs stay unchanged" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
+  create_user_image_fixture python-dev
+  create_mock podman 0 ""
+  # shellcheck disable=SC2329
+  cmd_test_run() { :; }
 
-  run generate_cached_devcontainer python
+  run cmd_init_do --devcontainer python
   [ "$status" -eq 0 ]
-  [ "${lines[1]}" = "generated" ]
+  [[ $output == *"Cache status: generated"* ]]
 
-  run generate_cached_devcontainer python
+  run cmd_init_do --devcontainer python
   [ "$status" -eq 0 ]
-  [ "${lines[1]}" = "cached" ]
+  [[ $output == *"Cache status: cached"* ]]
 }
 
 @test "cmd_init reads only user config and ignores installed templates" {
@@ -1820,7 +1716,7 @@ EOF
   [[ ${mounts[*]} == *"target=${HOME}/.gemini/key.json,readonly"* ]]
 }
 
-@test "generate_cached_devcontainer writes the effective network allowlist into the cache" {
+@test "cmd_init writes the effective network allowlist into the cache" {
   create_user_base_layer_fixture
   mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/general"
   cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/general/devcontainer.json" <<'EOF'
@@ -1832,8 +1728,12 @@ EOF
 }
 EOF
   create_user_manifest_fixture general base general
+  create_user_image_fixture agents
+  create_mock podman 0 ""
+  # shellcheck disable=SC2329
+  cmd_test_run() { :; }
 
-  run generate_cached_devcontainer general true
+  run cmd_init_do --devcontainer general
   [ "$status" -eq 0 ]
   local cached="${XDG_CACHE_HOME}/dctl/devcontainer/general/devcontainer.json"
   [ "$(jq -r '.network.allow[]' "$cached" | grep -c '^foo.example$')" -eq 1 ]

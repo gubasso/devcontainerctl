@@ -133,10 +133,10 @@ uninstall-systemd:
 	systemctl --user daemon-reload >/dev/null 2>&1 || true
 
 test-unit:
-	bats --filter-tags 'unit,!integration' tests
+	bats --jobs $(shell nproc) --filter-tags 'unit,!integration' tests
 
 test-integration:
-	bats --filter-tags integration tests
+	bats --jobs $(shell nproc) --filter-tags integration tests
 
 test: test-unit test-integration
 
@@ -150,7 +150,7 @@ check:
 	pre-commit run --all-files
 	bash -O globstar -c 'shellcheck -x bin/* lib/**/*.sh'
 	shfmt -d -i 2 -ci -bn -s bin/ lib/ hooks/ tests/
-	bats -r tests/
+	bats --jobs $(shell nproc) --filter-tags '!e2e' tests
 	$(MAKE) check-no-docker
 
 # `.plan/` is a developer-local scratch directory (not committed) used by

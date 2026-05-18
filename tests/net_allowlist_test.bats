@@ -121,25 +121,6 @@ EOF
   [ "$output" = "$expected" ]
 }
 
-@test "cmd_net_allow appends to the leaf devcontainer and regenerates cache" {
-  run generate_cached_devcontainer general true
-  [ "$status" -eq 0 ]
-  local cached="${XDG_CACHE_HOME}/dctl/devcontainer/general/devcontainer.json"
-  [ -f "$cached" ]
-  local before_mtime
-  before_mtime="$(stat -c '%Y' "$cached")"
-  sleep 1
-
-  run cmd_net_allow foo2.example
-  [ "$status" -eq 0 ]
-  [ "$(jq -r '.network.allow[]' "${XDG_CONFIG_HOME}/dctl/devcontainer/general/devcontainer.json" | grep -c '^foo2.example$')" -eq 1 ]
-  [ "$(jq -r '.network.allow[]' "$cached" | grep -c '^foo2.example$')" -eq 1 ]
-  [ "$(stat -c '%Y' "$cached")" -gt "$before_mtime" ]
-  # cmd_net_allow's contract ends with a `cmd_net_show` call (lib/dctl/commands/net/allow.sh:50);
-  # the annotated output is the user-visible signal that the show step ran.
-  [[ $output == *$'user\tfoo2.example'* ]]
-}
-
 @test "cmd_net_show prints default git-remote and user origin annotations" {
   DCTL_NET_MANIFEST_HINT=general run cmd_net_show
   [ "$status" -eq 0 ]

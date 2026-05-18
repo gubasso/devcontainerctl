@@ -110,16 +110,23 @@ repos:
       - id: bats-unit
         name: bats unit tests
         language: system
-        entry: bats --filter-tags 'unit,!integration' tests
+        entry: bash -lc 'bats --jobs "$(nproc)" --filter-tags "unit,!integration" tests'
         pass_filenames: false
         always_run: true
       - id: bats-integration
         name: bats integration tests
         language: system
-        entry: bats --filter-tags integration tests
+        entry: bash -lc 'bats --jobs "$(nproc)" --filter-tags "integration,!e2e" tests'
         pass_filenames: false
         always_run: true
         stages: [pre-push]
+      - id: bats-e2e
+        name: bats e2e tests
+        language: system
+        entry: bash -lc 'bats --jobs "$(nproc)" --filter-tags e2e tests'
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
       # slidev build – catches deck breakages before pushing to GitHub Pages.
       # Requires slides/node_modules (run `npm ci` in slides/ first).
       - id: slidev-build

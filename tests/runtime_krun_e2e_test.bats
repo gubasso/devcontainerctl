@@ -1,19 +1,19 @@
 #!/usr/bin/env bats
 
-# bats file_tags=integration
+# bats file_tags=e2e
 
 setup_file() {
   if ! command -v podman >/dev/null 2>&1; then
-    skip "Integration tests require podman"
+    skip "E2E tests require podman"
   fi
   if [ ! -e /dev/kvm ] || [ ! -r /dev/kvm ]; then
-    skip "Integration tests require a readable /dev/kvm"
+    skip "E2E tests require a readable /dev/kvm"
   fi
 }
 
 setup() {
   export TEST_TMPDIR
-  TEST_TMPDIR="$(mktemp -d "${BATS_TEST_TMPDIR}/dctl.integration.XXXXXX")"
+  TEST_TMPDIR="$(mktemp -d "${BATS_TEST_TMPDIR}/dctl.e2e.XXXXXX")"
   export XDG_DATA_HOME="${TEST_TMPDIR}/xdg-data"
   export XDG_CONFIG_HOME="${TEST_TMPDIR}/xdg-config"
   export XDG_CACHE_HOME="${TEST_TMPDIR}/xdg-cache"
@@ -27,7 +27,7 @@ setup() {
 EOF
 
   if ! podman image inspect quay.io/quay/busybox:1.36 >/dev/null 2>&1; then
-    podman pull quay.io/quay/busybox:1.36 >/dev/null 2>&1 || skip "Integration smoke requires quay.io/quay/busybox:1.36 locally or pullable"
+    podman pull quay.io/quay/busybox:1.36 >/dev/null 2>&1 || skip "E2E smoke requires quay.io/quay/busybox:1.36 locally or pullable"
   fi
 }
 

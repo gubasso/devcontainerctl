@@ -45,13 +45,20 @@ discover_config_layers() {
   printf '%s\n' "${layers[@]}"
 }
 
+# Comparator seam — overridable in tests via DCTL_CACHE_NEWER_THAN.
+# Returns 0 iff $1 is strictly newer than $2 by mtime.
+__cache_newer_than() {
+  [[ $1 -nt $2 ]]
+}
+
 cache_is_fresh() {
   local cached_path="$1"
   shift
   [[ -f $cached_path ]] || return 1
   local source_path
+  local cmp="${DCTL_CACHE_NEWER_THAN:-__cache_newer_than}"
   for source_path in "$@"; do
-    [[ $cached_path -nt $source_path ]] || return 1
+    "$cmp" "$cached_path" "$source_path" || return 1
   done
 }
 

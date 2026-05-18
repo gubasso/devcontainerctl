@@ -67,6 +67,7 @@ cmd_doctor() {
   _doctor_probe_8_cgroup_v2
   _doctor_probe_9_cgroup_manager
   _doctor_probe_10_oci_runtime
+  _doctor_probe_10b_parallel
   _doctor_probe_11_network_backend
   _doctor_probe_12_uid_map
   _doctor_probe_13_userns_clone
