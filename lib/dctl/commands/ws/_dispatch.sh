@@ -61,6 +61,15 @@ main_ws() {
   local command="${1:-help}"
 
   case "$command" in
+    help | -h | --help)
+      usage_ws
+      return 0
+      ;;
+  esac
+
+  require_cmds podman
+
+  case "$command" in
     up)
       shift
       __dctl_require commands/ws/up.sh
@@ -95,9 +104,6 @@ main_ws() {
       shift
       __dctl_require commands/ws/down.sh
       cmd_ws_down "$@"
-      ;;
-    help | -h | --help)
-      usage_ws
       ;;
     *)
       err "Unknown ws command: $command"

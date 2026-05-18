@@ -31,6 +31,15 @@ main_net() {
   local command="${1:-help}"
 
   case "$command" in
+    help | -h | --help)
+      usage_net
+      return 0
+      ;;
+  esac
+
+  require_cmds jq
+
+  case "$command" in
     allow)
       shift
       __dctl_require commands/net/allow.sh
@@ -40,9 +49,6 @@ main_net() {
       shift
       __dctl_require commands/net/show.sh
       cmd_net_show "$@"
-      ;;
-    help | -h | --help)
-      usage_net
       ;;
     *)
       err "Unknown net command: $command"

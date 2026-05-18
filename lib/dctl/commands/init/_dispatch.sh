@@ -32,5 +32,14 @@ EOF
 }
 
 main_init() {
+  case "${1:-}" in
+    --help | -h)
+      usage_init
+      return 0
+      ;;
+  esac
+
+  require_cmds jq
+
   cmd_init_do "$@"
 }

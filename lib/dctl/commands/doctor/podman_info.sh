@@ -17,6 +17,7 @@ _doctor_probe_3_podman_krun_smoke() {
   local label="podman + krun smoke"
   local ctr="dctl-doctor-smoke-$$"
   local rt=""
+  local err_file stderr_excerpt
 
   if ! _doctor_require_cmd podman; then
     _doctor_check_warn "$label" "Skipped because podman is not installed yet. Install podman first, then rerun 'dctl doctor'."
@@ -32,18 +33,30 @@ _doctor_probe_3_podman_krun_smoke() {
   fi
 
   _doctor_cleanup_smoke "$ctr"
+  err_file="$(mktemp)"
   if ! podman create --runtime krun --name "$ctr" \
-    "$DCTL_DOCTOR_SMOKE_IMAGE" /bin/true >/dev/null 2>&1; then
-    _doctor_check_fail "$label" "podman create failed. Verify image access to ${DCTL_DOCTOR_SMOKE_IMAGE}; if the registry is unreachable, retry later. Otherwise run 'podman create --runtime krun --name $ctr ${DCTL_DOCTOR_SMOKE_IMAGE} /bin/true' manually and inspect the error."
+    "$DCTL_DOCTOR_SMOKE_IMAGE" /bin/true >/dev/null 2>"$err_file"; then
+    stderr_excerpt="$(head -n 5 "$err_file" 2>/dev/null | sed 's/^/      /')"
+    rm -f "$err_file"
+    _doctor_check_fail "$label" "podman create failed. stderr:
+${stderr_excerpt:-      <no output>}
+    Reproduce: podman create --runtime krun --name $ctr ${DCTL_DOCTOR_SMOKE_IMAGE} /bin/true"
     _doctor_cleanup_smoke "$ctr"
     return
   fi
+  rm -f "$err_file"
 
-  if ! podman start -a "$ctr" >/dev/null 2>&1; then
-    _doctor_check_fail "$label" "Container failed to start under krun. Check /dev/kvm permissions (probe 5), the ACL warning (probe 5b), and 'journalctl --user -xe' for podman/crun diagnostics."
+  err_file="$(mktemp)"
+  if ! podman start -a "$ctr" >/dev/null 2>"$err_file"; then
+    stderr_excerpt="$(head -n 5 "$err_file" 2>/dev/null | sed 's/^/      /')"
+    rm -f "$err_file"
+    _doctor_check_fail "$label" "Container failed to start under krun. stderr:
+${stderr_excerpt:-      <no output>}
+    Check /dev/kvm permissions (probe 5), the ACL warning (probe 5b), and 'journalctl --user -xe'."
     _doctor_cleanup_smoke "$ctr"
     return
   fi
+  rm -f "$err_file"
 
   rt="$(podman inspect --format '{{.OCIRuntime}}' "$ctr" 2>/dev/null || true)"
   if [[ $rt == "krun" ]]; then

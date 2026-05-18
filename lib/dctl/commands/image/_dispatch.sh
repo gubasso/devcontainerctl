@@ -51,6 +51,15 @@ main_image() {
   local command="${1:-help}"
 
   case "$command" in
+    help | -h | --help)
+      usage_image
+      return 0
+      ;;
+  esac
+
+  require_cmds podman
+
+  case "$command" in
     build)
       shift
       __dctl_require commands/image/build.sh
@@ -60,9 +69,6 @@ main_image() {
       shift
       __dctl_require commands/image/list.sh
       cmd_image_list "$@"
-      ;;
-    help | -h | --help)
-      usage_image
       ;;
     *)
       err "Unknown image command: $command"
