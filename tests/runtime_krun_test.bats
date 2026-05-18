@@ -195,7 +195,7 @@ teardown() {
   ln -sf "${TEST_TMPDIR}/bin/crun" "${TEST_TMPDIR}/bin/krun"
   create_mock ldconfig 0 "libkrun.so (libc6,x86-64) => /usr/lib64/libkrun.so.1.18.0"
   local old_path="$PATH"
-  PATH="$(sanitized_bin_excluding getfacl):${TEST_TMPDIR}/bin"
+  PATH="${TEST_TMPDIR}/bin:$(sanitized_bin_excluding getfacl)"
   export PATH
   # shellcheck disable=SC2329
   _doctor_probe_5_kvm_access() { _doctor_check_pass "current user has rw access to /dev/kvm"; }

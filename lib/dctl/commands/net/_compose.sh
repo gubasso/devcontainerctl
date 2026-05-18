@@ -20,7 +20,7 @@ net_compose_allowlist() {
     else
       warn "Ignoring invalid network allowlist entry: $entry"
     fi
-  done | sort -u
+  done | LC_ALL=C sort -u
 }
 
 net_compose_allowlist_json() {

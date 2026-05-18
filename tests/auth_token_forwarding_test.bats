@@ -176,7 +176,7 @@ teardown() {
 @test "devcontainer_exec omits auth token env flags when no CLI is configured" {
   record_argv_mock podman 0
   local old_path="$PATH"
-  PATH="$(sanitized_bin_excluding gh glab):${TEST_TMPDIR}/bin"
+  PATH="${TEST_TMPDIR}/bin:$(sanitized_bin_excluding gh glab)"
   export PATH
   # shellcheck disable=SC2329
   _krun_rt_ps() { printf 'ctr123\n'; }
