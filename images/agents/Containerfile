@@ -21,7 +21,6 @@
 FROM opensuse/tumbleweed
 
 ENV LANG=C.UTF-8
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Defence-in-depth against transient mirror 404s: disable libzypp's parallel
 # package preload so a single mirror miss doesn't abort the whole transaction
@@ -129,13 +128,16 @@ USER $USERNAME
 WORKDIR /home/$USERNAME
 
 # Install Bun
-RUN curl -fsSL https://bun.com/install | bash
+# hadolint ignore=DL4006
+RUN set -o pipefail && curl -fsSL https://bun.com/install | bash
 
 ENV BUN_INSTALL="/home/$USERNAME/.bun"
 
 # Rust toolchain (for cargo-binstall chain)
 # Minimal profile: just rustc + cargo + rust-std (no docs/clippy/rustfmt)
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+# hadolint ignore=DL4006
+RUN set -o pipefail \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --default-toolchain stable --profile minimal
 
 ENV PATH="/home/$USERNAME/.local/share/mise/shims:/home/$USERNAME/.cargo/bin:$BUN_INSTALL/bin:/home/$USERNAME/.local/bin:$PATH"
@@ -164,9 +166,10 @@ RUN --mount=type=secret,id=gh_token,mode=0444 \
 # Intentionally unpinned: @latest with default backends matches the weekly-rebuild
 # rolling model. If a backend drifts, the build breaks loud — fix forward.
 # Refresh mise binary: cached cargo-binstall version may have registry/parser bugs
-# hadolint ignore=DL3013
+# hadolint ignore=DL3013,DL4006
 RUN --mount=type=secret,id=gh_token,mode=0444 \
-    export GITHUB_TOKEN="$(cat /run/secrets/gh_token 2>/dev/null || true)" \
+    set -o pipefail \
+    && export GITHUB_TOKEN="$(cat /run/secrets/gh_token 2>/dev/null || true)" \
     && curl -fsSL https://mise.run | MISE_INSTALL_PATH="$HOME/.cargo/bin/mise" sh \
     && mise use --global neovim@latest \
     # Force standard (non-freethreaded) Python: 3.14+ defaults to freethreaded builds
@@ -187,7 +190,9 @@ RUN --mount=type=secret,id=gh_token,mode=0444 \
 # Cache-bust: dctl image build --refresh-agents agents
 ARG CACHEBUST_AGENTS=0
 # Claude Code (native installer - auto-updates)
-RUN echo "agent-cache-bust=$CACHEBUST_AGENTS" \
+# hadolint ignore=DL4006
+RUN set -o pipefail \
+    && echo "agent-cache-bust=$CACHEBUST_AGENTS" \
     && curl -fsSL https://claude.ai/install.sh | bash
 # Codex CLI (OpenAI) via Bun | OpenCode via Bun | Gemini CLI via npm
 RUN bun add -g @openai/codex opencode-ai && npm install -g @google/gemini-cli@latest
