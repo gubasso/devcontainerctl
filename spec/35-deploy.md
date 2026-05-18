@@ -143,4 +143,4 @@ Interactive deploy proceeds in three steps:
 The item picker uses `fzf --multi` with a preview pane:
 
 - devcontainers preview the manifest YAML
-- images preview `Dockerfile`
+- images preview `Containerfile`

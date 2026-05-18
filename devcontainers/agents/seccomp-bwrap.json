@@ -4,7 +4,7 @@
     "approach": "Default-allow with targeted denies on the highest-risk syscalls historically used in container escape / kernel LPE exploits. Strictly stronger than seccomp=unconfined, intentionally looser than moby's default-deny baseline so AI agent CLIs (Codex, Claude Code, Gemini) and their bubblewrap-based inner sandboxes work out of the box without per-syscall allowlist tuning.",
     "trade_off": "Will not auto-block a future-added kernel syscall that turns out to be exploitable. Users who want default-deny semantics should swap seccomp= for moby's default profile (see references) and accept the maintenance cost.",
     "references": {
-      "docker_seccomp_docs": "https://docs.docker.com/engine/security/seccomp/",
+      "seccomp_docs": "https://github.com/opencontainers/runtime-spec/blob/main/config-linux.md#seccomp",
       "moby_default_profile": "https://github.com/moby/profiles/blob/main/seccomp/default.json",
       "moby_default_profile_history": "https://github.com/moby/moby/commits/master/profiles/seccomp/default.json",
       "linux_seccomp_man": "https://man7.org/linux/man-pages/man2/seccomp.2.html",

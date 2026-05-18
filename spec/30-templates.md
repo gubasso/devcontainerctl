@@ -95,7 +95,7 @@ resolves each listed layer from user config, and merges them two-by-two with
    into `~/.cache/dctl/devcontainer/<name>/devcontainer.json`
 3. reads the `.image` field from the merged cached config
 4. for managed `devimg/<name>:latest` images, validates that the corresponding
-   Dockerfile exists in `~/.config/dctl/images/<name>/Dockerfile`
+   Containerfile exists in `~/.config/dctl/images/<name>/Containerfile`
 5. for managed images, auto-builds the local image when missing
 6. registers the manifest name in `~/.config/dctl/projects.yaml` — the
    entry contains `devcontainer-manifest:` only, plus `sibling_discovery: false` when

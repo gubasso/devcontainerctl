@@ -1,0 +1,66 @@
+# shellcheck shell=bash
+# Source-once primitives + lazy dispatch for dctl modules.
+
+[[ -n ${_DCTL_SOURCE_LOADED:-} ]] && return 0
+readonly _DCTL_SOURCE_LOADED=1
+
+: "${DCTL_LIB_DIR:?DCTL_LIB_DIR must be set before sourcing _lib/source.sh}"
+
+__dctl_require() {
+  local rel="$1" abs guard
+  [[ -n $rel ]] || {
+    printf '\033[1;31mERROR:\033[0m __dctl_require needs a relative path\n' >&2
+    exit 1
+  }
+  abs="${DCTL_LIB_DIR}/${rel}"
+  guard="_DCTL_LOADED_${rel//[^A-Za-z0-9_]/_}"
+  [[ -n ${!guard:-} ]] && return 0
+  [[ -r $abs ]] || {
+    printf '\033[1;31mERROR:\033[0m Missing dctl library file: %s\n' "$abs" >&2
+    exit 1
+  }
+  printf -v "$guard" '%s' 1
+  readonly "$guard"
+  # shellcheck source=/dev/null
+  source "$abs"
+}
+
+declare -gA __dctl_autoload_registry=()
+
+__dctl_autoload_register() {
+  local func="$1" rel="$2"
+  __dctl_autoload_registry["$func"]="$rel"
+  eval "${func}() { unset -f ${func}; __dctl_require '${rel}'; ${func} \"\$@\"; }"
+}
+
+__dctl_dispatch() {
+  local group="${1:-help}"
+
+  case "$group" in
+    "" | help | -h | --help)
+      usage
+      return 0
+      ;;
+    version | -v | --version)
+      printf 'dctl %s\n' "${DCTL_VERSION:-dev}"
+      return 0
+      ;;
+  esac
+
+  shift
+
+  # Allow-list of real CLI command groups. Internal helpers like `_lib/*`,
+  # `lifecycle.sh`, or `runtime/*` must not be reachable via the dispatcher.
+  # Post-15b, every public command group routes only through
+  # `commands/<group>/_dispatch.sh`.
+  case "$group" in
+    init | deploy | test | doctor | ws | image | config | net) ;;
+    *)
+      printf '\033[1;31mERROR:\033[0m Unknown command group: %s\n' "$group" >&2
+      exit 1
+      ;;
+  esac
+
+  __dctl_require "commands/${group}/_dispatch.sh"
+  "main_${group}" "$@"
+}

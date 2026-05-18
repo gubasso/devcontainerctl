@@ -60,8 +60,9 @@ Networking uses **TSI (Transparent Socket Impersonation)**: in-guest sockets are
 
 - **KVM-class boundary.** The guest runs its own kernel; the host kernel is not part of the in-guest attack surface. Shared-kernel escape classes (runc, namespaces, seccomp bypasses) do not apply at this boundary.
 - **No published hypervisor-escape CVEs in libkrun 2024–2026.** The two libkrun CVEs in 2025 were transitive Rust dependency rolls (`rust-openssl`, `crossbeam-channel`), patched through the normal Fedora pipeline; neither was a VMM escape. References: [FEDORA-2025-f8be7978e3](https://linuxsecurity.com/advisories/fedora/fedora-41-libkrun-2025-f8be7978e3-security-advisory-updates-rh8lbifoalx6), [FEDORA-2025-c53905e83d](https://linuxsecurity.com/advisories/fedora/fedora-41-libkrun-2025-c53905e83d-ohmxvt9uvrww).
-- **TSI eliminates host-side privileged-network plumbing.** No TAP device, no bridge, no NAT chain on the host. The host-side attack surface that any TAP-based microVM workflow has to consider is removed entirely.
+- **TSI removes host-side TAP/bridge/NAT plumbing** in exchange for a userspace proxy that terminates per-connection TCP on the **host's** TCP/IP stack via real `AF_INET` / `AF_INET6` / `AF_UNIX` sockets ([libkrunfw TSI patch](https://github.com/containers/libkrunfw/blob/main/patches/0009-Transparent-Socket-Impersonation-implementation.patch)). This is a **different** host-side network surface from a TAP+netfilter microVM, not a strictly smaller one. The in-VM nftables egress allowlist (see [§5.1](#51-egress-enforcement) and `lib/dctl/commands/net/`) is sized for exactly this trade-off: the egress proxy lives in the VMM process, so per-VM allowlisting is the right control point.
 - **Trust path vs. boundary class.** libkrun + crun + Podman is more code on the host-side trust path than a minimal bare-VMM stack, but the **boundary class is identical (KVM)**. Boundary class is the security-relevant variable; trust-path size is a secondary consideration weighed against engineering cost (see §2.4).
+- **Device-set delta vs. bare Firecracker (the residual host-kernel surface).** Every KVM VMM keeps `/dev/kvm` ioctls and a set of virtio device backends as the host-facing surface — see [SPEC.md §4.1 "Residual host-kernel surface"](./SPEC.md). libkrun's set is **wider** than Firecracker's in three concrete ways: (1) **virtio-fs is the default rootfs path** — it is how `crun --krun` mounts the OCI bundle into the guest — whereas Firecracker has no virtio-fs and forces a devmapper-snapshotter detour in Kata-on-FC; (2) **TSI's host-side proxy** opens real host AF_INET sockets on behalf of the guest, terminating per-connection TCP state on the host kernel; (3) **virtio-gpu (virgl/venus)** is available via `krun_set_gpu_options` and is off by default in this implementation. This delta is the technical content behind the maintainer's framing in [libkrun #538](https://github.com/containers/libkrun/discussions/538) ("guest and VMM pertain to the same security context") and is accepted as the cost of the smaller adapter footprint per §2.4. None of these surfaces converts the boundary back to shared-kernel — a guest-kernel LPE remains a guest-kernel compromise, not a host compromise — but they are the right thing to evaluate when comparing libkrun against a minimal bare-VMM stack.
 
 **Criterion 2 — production-proven and well-maintained.**
 
@@ -95,7 +96,7 @@ Networking uses **TSI (Transparent Socket Impersonation)**: in-guest sockets are
 | Owned by `dctl` | Owned upstream |
 |---|---|
 | `lib/dctl/runtime/krun.sh` adapter (~80–150 LOC bash). | Rootfs construction (handled inside `crun-krun`). |
-| `runtime: krun` value in `schemas/compose.schema.yaml`. | Kernel image (libkrun bundles or fetches it). |
+| `runtime.name: krun` value in `schemas/compose.schema.yaml`. | Kernel image (libkrun bundles or fetches it). |
 | KVM-detection probe with a clear error message when KVM is missing. | In-guest init / agent. |
 | Tier-0 policies (egress allowlist, scoped/ephemeral mounts, `no-new-privileges`, `cap-drop=ALL`). Runtime-agnostic. | KVM interface, virtio devices. |
 | Rootless-Podman defaults (pasta networking, `userns=auto:size=65536`) — already needed for [SPEC.md §5.2 Tier 1](./SPEC.md). | TSI networking (no TAP/bridge plumbing). |
@@ -154,7 +155,7 @@ This resolves [SPEC.md §8 — "CI parity"](./SPEC.md): **gVisor on KVM-less CI 
 | **Kata-FC** | Containerd dependency; devmapper snapshotter friction; no security delta. | Dropped in [DECISION.md §7](./DECISION.md). |
 | **Kata-CH** | Containerd dependency; no security delta. Reserved as a deferred contingency adapter in case libkrun governance deteriorates. | Catalog-only in [DECISION.md §7](./DECISION.md). |
 | **libkrun-on-HVF parity tracking** | macOS-specific; not relevant when macOS is out of scope. | Tracked upstream; ignored here. |
-| **Multi-backend manifest selection** | This implementation ships one backend value (`runtime: krun`) plus the documented CI fallback (`runtime: gvisor`); the manifest schema can accommodate more values when additional adapters land. | Schema future-compatible; not exposed here. |
+| **Multi-backend manifest selection** | This implementation ships exactly one accepted backend value (`runtime.name: krun`); the gvisor CI fallback is described in prose only and will be added to the schema enum when the adapter lands. | Schema future-compatible; not exposed here. |
 
 ---
 
@@ -167,7 +168,7 @@ The following questions from [SPEC.md §8](./SPEC.md) are resolved:
 | Final §4.1 backend choice | **libkrun via `crun --krun`** on Linux. |
 | CI parity default | **gVisor** on no-KVM CI runners; **libkrun** where KVM is available. |
 | Image distribution: Kata-specific or libkrun-specific build target? | **No new build target.** libkrun consumes the existing `images/` OCI artifacts unchanged via `crun --krun`. |
-| Multi-backend selection at the manifest level | Schema-ready; **not exposed** in this implementation. Only `runtime: krun` (default) and `runtime: gvisor` (documented CI fallback) are surfaced. |
+| Multi-backend selection at the manifest level | Schema-ready; **not exposed** in this implementation. Only `runtime.name: krun` is accepted by `schemas/compose.schema.yaml`; the gvisor CI fallback is documented in prose and will be added to the schema enum together with its adapter. |
 
 These remain unaffected by this decision and apply runtime-agnostically:
 
@@ -175,13 +176,30 @@ These remain unaffected by this decision and apply runtime-agnostically:
 - **Egress allowlist UX** — independent of runtime.
 - **Cross-runtime feature parity** — the runtime adapter must define which `devcontainer.json` keys are portable; the rest must error explicitly rather than silently degrade.
 
+### 5.1 Egress enforcement
+
+libkrun's TSI removes host-side TAP and bridge plumbing, but it does not apply
+an outbound policy on its own. `dctl` therefore installs a per-VM egress
+policy inside the guest with nftables (Option A). The control surface lives in
+`lib/dctl/commands/net/` and the in-guest bootstrap script
+`images/agents/dctl-egress`.
+
+Option B, a userspace `dctl-proxy`, was rejected. It would add a
+new binary, new HTTP/TLS interception semantics, and a larger support surface
+without changing the underlying isolation class. Revisit it only if DNS
+rotation or wildcard-host ergonomics prove untenable in practice.
+
 ---
 
 ## 6. Risks accepted
 
 Each risk is logged so it can be re-evaluated if conditions change.
 
-1. **Trust path is longer than a minimal bare-VMM stack.** libkrun + crun + Podman is more code on the host-side trust path than `jailer` + `firecracker`. **Same boundary class (KVM); larger TCB outside the VMM.** Accepted in exchange for ~3–5 calendar weeks of plumbing that `dctl` does not have to own. The bare-FC adapter remains documented in [DECISION.md §2.5](./DECISION.md) for future opt-in.
+1. **Trust path is longer than a minimal bare-VMM stack, and libkrun's host-facing device set is wider than Firecracker's.** Two separable facets:
+   - **Host-side TCB outside the VMM.** libkrun + crun + Podman is more code on the host-side trust path than `jailer` + `firecracker`. **Same boundary class (KVM); larger TCB outside the VMM.**
+   - **Host-facing device-backend surface.** libkrun retains three host-side surfaces that bare Firecracker either does not have or implements differently: **virtio-fs as the default rootfs path** (Firecracker has none; Kata-on-FC pays a devmapper snapshotter cost for the same reason), **TSI's userspace proxy** terminating per-connection TCP on the host's `AF_INET` stack (Firecracker uses TAP+netfilter instead), and **virtio-gpu (virgl/venus)** available via `krun_set_gpu_options` (Firecracker has no GPU support at all). The first two are unavoidable under this design; the third is **off by default in this implementation** and is gated behind an explicit profile opt-in to keep the surface bounded. See [SPEC.md §4.1 "Residual host-kernel surface"](./SPEC.md) for the full framing.
+
+   Both facets are accepted in exchange for ~3–5 calendar weeks of plumbing that `dctl` does not have to own. The bare-FC adapter remains documented in [DECISION.md §2.5](./DECISION.md) for future opt-in where minimizing this surface is worth the cost.
 2. **KVM is a hard requirement on developer workstations.** Hosts without KVM are not supported as workstation targets in this implementation. CI runners without KVM fall back to gVisor, with the understood weaker boundary class.
 3. **Single-vendor concentration in the `containers/` org.** Podman, crun, libkrun, Buildah, Skopeo all live under one org. Healthy in 2026; if funding or governance shifts, several `dctl` dependencies move at once. Mitigation: Kata-CH adapter remains specified in the catalog as a backup with different governance (CNCF incubating).
 4. **Shared `rust-vmm` lineage.** libkrun is derived from Firecracker, Cloud Hypervisor, and the `rust-vmm` crates ([RUNTIMES.md §4.4](./RUNTIMES.md)). A class bug in shared `rust-vmm` crates would land on libkrun, Firecracker, **and** Cloud Hypervisor simultaneously — runtime swap is not a mitigation. The mitigation is `dctl`'s own CVE-watch and a quick path to apply upstream patches. Recent precedent: the Firecracker virtio-pci OOB write in CVE-2026-5747 ([AWS bulletin 2026-015](https://aws.amazon.com/security/security-bulletins/2026-015-aws/)) is a reminder that "small VMM" is not "no VMM CVEs."
@@ -202,6 +220,8 @@ This decision narrows [SPEC.md §5–6](./SPEC.md) but does not change its tier 
 - **Tier 3** — unchanged. Once libkrun is the default, the inner-container freedom can be expanded per [SPEC.md §5.4](./SPEC.md).
 
 **Concrete next step:** implement `lib/dctl/runtime/krun.sh` against the [SPEC.md §5.5](./SPEC.md) adapter sketch and run the standard smoke-test against it on a KVM-capable Linux host. The numbers (cold-start, mount latency, devcontainer-feature parity, smoke-test pass rate) close the prototyping milestone in [SPEC.md §4.4 / §6 T2.0](./SPEC.md).
+
+The adapter intentionally leaves Podman rootless network backend selection unpinned in `rt_run`. Under the chosen libkrun design, TSI already removes the host-side TAP/bridge/NAT plumbing class discussed above ([§2.1](#21-what-it-is), [§2.2](#22-why-it-wins-on-each-criterion)), so there is no current evidence forcing a `slirp4netns` vs `pasta` override on the krun path. A later smoke pass can revisit pinning if a concrete compatibility or performance preference emerges, but for now the implementation keeps the runtime unpinned and treats backend choice as deferred rather than guessed.
 
 ---
 

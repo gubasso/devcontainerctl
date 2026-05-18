@@ -1,15 +1,13 @@
-# Sandbox Runtime — Planned `dctl` vs. ai-agents-sandbox
+# Sandbox Runtime — `dctl` vs. ai-agents-sandbox
 
 > Status: Informational comparison  
 > Date: 2026-05-13  
-> Scope: Technical comparison between the **planned** `dctl` runtime defined in [DECISION-LINUX.md](./DECISION-LINUX.md) — libkrun via `crun --krun` fronted by rootless Podman — and the existing [val4oss/ai-agents-sandbox](https://github.com/val4oss/ai-agents-sandbox) project, which already ships that same runtime stack today as a single-purpose agent sandbox. The comparison covers the runtime/security layer and the end-user UX / config-composability surface to determine whether the two initiatives overlap.  
+> Scope: Technical comparison between the `dctl` runtime defined in [DECISION-LINUX.md](./DECISION-LINUX.md) — libkrun via `crun --krun` fronted by rootless Podman — and the existing [val4oss/ai-agents-sandbox](https://github.com/val4oss/ai-agents-sandbox) project, which ships the same runtime stack as a single-purpose agent sandbox. The comparison covers the runtime/security layer and the end-user UX / config-composability surface to determine whether the two initiatives overlap.  
 > Companions: [DECISION-LINUX.md](./DECISION-LINUX.md), [DECISION.md](./DECISION.md), [SPEC.md](./SPEC.md), [RUNTIMES.md](./RUNTIMES.md), [COMPARISON-FLAKE-PILOT.md](./COMPARISON-FLAKE-PILOT.md).
->
-> **Convention.** Throughout this document, "`dctl`" refers exclusively to the **future** runtime layer defined by the spec set in this directory ([SPEC.md](./SPEC.md), [DECISION-LINUX.md](./DECISION-LINUX.md), [RUNTIMES.md](./RUNTIMES.md), [DECISION.md](./DECISION.md)). The current shipped `dctl` implementation is being refactored and is intentionally not load-bearing on the `dctl` side of any claim made here.
 
 ## 0. Summary
 
-| Axis | `dctl` (planned, per `DECISION-LINUX.md`) | ai-agents-sandbox (shipped today) |
+| Axis | `dctl` (per `DECISION-LINUX.md`) | ai-agents-sandbox (shipped today) |
 |---|---|---|
 | Boundary class | **KVM microVM** ([DECISION-LINUX.md §2.2](./DECISION-LINUX.md)) | **KVM microVM** when `/dev/kvm` + libkrun are present; shared-kernel container in the `no-microvm` fallback |
 | Runtime stack | `podman --runtime krun` → `crun --krun` → libkrun ([DECISION-LINUX.md §2.1](./DECISION-LINUX.md)) | Same: `podman --runtime krun` → `crun-krun` → libkrun; falls back to plain `podman` + `slirp4netns` |
@@ -127,7 +125,7 @@ Both projects exist to run AI coding agents (Copilot, Gemini, Claude Code) insid
 
 ### 7.3 Structural subset
 
-ai-agents-sandbox's feature set is expressible inside `dctl` as a single `runtime: krun` manifest plus a slim image whose `Containerfile` mirrors `image/Containerfile`. The inverse direction — folding `dctl` into ai-agents-sandbox — would require rebuilding the manifest/composition layer that [SPEC.md §1.3](./SPEC.md) commits to, i.e., reconstructing most of what `dctl` is.
+ai-agents-sandbox's feature set is expressible inside `dctl` as a single `runtime: { name: krun }` manifest plus a slim image whose `Containerfile` mirrors `image/Containerfile`. The inverse direction — folding `dctl` into ai-agents-sandbox — would require rebuilding the manifest/composition layer that [SPEC.md §1.3](./SPEC.md) commits to, i.e., reconstructing most of what `dctl` is.
 
 The one structural axis that does not map cleanly: ai-agents-sandbox's "single persistent home across all projects" model contradicts `dctl`'s per-project workspace premise ([SPEC.md §1.3](./SPEC.md)). Reconciliation requires either a shared-home leaf pattern in the manifest or accepting a per-project volume model in a `dctl` agent preset.
 

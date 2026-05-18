@@ -277,13 +277,13 @@ html.dark .recap-devc {
  * they announce the act explicitly.
  * ─────────────────────────────────────────────────────────────────────── */
 
-.slidev-layout.act-docker,
+.slidev-layout.act-podman,
 .slidev-layout.act-devc,
 .slidev-layout.act-dctl {
   position: relative;
 }
 
-.slidev-layout.act-docker::before,
+.slidev-layout.act-podman::before,
 .slidev-layout.act-devc::before,
 .slidev-layout.act-dctl::before {
   content: "";
@@ -295,7 +295,7 @@ html.dark .recap-devc {
   pointer-events: none;
 }
 
-.slidev-layout.act-docker::before {
+.slidev-layout.act-podman::before {
   background: var(--brand-mute);
 }
 .slidev-layout.act-devc::before {
@@ -305,7 +305,7 @@ html.dark .recap-devc {
   background: var(--brand-primary);
 }
 
-.slidev-layout.act-docker::after,
+.slidev-layout.act-podman::after,
 .slidev-layout.act-devc::after,
 .slidev-layout.act-dctl::after {
   position: absolute;
@@ -318,8 +318,8 @@ html.dark .recap-devc {
   opacity: 0.45;
   pointer-events: none;
 }
-.slidev-layout.act-docker::after {
-  content: "01 · Pure Docker";
+.slidev-layout.act-podman::after {
+  content: "01 · Raw Podman";
   color: var(--brand-mute);
 }
 .slidev-layout.act-devc::after {

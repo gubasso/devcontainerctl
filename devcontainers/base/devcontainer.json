@@ -3,31 +3,19 @@
   "updateRemoteUserUID": false,
   "init": true,
   "shutdownAction": "none",
+  "postStartCommand": "sudo --preserve-env=DCTL_NETWORK_ALLOWLIST_JSON /usr/local/bin/dctl-egress --daemon",
   "containerEnv": {
     "TERM": "${localEnv:TERM}",
+    "DCTL_NETWORK_ALLOWLIST_JSON": "[]",
     "COLORTERM": "truecolor"
   },
+  "runArgs": ["--tmpfs", "/tmp:rw,nosuid,nodev,size=1g"],
   "mounts": [
     {
       "source": "${localEnv:HOME}/.gitconfig",
       "target": "${localEnv:HOME}/.gitconfig",
       "type": "bind",
       "readonly": true
-    },
-    {
-      "source": "${localEnv:HOME}/.config/gh",
-      "target": "${localEnv:HOME}/.config/gh",
-      "type": "bind"
-    },
-    {
-      "source": "${localEnv:HOME}/.config/glab-cli",
-      "target": "${localEnv:HOME}/.config/glab-cli",
-      "type": "bind"
-    },
-    {
-      "source": "/tmp",
-      "target": "/tmp",
-      "type": "bind"
     }
   ]
 }

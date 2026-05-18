@@ -25,7 +25,7 @@ into user config, and `dctl deploy image <name>` copies the associated managed i
 files into user config:
 
 - `~/.config/dctl/devcontainer/` — deployed manifests plus layer directories (each may contain `devcontainer.json` and any sibling assets such as a seccomp profile)
-- `~/.config/dctl/images/` — managed Dockerfile and helper scripts
+- `~/.config/dctl/images/` — managed Containerfile and helper scripts
 
 User config (`~/.config/dctl/`) is the sole runtime source for all operations:
 `dctl image build`, `dctl ws up`, `dctl test`. Users can edit these files freely
@@ -49,6 +49,8 @@ layers:
 | Field | Required | Description |
 | --- | --- | --- |
 | `layers` | yes | Non-empty array of layer directory names, merged in order |
+| `runtime` | no | Optional runtime policy object (`name`, `resources`) for schema-level pinning |
+| `network.allow` | no | Optional manifest allowlist metadata merged into the cached config |
 
 No additional properties are allowed. The filename stem is the manifest name.
 
@@ -95,6 +97,8 @@ using `jq`:
 - `mounts` arrays are concatenated in layer order
 - `postCreateCommand` objects are merged by key (later layers win)
 - `containerEnv` and `remoteEnv` objects are merged by key (later layers win)
+- `runArgs` arrays are merged with the round-10 first-class merge logic
+- `workspaceMount` and `workspaceFolder` are treated as first-class scalar overrides
 - scalar fields use last-wins behavior (the leaf layer overrides earlier values)
 
 ## Discovery Rules

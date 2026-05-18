@@ -1,6 +1,6 @@
 # devcontainerctl
 
-Pre-built Docker images and a unified `dctl` CLI for devcontainer workspaces — especially useful for running AI coding agents (Claude Code, Codex, OpenCode, Gemini CLI) in safe, isolated sandboxes.
+Pre-built OCI images and a unified `dctl` CLI for Podman/libkrun devcontainer workspaces — especially useful for running AI coding agents (Claude Code, Codex, OpenCode, Gemini CLI) in rootless microVM sandboxes.
 
 - A two-step project setup flow with `dctl deploy` and `dctl init`.
 - Pre-built images with AI agent tooling and language-specific layers ready to go.
@@ -41,7 +41,7 @@ Installed (seed sources only, never used at runtime)
   ~/.local/share/dctl/devcontainers/python.yaml             ← manifest for the python config
   ~/.local/share/dctl/devcontainers/base/devcontainer.json  ← shared base layer
   ~/.local/share/dctl/devcontainers/python/devcontainer.json
-  ~/.local/share/dctl/images/python-dev/Dockerfile
+  ~/.local/share/dctl/images/python-dev/Containerfile
 
         ──dctl deploy──>
 
@@ -49,7 +49,7 @@ User config (runtime source of truth, user-editable)
   ~/.config/dctl/devcontainer/python.yaml                  ← deployed manifest
   ~/.config/dctl/devcontainer/base/devcontainer.json       ← shared base layer
   ~/.config/dctl/devcontainer/python/devcontainer.json     ← leaf layer
-  ~/.config/dctl/images/python-dev/Dockerfile              ← managed Dockerfile
+  ~/.config/dctl/images/python-dev/Containerfile           ← managed Containerfile
 
         ──merge──>
 
@@ -97,7 +97,8 @@ the filename stem is the manifest name.
 
 Prerequisites:
 
-- Docker with `buildx`
+- Podman with `crun --krun`, `libkrun`, and `libkrunfw`
+- `dctl doctor` for first-run host verification
 - Dev Container CLI (`devcontainer`)
 
 ```bash
@@ -113,7 +114,7 @@ dctl ws shell
 
 1. `make install` — installs `dctl` and copies images/templates to `~/.local/share/dctl/` (seed sources only)
 2. `dctl deploy devcontainer python` — deploys the Python manifest plus its managed shared layers into `~/.config/dctl/devcontainer/`
-3. `dctl deploy image python-dev` — deploys the managed Dockerfile into `~/.config/dctl/images/python-dev/`
+3. `dctl deploy image python-dev` — deploys the managed Containerfile into `~/.config/dctl/images/python-dev/`
 4. `dctl init --devcontainer python` — merges config to `~/.cache/dctl/`, auto-builds the managed image if missing, and registers the project
 5. `dctl image build` — optional rebuild from deployed managed images via an explicit target, the no-arg picker, or `--all`
 6. `dctl ws up` — starts the devcontainer using the merged config from `~/.cache/dctl/`
@@ -121,7 +122,7 @@ dctl ws shell
 
 ## Workflow Comparison
 
-Every `dctl` command has a Docker and Dev Container CLI equivalent — `dctl` just removes the boilerplate, flag repetition, and manual config authoring. See the [full workflow comparison](docs/WORKFLOW-COMPARISON.md) for a step-by-step walkthrough with complete commands, pain points, and command counts for all three approaches.
+Every `dctl` command has a raw Podman and Dev Container CLI equivalent — `dctl` just removes the boilerplate, flag repetition, and manual config authoring. See the [full workflow comparison](docs/WORKFLOW-COMPARISON.md) for a step-by-step walkthrough with complete commands, pain points, and command counts for all three approaches.
 
 ## Config System
 
@@ -221,7 +222,7 @@ dctl init
 
 If the selected devcontainer references a managed image like
 `devimg/python-dev:latest`, `dctl init` validates that
-`~/.config/dctl/images/python-dev/Dockerfile` exists and automatically builds
+`~/.config/dctl/images/python-dev/Containerfile` exists and automatically builds
 the image when it is missing locally.
 
 After registering the project, `dctl init` runs `dctl test` (the workspace
@@ -263,9 +264,9 @@ dctl image build --dry-run
 dctl image list
 ```
 
-`dctl image build` resolves Dockerfiles from user config only:
+`dctl image build` resolves Containerfiles from user config only:
 
-- `~/.config/dctl/images/<target>/Dockerfile`
+- `~/.config/dctl/images/<target>/Containerfile`
 
 With no positional image name, `dctl image build` opens an `fzf` picker over
 the deployed managed images under `~/.config/dctl/images/` and does not consult
@@ -310,8 +311,8 @@ devimg/agents:latest
 
 | Directory | Purpose | Used at runtime? |
 | --- | --- | --- |
-| `~/.local/share/dctl/` | Installed assets: Dockerfiles, devcontainer templates, schemas. Seed sources only. | No — only read by `dctl deploy` |
-| `~/.config/dctl/` | User config: deployed devcontainer layers, deployed Dockerfiles, project registry, defaults | Yes — sole runtime source for builds, merges, and container operations |
+| `~/.local/share/dctl/` | Installed assets: Containerfiles, devcontainer templates, schemas. Seed sources only. | No — only read by `dctl deploy` |
+| `~/.config/dctl/` | User config: deployed devcontainer layers, deployed Containerfiles, project registry, defaults | Yes — sole runtime source for builds, merges, and container operations |
 | `~/.cache/dctl/` | Generated artifacts: merged `devcontainer.json` output | Yes — consumed by `dctl ws up` |
 
 All of these honor `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, and `XDG_CACHE_HOME`.
@@ -340,7 +341,7 @@ This installs:
 
 - `dctl` to `~/.local/bin/dctl`
 - shell modules to `~/.local/lib/dctl/`
-- managed Dockerfiles to `~/.local/share/dctl/images/` (seed sources — not used at runtime)
+- managed Containerfiles to `~/.local/share/dctl/images/` (seed sources — not used at runtime)
 - devcontainer templates to `~/.local/share/dctl/devcontainers/` (seed sources — not used at runtime)
 - schema files to `~/.local/share/dctl/schemas/`
 
@@ -363,11 +364,11 @@ make uninstall
 make uninstall-systemd
 ```
 
-Use `make uninstall` to remove the installed binary, shell modules, templates, Dockerfiles, and schemas. Use `make uninstall-systemd` to remove and disable the weekly rebuild timer.
+Use `make uninstall` to remove the installed binary, shell modules, templates, Containerfiles, and schemas. Use `make uninstall-systemd` to remove and disable the weekly rebuild timer.
 
 ## Further Reading
 
 - [QUICKSTART.md](docs/QUICKSTART.md) for a short setup path
-- [ARCHITECTURE.md](docs/ARCHITECTURE.md) for deeper technical rationale and troubleshooting
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) for the Podman/libkrun architecture overview and runtime model
 - [spec/README.md](spec/README.md) for the implemented design/spec set
 - [slides/](slides/) for the Slidev presentation (`cd slides && npm install && npm run dev`); auto-deployed to GitHub Pages

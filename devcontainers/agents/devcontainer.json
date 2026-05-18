@@ -1,134 +1,14 @@
-// =============================================================================
-// AGENTS LAYER — generic configuration for AI coding agents
-// =============================================================================
+// AGENTS LAYER — AI coding agent defaults
 //
-// This layer adds what is needed to run agent CLIs (Claude Code, Codex CLI,
-// Gemini CLI) inside a dctl-managed container:
-//
-//   1. Mounts for each agent's config directory (so auth + history persist
-//      across container recreations).
-//   2. `runArgs` that allow agents to use bubblewrap (`bwrap`) for an
-//      internal sandbox — primarily OpenAI Codex CLI — while keeping a
-//      meaningful syscall filter applied to the container.
-//
-// -----------------------------------------------------------------------------
-// Why the runArgs below exist
-// -----------------------------------------------------------------------------
-//
-// THE PROBLEM
-// -----------
-// Some agents — most notably OpenAI Codex CLI — wrap every shell command
-// they execute in bubblewrap (`bwrap`). bwrap creates its sandbox by calling
-//
-//     unshare(CLONE_NEWUSER)
-//
-// to make a new user namespace, plus `clone`, `setns`, `mount`, `umount2`,
-// and `pivot_root` to set up the inner mount view. Docker's default
-// seccomp profile and Ubuntu's `docker-default` AppArmor profile both
-// block those operations from unprivileged callers.
-//
-// WHAT EACH runArg DOES
-// ---------------------
-//   --security-opt seccomp=<path>/seccomp-bwrap.json
-//       Hand-written syscall filter shipped with this layer. It is
-//       default-ALLOW with explicit EPERM denies on the
-//       highest-risk syscalls historically used in container escape and
-//       kernel privilege-escalation CVEs (bpf, userfaultfd,
-//       perf_event_open, keyctl, kexec_*, init_module, iopl/ioperm,
-//       reboot, syslog, swapon/swapoff, and a handful of legacy
-//       syscalls). Strictly stronger than seccomp=unconfined; deliberately
-//       looser than moby's default profile so bubblewrap, build tools,
-//       and ad-hoc debugging (`strace`, `gdb`) all keep working out of
-//       the box. See the file's `_meta` block for the full design
-//       rationale and references.
-//
-//   --security-opt apparmor=unconfined
-//       Do not load the AppArmor profile for this container. Required on
-//       Ubuntu 23.10/24.04+ where AppArmor independently denies `unshare`
-//       of user namespaces.
-//
-//   --security-opt systempaths=unconfined
-//       Do not mask /proc/sys and similar paths. bwrap reads some of those
-//       paths to probe kernel support for user namespaces; with them masked
-//       it may bail out before even trying.
-//
-// WHY THIS IS SAFE ENOUGH FOR A DEV WORKFLOW
-// ------------------------------------------
-// These flags do NOT grant extra privileges. We are NOT adding `--privileged`,
-// NOT granting extra Linux capabilities (e.g. CAP_SYS_ADMIN), NOT changing
-// the user the container runs as. The container still runs as the same
-// non-root user, with the same cgroups, same network scope, same everything.
-//
-// Docker's DEFENSIVE policies are relaxed in narrow, targeted ways: the
-// syscall filter still blocks the syscalls most often abused for kernel
-// privilege escalation; AppArmor and the /proc masking are off so bwrap
-// can probe kernel namespace support. Since dctl is already the isolation
-// boundary between your workspace and your host, this is an acceptable
-// tradeoff on a developer machine.
-//
-// SECCOMP PROFILE PATH
-// --------------------
-// The path under runArgs is resolved on the host by the devcontainer CLI
-// before being passed to docker. The file is shipped by `make install`,
-// deployed to user config by `dctl deploy`, and never referenced from
-// inside the container. There is no fallback to seccomp=unconfined: if
-// the file is missing, the container fails to start.
-//
-// The literal path uses `${localEnv:HOME}/.config/dctl/...`, which matches the
-// rest of this repo's idiom (see the bind mounts below) and assumes the user
-// has not overridden XDG_CONFIG_HOME. If you do set XDG_CONFIG_HOME to a
-// non-default value, `dctl deploy` writes the seccomp file under
-// `$XDG_CONFIG_HOME/dctl/devcontainer/agents/` but the runArgs literal still
-// reads `~/.config/dctl/...` — symlink the deployed file into ~/.config/dctl/
-// or override `runArgs` in your leaf layer.
-//
-// SUDO HARDENING — SCOPE LIMIT
-// ----------------------------
-// images/agents/Dockerfile narrows passwordless sudo from `NOPASSWD: ALL` to
-// `NOPASSWD: /usr/bin/zypper`. This blocks the common case of `sudo <random
-// command>` but does not eliminate root execution: `sudo zypper install
-// /path/to/local.rpm` will run that RPM's %post script as root, and
-// `--allow-unsigned-rpm` lifts the signature requirement. A determined agent
-// inside the container can still gain root via a crafted local RPM. The
-// trade-off is conscious: zypper covers ~all legitimate package-install needs
-// and stops casual `sudo cp /etc/x ...` style abuse. For a fully sudo-free
-// agent variant, build your own image without the sudoers.d entry.
-//
-// REFERENCES
-// ----------
-//   https://docs.docker.com/engine/security/seccomp/
-//   https://github.com/moby/profiles/blob/main/seccomp/default.json
-//   https://developers.openai.com/codex/concepts/sandboxing
-//   https://github.com/containers/bubblewrap
-//   https://emirb.github.io/blog/microvm-2026/
-//
-// =============================================================================
+// Tier 0 hygiene on the outer libkrun boundary: cap-drop=ALL,
+// no-new-privileges, and no live host auth-dir mounts. Credential forwarding
+// happens via env vars (GH/GitLab) or per-session read-only ephemeral copies
+// (Claude/Codex/Gemini). For workflows that run an inner bwrap sandbox (e.g.
+// Codex CLI's), use the opt-in `agents-permissive` layer instead. See
+// docs/SECURITY.md for the runtime threat-model details.
 {
   "runArgs": [
-    "--security-opt", "seccomp=${localEnv:HOME}/.config/dctl/devcontainer/agents/seccomp-bwrap.json",
-    "--security-opt", "apparmor=unconfined",
-    "--security-opt", "systempaths=unconfined"
-  ],
-  "mounts": [
-    {
-      "source": "${localEnv:HOME}/.claude",
-      "target": "${localEnv:HOME}/.claude",
-      "type": "bind"
-    },
-    {
-      "source": "${localEnv:HOME}/.claude.json",
-      "target": "${localEnv:HOME}/.claude.json",
-      "type": "bind"
-    },
-    {
-      "source": "${localEnv:HOME}/.codex",
-      "target": "${localEnv:HOME}/.codex",
-      "type": "bind"
-    },
-    {
-      "source": "${localEnv:HOME}/.gemini",
-      "target": "${localEnv:HOME}/.gemini",
-      "type": "bind"
-    }
+    "--cap-drop", "ALL",
+    "--security-opt", "no-new-privileges"
   ]
 }

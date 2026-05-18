@@ -1,0 +1,204 @@
+# Base layer for AI agent sandboxing
+# See: docs/ARCHITECTURE.md
+#
+# Supply chain note: Bun, Claude Code, OpenCode, and the mise
+# refresh are installed via curl-pipe. Codex is installed via Bun (npm-style).
+# gh is installed via the official GitHub RPM repo. Node.js LTS, Neovim,
+# Python, fzf, pre-commit, glab, bats, and yq are installed via mise. eza, mise, zoxide,
+# and starship are installed via cargo-binstall.
+# trash-cli via pipx. Rust toolchain via rustup. Neovim runs a minimal
+# config in containers (no plugins, LSP, or treesitter). For stronger
+# guarantees, pin versions and validate checksums. Current approach favors
+# simplicity for personal devcontainers with weekly rebuilds.
+
+# Base image: opensuse/tumbleweed is the rolling release. Docker Hub's tag
+# is rebuilt frequently against the current snapshot and mirrors sync
+# atomically per snapshot, so the chronic mirror-lag 404s that plague
+# Leap 16.0's image don't occur here. Tumbleweed's recommended upgrade
+# command is `zypper dist-upgrade` (not `zypper update`).
+#   https://en.opensuse.org/Portal:Tumbleweed
+# hadolint ignore=DL3006
+FROM opensuse/tumbleweed
+
+ENV LANG=C.UTF-8
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# Defence-in-depth against transient mirror 404s: disable libzypp's parallel
+# package preload so a single mirror miss doesn't abort the whole transaction
+# — standard sequential download falls back to the master.
+#   https://www.suse.com/support/update/announcement/2025/suse-ru-202520488-1/
+ENV ZYPP_PCK_PRELOAD=0
+
+# System dependencies + build tools for native extensions
+# Package names follow openSUSE conventions. Verify availability with:
+#   podman run --rm opensuse/tumbleweed bash -c "zypper --non-interactive refresh && zypper info <pkg>"
+# Or check: https://software.opensuse.org/package/<pkg>
+# clang-devel/llvm-devel are unversioned metapackages — they pull whatever
+# LLVM major version is current in the snapshot.
+# Retry loop: defence in depth against transient mirror flaps. Up to 3
+# attempts with -f metadata refresh between retries.
+# hadolint ignore=DL3035,DL3037
+RUN zypper --non-interactive --gpg-auto-import-keys refresh -f \
+    && zypper --non-interactive --gpg-auto-import-keys dist-upgrade --no-recommends --auto-agree-with-licenses --allow-vendor-change \
+    && for attempt in 1 2 3; do \
+        echo "==> Installing zypper packages (attempt ${attempt}/3)..." \
+        && zypper --non-interactive install --no-recommends \
+            ca-certificates \
+            ca-certificates-mozilla \
+            curl \
+            git-core \
+            unzip \
+            ripgrep \
+            nftables \
+            fd \
+            bat \
+            fish \
+            jq \
+            tree \
+            htop \
+            sudo \
+            openssh-clients \
+            rsync \
+            stow \
+            kitty-terminfo \
+            parallel \
+            gcc \
+            gcc-c++ \
+            make \
+            binutils \
+            glibc-devel \
+            libffi-devel \
+            libopenssl-3-devel \
+            pkgconf-pkg-config \
+            clang-devel \
+            llvm-devel \
+            dbus-1-devel \
+            libX11-devel \
+            libXft-devel \
+            libXinerama-devel \
+        && break \
+        || if [ "$attempt" -lt 3 ]; then \
+            echo "==> Attempt ${attempt}/3 failed — refreshing mirrors and retrying in 5s..."; \
+            sleep 5; \
+            zypper --non-interactive --gpg-auto-import-keys refresh -f; \
+        else \
+            echo "==> ERROR: zypper install failed after 3 attempts"; exit 1; \
+        fi; \
+    done \
+    && zypper clean --all
+
+# Non-root user with package-management-only passwordless sudo
+# USERNAME must match host $USER for config file consistency
+# (sudo intentionally restricted to /usr/bin/zypper — agents and devcontainer
+# features can still install packages, but the agent cannot run arbitrary
+# commands as root)
+ARG USERNAME
+ARG USER_UID=1000
+ARG USER_GID=1000
+
+RUN test -n "$USERNAME" || { echo "USERNAME build arg is required"; exit 1; } \
+    && groupadd --gid $USER_GID $USERNAME \
+    && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/bash $USERNAME \
+    && rm -f /home/$USERNAME/.bashrc /home/$USERNAME/.bash_logout /home/$USERNAME/.profile \
+    && { \
+        echo "Defaults!/usr/local/bin/dctl-egress env_keep += \"DCTL_NETWORK_ALLOWLIST_JSON\""; \
+        echo "$USERNAME ALL=(root) NOPASSWD: /usr/bin/zypper, /usr/local/bin/dctl-egress"; \
+    } > /etc/sudoers.d/$USERNAME \
+    && chmod 0440 /etc/sudoers.d/$USERNAME
+
+# Pre-create directories for mounts
+RUN install -d -m 0700 -o $USERNAME -g $USERNAME /home/$USERNAME/.ssh
+
+# fzf-tab-completion: bash Tab completion via fzf (installed from upstream repo)
+# Checked first by bash/.config/bash/rc.d/10-fzf.bash
+RUN git clone --depth=1 https://github.com/lincheney/fzf-tab-completion /usr/share/fzf-tab-completion \
+    && rm -rf /usr/share/fzf-tab-completion/.git \
+    && test -r /usr/share/fzf-tab-completion/bash/fzf-bash-completion.sh
+
+# GitHub CLI (gh): official RPM repo tracks latest releases for openSUSE/Fedora/RHEL
+# hadolint ignore=DL3037
+RUN zypper --non-interactive addrepo https://cli.github.com/packages/rpm/gh-cli.repo \
+    && zypper --non-interactive --gpg-auto-import-keys refresh \
+    && zypper --non-interactive install --no-recommends gh \
+    && zypper clean --all
+
+COPY dctl-egress /usr/local/bin/dctl-egress
+RUN chmod 0755 /usr/local/bin/dctl-egress
+
+USER $USERNAME
+WORKDIR /home/$USERNAME
+
+# Install Bun
+RUN curl -fsSL https://bun.com/install | bash
+
+ENV BUN_INSTALL="/home/$USERNAME/.bun"
+
+# Rust toolchain (for cargo-binstall chain)
+# Minimal profile: just rustc + cargo + rust-std (no docs/clippy/rustfmt)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --default-toolchain stable --profile minimal
+
+ENV PATH="/home/$USERNAME/.local/share/mise/shims:/home/$USERNAME/.cargo/bin:$BUN_INSTALL/bin:/home/$USERNAME/.local/bin:$PATH"
+
+# Default editor (neovim installed below via mise)
+ENV EDITOR=nvim
+ENV VISUAL=nvim
+
+# CLI tools via cargo (prebuilt where available, source where needed)
+# Preference: cargo-binstall > cargo-install
+RUN cargo install cargo-binstall --locked \
+    && cargo binstall --no-confirm --locked mise \
+    && cargo binstall --no-confirm --locked zoxide \
+    && cargo binstall --no-confirm --locked eza \
+    && cargo binstall --no-confirm --locked starship \
+    && cargo binstall --no-confirm --locked ast-grep \
+    && cargo binstall --no-confirm --locked shellharden
+
+# Node.js LTS via mise (needed for bun-installed packages with #!/usr/bin/env node shebangs)
+RUN --mount=type=secret,id=gh_token,mode=0444 \
+    export GITHUB_TOKEN="$(cat /run/secrets/gh_token 2>/dev/null || true)" \
+    && mise use --global node@lts \
+    && mise reshim
+
+# Neovim (latest stable) + Python + pre-commit + fzf + glab via mise
+# Intentionally unpinned: @latest with default backends matches the weekly-rebuild
+# rolling model. If a backend drifts, the build breaks loud — fix forward.
+# Refresh mise binary: cached cargo-binstall version may have registry/parser bugs
+# hadolint ignore=DL3013
+RUN --mount=type=secret,id=gh_token,mode=0444 \
+    export GITHUB_TOKEN="$(cat /run/secrets/gh_token 2>/dev/null || true)" \
+    && curl -fsSL https://mise.run | MISE_INSTALL_PATH="$HOME/.cargo/bin/mise" sh \
+    && mise use --global neovim@latest \
+    # Force standard (non-freethreaded) Python: 3.14+ defaults to freethreaded builds
+    # (no GIL), whose stripped precompiled binaries lack the lib/ dir mise expects.
+    # Standard build keeps full compatibility with C extensions and conventional layout.
+    && MISE_PYTHON_PRECOMPILED_FLAVOR=install_only_stripped mise use --global python@latest \
+    && mise use --global pre-commit@latest \
+    && mise use --global fzf@latest \
+    && mise use --global gitlab:gitlab-org/cli@latest \
+    && mise use --global bats@latest \
+    && mise use --global yq@latest \
+    && pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir pipx \
+    && python -m pipx install trash-cli \
+    && mise reshim
+
+# AI Agent CLIs (rolling: rebuild weekly, or on-demand via --refresh-agents)
+# Cache-bust: dctl image build --refresh-agents agents
+ARG CACHEBUST_AGENTS=0
+# Claude Code (native installer - auto-updates)
+RUN echo "agent-cache-bust=$CACHEBUST_AGENTS" \
+    && curl -fsSL https://claude.ai/install.sh | bash
+# Codex CLI (OpenAI) via Bun | OpenCode via Bun | Gemini CLI via npm
+RUN bun add -g @openai/codex opencode-ai && npm install -g @google/gemini-cli@latest
+
+# Kitty remote control client (standalone static binary, no runtime deps)
+# Enables tab-title hooks and notifications from inside containers via kitty's Unix socket
+RUN curl -fsSL -o /tmp/kitten \
+    https://github.com/kovidgoyal/kitty/releases/latest/download/kitten-linux-amd64 \
+    && install -m 0755 /tmp/kitten /home/$USERNAME/.local/bin/kitten \
+    && rm -f /tmp/kitten
+
+WORKDIR /workspaces
+
+CMD ["sleep", "infinity"]

@@ -93,8 +93,8 @@ config lives elsewhere.
   run `dctl deploy`
 - reads the selected devcontainer's `.image` field
 - for managed `devimg/<name>:latest` images, validates that
-  `~/.config/dctl/images/<name>/Dockerfile` exists
-- for managed images, runs `docker image inspect` and automatically calls
+  `~/.config/dctl/images/<name>/Containerfile` exists
+- for managed images, runs `podman image inspect` and automatically calls
   `dctl image build <name>` when the image is missing locally
 - writes merged output to `~/.cache/dctl/devcontainer/<name>/devcontainer.json`
 - registers the manifest name in `~/.config/dctl/projects.yaml`

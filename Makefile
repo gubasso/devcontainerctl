@@ -6,11 +6,32 @@ SYSTEMD_DIR ?= $(HOME)/.local/share/systemd/user
 INSTALL := install
 
 IMAGE_NAMES := agents python-dev rust-dev zig-dev
-DEVCONTAINER_DIRS := agents python rust zig general coordinator base
+DEVCONTAINER_DIRS := agents agents-permissive python rust zig general coordinator base
 DEVCONTAINER_MANIFESTS := general coordinator python rust zig
-LIB_FILES := common.sh ws.sh image.sh deploy.sh init.sh test.sh auth.sh config.sh
+LIB_FILES := lifecycle.sh
 
-.PHONY: install uninstall install-systemd uninstall-systemd test test-unit test-integration lint check gate-no-eval gate-no-raw-ansi gate-one-public-fn-per-file
+CHECK_NO_DOCKER_GLOBS := --include='*.sh' --include='*.bats' --include='*.md' \
+	--include='*.yaml' --include='*.yml' --include='*.json' \
+	--include='Makefile' --include='Containerfile' --include='post-stow'
+# Content-token whitelist: legitimate author content that must survive.
+# See docs/specs/sandbox-runtime/IMPLEMENTATION-PLAN.md refactor history.
+#  - build\.dockerfile   upstream Microsoft devcontainer.json schema key
+#  - CVE-2025-9074, Leaky Vessels, outcoldman, firedocker   factual security history
+#  - is-docker   npm transitive dep in slides/package-lock.json (not author-controlled)
+#  - Docker Hub        the openSUSE/Tumbleweed image is published to Docker Hub; the
+#                       phrase names the upstream registry, not a docker dependency.
+#  - check-no-docker   the gate's own target name, referenced by CI and pre-commit.
+CHECK_NO_DOCKER_WHITELIST := build\.dockerfile|CVE-2025-9074|Leaky Vessels|outcoldman|firedocker|is-docker|Docker Hub|check-no-docker
+# Path exclusions: whole-file survivors that contain the gate's own machinery
+# or the legacy `dockerfile` registry-key migration path. Excluding by path
+# (rather than enlarging the regex whitelist) keeps the content token list
+# small and stops new prose drift from sneaking in via a shared regex.
+CHECK_NO_DOCKER_PATH_EXCLUDES := \
+	-e '^(\./)?Makefile:' \
+	-e '^(\./)?lib/dctl/_lib/registry/register_project_defaults\.sh:' \
+	-e '^(\./)?tests/config_test\.bats:'
+
+.PHONY: install uninstall install-systemd uninstall-systemd test test-unit test-integration lint check check-no-docker gate-no-eval gate-no-raw-ansi gate-one-public-fn-per-file
 
 install:
 	$(INSTALL) -d "$(BIN_DIR)"
@@ -19,6 +40,21 @@ install:
 	for lib in $(LIB_FILES); do \
 		$(INSTALL) -m 644 "lib/dctl/$$lib" "$(LIB_DIR)/$$lib"; \
 	done
+	$(INSTALL) -d "$(LIB_DIR)/_lib"
+	find lib/dctl/_lib -type f -name '*.sh' | while read -r file; do \
+		dest="$(LIB_DIR)/$${file#lib/dctl/}"; \
+		$(INSTALL) -d "$$(dirname "$$dest")"; \
+		$(INSTALL) -m 644 "$$file" "$$dest"; \
+	done
+	$(INSTALL) -d "$(LIB_DIR)/commands"
+	find lib/dctl/commands -type f -name '*.sh' | while read -r file; do \
+		dest="$(LIB_DIR)/$${file#lib/dctl/}"; \
+		$(INSTALL) -d "$$(dirname "$$dest")"; \
+		$(INSTALL) -m 644 "$$file" "$$dest"; \
+	done
+	$(INSTALL) -d "$(LIB_DIR)/runtime"
+	$(INSTALL) -m 644 "lib/dctl/runtime/common.sh" "$(LIB_DIR)/runtime/common.sh"
+	$(INSTALL) -m 644 "lib/dctl/runtime/krun.sh" "$(LIB_DIR)/runtime/krun.sh"
 	for image in $(IMAGE_NAMES); do \
 		$(INSTALL) -d "$(DATA_DIR)/images/$$image"; \
 		for file in images/$$image/*; do \
@@ -53,6 +89,11 @@ uninstall:
 	for lib in $(LIB_FILES); do \
 		rm -f "$(LIB_DIR)/$$lib"; \
 	done
+	rm -rf "$(LIB_DIR)/_lib"
+	rm -rf "$(LIB_DIR)/commands"
+	rm -f "$(LIB_DIR)/runtime/common.sh"
+	rm -f "$(LIB_DIR)/runtime/krun.sh"
+	rmdir "$(LIB_DIR)/runtime" 2>/dev/null || true
 	rmdir "$(LIB_DIR)" 2>/dev/null || true
 	for image in $(IMAGE_NAMES); do \
 		for file in images/$$image/*; do \
@@ -92,10 +133,10 @@ uninstall-systemd:
 	systemctl --user daemon-reload >/dev/null 2>&1 || true
 
 test-unit:
-	bats --filter-tags 'unit,!integration' tests
+	bats --jobs $(shell nproc) --filter-tags 'unit,!integration' tests
 
 test-integration:
-	bats --filter-tags integration tests
+	bats --jobs $(shell nproc) --filter-tags integration tests
 
 test: test-unit test-integration
 
@@ -104,13 +145,30 @@ lint:
 	pre-commit run shfmt --all-files
 	pre-commit run shellharden --all-files
 	pre-commit run bashate --all-files
-	pre-commit run typos --all-files
 
 check:
 	pre-commit run --all-files
 	bash -O globstar -c 'shellcheck -x bin/* lib/**/*.sh'
 	shfmt -d -i 2 -ci -bn -s bin/ lib/ hooks/ tests/
-	bats -r tests/
+	bats --jobs $(shell nproc) --filter-tags '!e2e' tests
+	$(MAKE) check-no-docker
+
+# `.plan/` is a developer-local scratch directory (not committed) used by
+# planning tools (e.g. prex, review-loop). It is excluded here so transient
+# planning artifacts cannot trip the grep gate; keep this filter in place.
+check-no-docker:
+	@hits=$$(grep -rniE 'docker(file)?' $(CHECK_NO_DOCKER_GLOBS) . \
+	  | grep -v '/.git/' \
+	  | grep -v '/.plan/' \
+	  | grep -v '/node_modules/' \
+	  | grep -vE $(CHECK_NO_DOCKER_PATH_EXCLUDES) \
+	  | grep -vE '$(CHECK_NO_DOCKER_WHITELIST)' \
+	  || true); \
+	if [ -n "$$hits" ]; then \
+	  echo "check-no-docker: forbidden docker/Dockerfile references:" >&2; \
+	  echo "$$hits" >&2; \
+	  exit 1; \
+	fi
 
 gate-no-eval:
 	! grep -rn --include='*.sh' -E '^[[:space:]]*eval\b' bin lib hooks | grep -v '# allow-eval'

@@ -11,13 +11,9 @@ if [[ ! -d $DCTL_LIB_DIR ]]; then
   exit 1
 fi
 
-source "${DCTL_LIB_DIR}/common.sh"
-source "${DCTL_LIB_DIR}/ws.sh"
-source "${DCTL_LIB_DIR}/image.sh"
-source "${DCTL_LIB_DIR}/deploy.sh"
-source "${DCTL_LIB_DIR}/init.sh"
-source "${DCTL_LIB_DIR}/test.sh"
-source "${DCTL_LIB_DIR}/config.sh"
+source "${DCTL_LIB_DIR}/_lib/source.sh"
+__dctl_require _lib/log.sh
+__dctl_require _lib/paths.sh
 
 usage() {
   cat <<'EOF'
@@ -30,6 +26,7 @@ Commands:
   init         Register the current project using a deployed devcontainer
   deploy       Copy installed templates/images into user config
   test         Validate the current workspace setup
+  doctor       Probe the host for libkrun + rootless Podman readiness
   ws           Manage the current workspace's devcontainer lifecycle
   image        Build and inspect devcontainer base images
   config       Project registry management
@@ -70,43 +67,7 @@ main() {
     esac
   done
 
-  local command_group="${1:-help}"
-
-  case "$command_group" in
-    init)
-      shift
-      main_init "$@"
-      ;;
-    deploy)
-      shift
-      main_deploy "$@"
-      ;;
-    test)
-      shift
-      main_test "$@"
-      ;;
-    ws)
-      shift
-      main_ws "$@"
-      ;;
-    image)
-      shift
-      main_image "$@"
-      ;;
-    config)
-      shift
-      main_config "$@"
-      ;;
-    help | -h | --help)
-      usage
-      ;;
-    version | -v | --version)
-      printf 'dctl %s\n' "$DCTL_VERSION"
-      ;;
-    *)
-      err "Unknown command group: $command_group"
-      ;;
-  esac
+  __dctl_dispatch "$@"
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
