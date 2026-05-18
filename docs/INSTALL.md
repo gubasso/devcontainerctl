@@ -64,7 +64,7 @@ dctl doctor
 If `dctl` is not installed yet, use a direct Podman smoke test first:
 
 ```bash
-podman run --runtime krun --rm quay.io/quay/busybox:1.36 /bin/true
+podman run --runtime krun --rm quay.io/libpod/busybox:latest /bin/true
 ```
 
 ## Known limitations

@@ -13,7 +13,7 @@ readonly MIN_LIBKRUN_VER="1.18.0"
 # Pinned tiny image for the decisive `podman run --runtime krun` smoke probe.
 # TODO(phase-1): swap to digest pin.
 # shellcheck disable=SC2034
-readonly DCTL_DOCTOR_SMOKE_IMAGE="quay.io/quay/busybox:1.36"
+readonly DCTL_DOCTOR_SMOKE_IMAGE="quay.io/libpod/busybox:latest"
 
 # Interface contract — callers depend only on these runtime-agnostic entrypoints.
 #

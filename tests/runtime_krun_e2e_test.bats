@@ -22,12 +22,12 @@ setup() {
   mkdir -p "${XDG_DATA_HOME}/dctl" "${XDG_CONFIG_HOME}/dctl" "${XDG_CACHE_HOME}/dctl" "$HOME" "${WORKSPACE_FOLDER}/.devcontainer"
   cat >"${WORKSPACE_FOLDER}/.devcontainer/devcontainer.json" <<'EOF'
 {
-  "image": "quay.io/quay/busybox:1.36"
+  "image": "quay.io/libpod/busybox:latest"
 }
 EOF
 
-  if ! podman image inspect quay.io/quay/busybox:1.36 >/dev/null 2>&1; then
-    podman pull quay.io/quay/busybox:1.36 >/dev/null 2>&1 || skip "E2E smoke requires quay.io/quay/busybox:1.36 locally or pullable"
+  if ! podman image inspect quay.io/libpod/busybox:latest >/dev/null 2>&1; then
+    podman pull quay.io/libpod/busybox:latest >/dev/null 2>&1 || skip "E2E smoke requires quay.io/libpod/busybox:latest locally or pullable"
   fi
 }
 
