@@ -1,7 +1,27 @@
 # Development workflow
 
-How to build, run, and test `dctl` from a working tree without disturbing
-an existing host install.
+How to build, run, and test `dctl` from a working tree without
+disturbing an existing host install.
+
+## TL;DR
+
+Set `DCTL_HOME` and run the repo's `./bin/dctl` — config/cache live in
+the sandbox, seed data is auto-detected from the working tree:
+
+```bash
+cd /path/to/devcontainerctl
+export DCTL_HOME=$HOME/.dctl-dev
+
+./bin/dctl doctor
+./bin/dctl init
+./bin/dctl image build agents
+./bin/dctl ws up
+
+# cleanup (production state is never touched)
+rm -rf "$HOME/.dctl-dev"
+```
+
+Details below.
 
 ## Layout recap
 
@@ -13,12 +33,12 @@ its own location (`bin/dctl:6`):
 DCTL_LIB_DIR="$(dirname "$(readlink -f "$0")")/../lib/dctl"
 ```
 
-That single line is what makes every option below work. As long as the
-running script sits in a `bin/` directory whose sibling `lib/dctl/` is
-populated, it picks up that library tree — repo, custom prefix, or
-symlink target.
+So invoking the repo's `./bin/dctl` always loads the repo's
+`lib/dctl/`; no install step, no rebuild, edits are picked up on the
+next invocation.
 
-Install paths are controlled by Make variables (`Makefile:1-4`):
+Install paths (used by `make install`, not the dev workflow) are
+controlled by Make variables (`Makefile:1-4`):
 
 | Variable      | Default                                | Purpose                          |
 |---------------|----------------------------------------|----------------------------------|
@@ -27,108 +47,69 @@ Install paths are controlled by Make variables (`Makefile:1-4`):
 | `DATA_DIR`    | `$HOME/.local/share/dctl`              | Images, devcontainers, schemas   |
 | `SYSTEMD_DIR` | `$HOME/.local/share/systemd/user`      | Image rebuild timer/service      |
 
-Runtime config and cache live under XDG paths (`~/.config/dctl/`,
-`~/.cache/dctl/`) and are written by `dctl init` / `dctl deploy` — they
-are not affected by where the binary is installed.
+## Dev workflow — isolated sandbox via `DCTL_HOME`
 
-## Option 1 — Run from the working tree
+The supported way to run `dctl` from a working tree is with `DCTL_HOME`
+set. This redirects config, cache, and seed-data roots under one
+prefix, so dev iteration cannot disturb the installed `dctl`'s state.
+No install step.
 
-Zero install, zero collision with the existing `dctl`. The repo's
-`bin/dctl` resolves to the repo's `lib/dctl/`.
+When `DCTL_HOME` is set, `lib/dctl/_lib/paths.sh` redirects three
+roots:
+
+| Var               | Default under `DCTL_HOME`              | Replaces                  |
+|-------------------|----------------------------------------|---------------------------|
+| `DCTL_CONFIG_DIR` | `$DCTL_HOME/config`                    | `~/.config/dctl/`         |
+| `DCTL_CACHE_DIR`  | `$DCTL_HOME/cache`                     | `~/.cache/dctl/`          |
+| `DCTL_DATA_DIR`   | repo root (auto-detect) or `$DCTL_HOME/share` | `~/.local/share/dctl/` |
+
+`DCTL_DATA_DIR` is the seed-data root that `IMAGES_DIR`,
+`DEVCONTAINERS_DIR`, and `DCTL_SCHEMAS_DIR` derive from. Its default
+auto-detects: when `./bin/dctl` runs from a repo working tree (the
+parent of `lib/dctl/` contains `images/`, `devcontainers/`, and
+`schemas/`), `DCTL_DATA_DIR` resolves to that repo root, so `dctl init`
+seeds from there without `make install`. Outside a repo (e.g. an
+installed `dctl`), it falls back to `$DCTL_HOME/share`.
+
+So this is all you need from the repo:
 
 ```bash
-cd /path/to/devcontainerctl
-./bin/dctl doctor
+export DCTL_HOME=$HOME/.dctl-dev
+./bin/dctl init
+./bin/dctl image build agents
 ./bin/dctl ws up
 ```
 
-Use this for normal iterative development. The installed `dctl` on
-`$PATH` is untouched.
+Override the auto-detect by setting `DCTL_DATA_DIR` explicitly, e.g.
+`DCTL_DATA_DIR=$HOME/.dctl-dev/share` to use a populated install tree
+under the sandbox instead of the repo.
+
+Precedence (highest → lowest): individual `DCTL_*_DIR` / `IMAGES_DIR`
+override → `DCTL_HOME` derivation (with auto-detect for data) →
+`XDG_*` → `$HOME`. Override one knob without losing the others.
 
 Caveats:
 
-- `make install-systemd` writes service files that hardcode
-  `$(BIN_DIR)/dctl` (`Makefile:123-124`); the in-repo entrypoint is not
-  registered with systemd unless you install it.
-- `~/.config/dctl/` and `~/.cache/dctl/` are shared with the installed
-  `dctl`. If a branch changes config schema or cache layout, point at a
-  scratch home (e.g. `HOME=$PWD/.devhome ./bin/dctl ...`) to keep state
-  isolated.
+- Podman image storage is user-level and is NOT isolated by
+  `DCTL_HOME`. If you need a parallel image, use a distinct image tag
+  on the branch.
+- Systemd units installed via `make install-systemd` hardcode
+  `$(BIN_DIR)/dctl` and are also not affected by `DCTL_HOME` — testing
+  the timer wiring requires a real `make install`.
 
-## Option 2 — Side-by-side install under a custom prefix
-
-Install the branch under a separate prefix so both versions coexist on
-`$PATH` under different paths. The binary name stays `dctl`; you
-disambiguate by full path or by which prefix is earlier on `$PATH`.
+Cleanup is one `rm -rf`:
 
 ```bash
-make install \
-  BIN_DIR="$HOME/.local-dev/bin" \
-  LIB_DIR="$HOME/.local-dev/lib/dctl" \
-  DATA_DIR="$HOME/.local-dev/share/dctl"
-
-# invoke explicitly
-"$HOME/.local-dev/bin/dctl" doctor
+rm -rf "$HOME/.dctl-dev"
 ```
 
-Uninstall the dev copy:
-
-```bash
-make uninstall \
-  BIN_DIR="$HOME/.local-dev/bin" \
-  LIB_DIR="$HOME/.local-dev/lib/dctl" \
-  DATA_DIR="$HOME/.local-dev/share/dctl"
-```
-
-Pass the same variables to every `make install`/`make uninstall` pair —
-the targets do not remember them.
-
-## Option 3 — Alternate binary name (`dctl-dev`)
-
-If you want the dev version on `$PATH` under a distinct name, install
-under a custom prefix (Option 2) and rename the entrypoint. No script
-edit needed — `DCTL_LIB_DIR` is computed from the file's actual location
-via `readlink -f`, so a renamed file still resolves the correct sibling
-`lib/dctl/`.
-
-```bash
-make install \
-  BIN_DIR="$HOME/.local-dev/bin" \
-  LIB_DIR="$HOME/.local-dev/lib/dctl" \
-  DATA_DIR="$HOME/.local-dev/share/dctl"
-
-mv "$HOME/.local-dev/bin/dctl" "$HOME/.local-dev/bin/dctl-dev"
-ln -s "$HOME/.local-dev/bin/dctl-dev" "$HOME/.local/bin/dctl-dev"
-
-dctl-dev doctor
-```
-
-Or skip the install entirely and symlink straight to the working tree.
-`readlink -f` follows the symlink, so `DCTL_LIB_DIR` resolves to the
-repo's `lib/dctl/`:
-
-```bash
-ln -s /path/to/devcontainerctl/bin/dctl "$HOME/.local/bin/dctl-dev"
-dctl-dev doctor
-```
-
-The symlink form means every edit in the working tree is visible to
-`dctl-dev` on the next invocation — no rebuild step.
-
-## Choosing between the options
-
-| Use case                                                     | Option |
-|--------------------------------------------------------------|--------|
-| Run a one-off check on the branch                            | 1      |
-| Hack iteratively, see edits immediately                      | 1 or 3 (symlink) |
-| Compare branch vs. installed `dctl` from two terminals       | 2      |
-| Put the branch on `$PATH` under a memorable name             | 3      |
-| Test the systemd image-build timer wiring                    | 2      |
+Production state under `~/.config/dctl/`, `~/.cache/dctl/`, and
+`~/.local/share/dctl/` is never touched.
 
 ## Running tests and gates
 
-The Makefile drives the full test and lint surface; nothing here depends
-on whether `dctl` is installed.
+The Makefile drives the full test and lint surface; nothing here
+depends on whether `dctl` is installed.
 
 ```bash
 make test-unit          # bats: unit-tagged
@@ -149,26 +130,6 @@ Other gates worth knowing about:
 Pre-commit hooks (`shellcheck`, `shfmt`, `shellharden`, `bashate`) run
 on `git commit`; run `make check` before pushing to catch the same
 issues locally.
-
-## Cleaning up
-
-When you are done with the branch, remove only the dev install — never
-touch the production prefix:
-
-```bash
-# Option 2/3 cleanup (custom prefix)
-make uninstall \
-  BIN_DIR="$HOME/.local-dev/bin" \
-  LIB_DIR="$HOME/.local-dev/lib/dctl" \
-  DATA_DIR="$HOME/.local-dev/share/dctl"
-
-# Option 3 symlink cleanup
-rm -f "$HOME/.local/bin/dctl-dev"
-```
-
-`~/.config/dctl/` and `~/.cache/dctl/` are shared user state and are not
-removed by `make uninstall`; clear them manually only if the branch
-left incompatible content behind.
 
 ## See also
 
