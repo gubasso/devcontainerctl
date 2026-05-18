@@ -1,6 +1,6 @@
 # Sandbox Runtime — Security Specification
 
-> Status: Draft
+> Status: Decided. §1–§4 record the threat model and viable backend catalog and remain authoritative. §5 (tiered build-out) and §6 (migration sketch) are the **original proposal**: the chosen path is libkrun-only as committed in [DECISION-LINUX.md](./DECISION-LINUX.md), and the as-built tree lives under `lib/dctl/{runtime,commands,_lib}/`. The other backends sketched here (kata-fc/ch, bare-FC, gvisor, apple) remain catalog-only.
 > Scope: Major security re-architecture of `devcontainerctl`'s container/sandbox layer.
 > Audience: Maintainers, contributors, and security reviewers.
 > Companion: [RUNTIMES.md](./RUNTIMES.md) — full per-option catalog and rejection reasoning.
@@ -73,7 +73,7 @@ Rootless mode reduces *blast radius* (escape lands as the invoking user instead 
 
 ## 2. Configured posture (target)
 
-`dctl` is a Bash CLI that consumes `devcontainer.json` directly and composes layers via YAML manifests (`schemas/compose.schema.yaml`). Every container operation invokes `podman` and nothing else; `lib/dctl/lifecycle.sh` interprets the `devcontainer.json` lifecycle keys (`postCreateCommand`, `postStartCommand`, `remoteEnv`, `mounts`, `runArgs`) in-process. Implementation phasing is in [IMPLEMENTATION-PLAN.md](./IMPLEMENTATION-PLAN.md).
+`dctl` is a Bash CLI that consumes `devcontainer.json` directly and composes layers via YAML manifests (`schemas/compose.schema.yaml`). Every container operation invokes `podman` and nothing else; `lib/dctl/lifecycle.sh` interprets the `devcontainer.json` lifecycle keys (`postCreateCommand`, `postStartCommand`, `remoteEnv`, `mounts`, `runArgs`) in-process.
 
 ### 2.1 Required posture
 
@@ -85,7 +85,7 @@ The composed `devcontainer.json` (base + agents leaf) **must** satisfy all of th
 - **Default seccomp is the strict baseline** under microVM isolation ([§5.4 Tier 3](#54-tier-3--relax-inner-constraints-once-the-outer-boundary-is-a-hypervisor)). The permissive `seccomp-bwrap.json` profile is retained only for the `agents-permissive` opt-in profile that hosts Codex CLI's inner `bwrap` sandbox.
 - **AppArmor stays enabled** for the default `agents-strict` profile; `apparmor=unconfined` is only acceptable on the opt-in `agents-permissive` profile.
 - **`--cap-drop=ALL` and `--security-opt=no-new-privileges`** appear in the agents layer's default `runArgs`.
-- **No long-lived OAuth token directories are bind-mounted.** `~/.config/gh`, `~/.config/glab-cli`, `~/.claude*`, `~/.codex`, `~/.gemini` are **never** bind-mounted live; tokens are forwarded as short-lived env (`GH_TOKEN`, `GITLAB_TOKEN`) or copied into a per-session ephemeral tmpdir under `$DCTL_CACHE_DIR/sessions/<workspace-hash>/`. See [§5.1 Tier 0](#51-tier-0--configuration-hygiene-do-now-regardless-of-runtime) and [IMPLEMENTATION-PLAN.md §Phase 4](./IMPLEMENTATION-PLAN.md).
+- **No long-lived OAuth token directories are bind-mounted.** `~/.config/gh`, `~/.config/glab-cli`, `~/.claude*`, `~/.codex`, `~/.gemini` are **never** bind-mounted live; tokens are forwarded as short-lived env (`GH_TOKEN`, `GITLAB_TOKEN`) or copied into a per-session ephemeral tmpdir under `$DCTL_CACHE_DIR/sessions/<workspace-hash>/`. See [§5.1 Tier 0](#51-tier-0--configuration-hygiene-do-now-regardless-of-runtime).
 - **`/tmp` is a tmpfs**, never a host bind.
 - **Network egress is allowlisted by default.** A `lib/dctl/net.sh` module emits the in-VM nftables ruleset; only model APIs, package mirrors, and the workspace's git remotes are reachable.
 - **Per-workspace container identity.** Every container carries `--label devcontainer.local_folder=$PWD`; `dctl ws` queries match on that label, so work-clones of the same repo produce distinct containers.

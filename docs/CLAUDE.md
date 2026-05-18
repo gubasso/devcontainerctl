@@ -10,7 +10,7 @@ Pre-built Podman/libkrun images and the unified `dctl` CLI for AI-agent devconta
 | What | Where |
 |---|---|
 | Internal helpers | `lib/dctl/_lib/<topic>/<name>.sh` |
-| Command tree | `lib/dctl/commands/<group>/` (round 15b) |
+| Command tree | `lib/dctl/commands/<group>/` |
 | Runtime adapter | `lib/dctl/runtime/{common,krun}.sh` |
 | Lifecycle interpreter | `lib/dctl/lifecycle.sh` |
 

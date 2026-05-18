@@ -9,7 +9,7 @@ network egress rather than container escape. See
 
 ## Tier 0 Hygiene
 
-The default path now applies the low-cost controls required by round 40:
+The default path applies these low-cost controls:
 
 - `/tmp` is a tmpfs (`--tmpfs /tmp:rw,nosuid,nodev,size=1g`), not a host bind.
 - The agents layer adds `--cap-drop=ALL`.

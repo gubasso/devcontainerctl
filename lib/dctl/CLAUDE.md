@@ -2,9 +2,6 @@
 
 Shell implementation for `dctl`.
 
-Round 15a introduced the `_lib/` helper tree and lazy dispatch bootstrap.
-Round 15b adds the `commands/` tree and removes the flat compatibility shims.
-
 ## What / Where
 
 | What | Where |
@@ -33,19 +30,18 @@ Round 15b adds the `commands/` tree and removes the flat compatibility shims.
 - `bin/dctl` eagerly loads only `_lib/source.sh`, `_lib/log.sh`, and `_lib/paths.sh`.
 - All other helpers load through `__dctl_require`.
 - `__dctl_dispatch` short-circuits `help`, `--help`, `version`, `--version`, and no-arg entry before loading any command group.
-- Round 15b removed the flat fallback; `__dctl_dispatch` routes only to `commands/<group>/_dispatch.sh`.
+- `__dctl_dispatch` routes only to `commands/<group>/_dispatch.sh` (no flat fallback).
 
 ## Size Guidance
 
 - Soft target: about 200 lines per file.
 - Hard ceiling: 500 lines per file.
-- Small helper files are allowed when they preserve the one-function-per-file layout adopted in 15a.
+- Small helper files are allowed when they preserve the one-function-per-file layout.
 - `tests/structure_test.bats` enforces the command-tree layout, the 500-line ceiling, and the `_lib` one-function rule with exemptions for `_lib/source.sh`, `_lib/log.sh`, and `_lib/paths.sh`.
 
 ## Command Groups
 
-- Round 15b groups: `ws`, `image`, `init`, `deploy`, `config`, `test`, `doctor`
-- Round 40 adds: `net`
+`ws`, `image`, `init`, `deploy`, `config`, `test`, `doctor`, `net`.
 
 ## Do Not Move
 

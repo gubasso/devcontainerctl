@@ -60,7 +60,7 @@ Networking uses **TSI (Transparent Socket Impersonation)**: in-guest sockets are
 
 - **KVM-class boundary.** The guest runs its own kernel; the host kernel is not part of the in-guest attack surface. Shared-kernel escape classes (runc, namespaces, seccomp bypasses) do not apply at this boundary.
 - **No published hypervisor-escape CVEs in libkrun 2024–2026.** The two libkrun CVEs in 2025 were transitive Rust dependency rolls (`rust-openssl`, `crossbeam-channel`), patched through the normal Fedora pipeline; neither was a VMM escape. References: [FEDORA-2025-f8be7978e3](https://linuxsecurity.com/advisories/fedora/fedora-41-libkrun-2025-f8be7978e3-security-advisory-updates-rh8lbifoalx6), [FEDORA-2025-c53905e83d](https://linuxsecurity.com/advisories/fedora/fedora-41-libkrun-2025-c53905e83d-ohmxvt9uvrww).
-- **TSI removes host-side TAP/bridge/NAT plumbing** in exchange for a userspace proxy that terminates per-connection TCP on the **host's** TCP/IP stack via real `AF_INET` / `AF_INET6` / `AF_UNIX` sockets ([libkrunfw TSI patch](https://github.com/containers/libkrunfw/blob/main/patches/0009-Transparent-Socket-Impersonation-implementation.patch)). This is a **different** host-side network surface from a TAP+netfilter microVM, not a strictly smaller one. The Phase 5 in-VM nftables egress allowlist ([IMPLEMENTATION-PLAN.md §Phase 5](./IMPLEMENTATION-PLAN.md)) is sized for exactly this trade-off: the egress proxy lives in the VMM process, so per-VM allowlisting is the right control point.
+- **TSI removes host-side TAP/bridge/NAT plumbing** in exchange for a userspace proxy that terminates per-connection TCP on the **host's** TCP/IP stack via real `AF_INET` / `AF_INET6` / `AF_UNIX` sockets ([libkrunfw TSI patch](https://github.com/containers/libkrunfw/blob/main/patches/0009-Transparent-Socket-Impersonation-implementation.patch)). This is a **different** host-side network surface from a TAP+netfilter microVM, not a strictly smaller one. The in-VM nftables egress allowlist (see [§5.1](#51-egress-enforcement) and `lib/dctl/commands/net/`) is sized for exactly this trade-off: the egress proxy lives in the VMM process, so per-VM allowlisting is the right control point.
 - **Trust path vs. boundary class.** libkrun + crun + Podman is more code on the host-side trust path than a minimal bare-VMM stack, but the **boundary class is identical (KVM)**. Boundary class is the security-relevant variable; trust-path size is a secondary consideration weighed against engineering cost (see §2.4).
 - **Device-set delta vs. bare Firecracker (the residual host-kernel surface).** Every KVM VMM keeps `/dev/kvm` ioctls and a set of virtio device backends as the host-facing surface — see [SPEC.md §4.1 "Residual host-kernel surface"](./SPEC.md). libkrun's set is **wider** than Firecracker's in three concrete ways: (1) **virtio-fs is the default rootfs path** — it is how `crun --krun` mounts the OCI bundle into the guest — whereas Firecracker has no virtio-fs and forces a devmapper-snapshotter detour in Kata-on-FC; (2) **TSI's host-side proxy** opens real host AF_INET sockets on behalf of the guest, terminating per-connection TCP state on the host kernel; (3) **virtio-gpu (virgl/venus)** is available via `krun_set_gpu_options` and is off by default in this implementation. This delta is the technical content behind the maintainer's framing in [libkrun #538](https://github.com/containers/libkrun/discussions/538) ("guest and VMM pertain to the same security context") and is accepted as the cost of the smaller adapter footprint per §2.4. None of these surfaces converts the boundary back to shared-kernel — a guest-kernel LPE remains a guest-kernel compromise, not a host compromise — but they are the right thing to evaluate when comparing libkrun against a minimal bare-VMM stack.
 
@@ -176,15 +176,15 @@ These remain unaffected by this decision and apply runtime-agnostically:
 - **Egress allowlist UX** — independent of runtime.
 - **Cross-runtime feature parity** — the runtime adapter must define which `devcontainer.json` keys are portable; the rest must error explicitly rather than silently degrade.
 
-### 5.1 Phase-40 egress enforcement
+### 5.1 Egress enforcement
 
 libkrun's TSI removes host-side TAP and bridge plumbing, but it does not apply
-an outbound policy on its own. Round 40 therefore installs a per-VM egress
+an outbound policy on its own. `dctl` therefore installs a per-VM egress
 policy inside the guest with nftables (Option A). The control surface lives in
 `lib/dctl/commands/net/` and the in-guest bootstrap script
 `images/agents/dctl-egress`.
 
-Option B, a userspace `dctl-proxy`, is rejected for this round. It would add a
+Option B, a userspace `dctl-proxy`, was rejected. It would add a
 new binary, new HTTP/TLS interception semantics, and a larger support surface
 without changing the underlying isolation class. Revisit it only if DNS
 rotation or wildcard-host ergonomics prove untenable in practice.
@@ -221,7 +221,7 @@ This decision narrows [SPEC.md §5–6](./SPEC.md) but does not change its tier 
 
 **Concrete next step:** implement `lib/dctl/runtime/krun.sh` against the [SPEC.md §5.5](./SPEC.md) adapter sketch and run the standard smoke-test against it on a KVM-capable Linux host. The numbers (cold-start, mount latency, devcontainer-feature parity, smoke-test pass rate) close the prototyping milestone in [SPEC.md §4.4 / §6 T2.0](./SPEC.md).
 
-Round 20 intentionally leaves Podman rootless network backend selection unpinned in `rt_run`. Under the chosen libkrun design, TSI already removes the host-side TAP/bridge/NAT plumbing class discussed above ([§2.1](#21-what-it-is), [§2.2](#22-why-it-wins-on-each-criterion)), so there is no round-20 evidence forcing a `slirp4netns` vs `pasta` override on the krun path. A later smoke pass can revisit pinning if a concrete compatibility or performance preference emerges, but for now the implementation keeps the runtime unpinned and treats backend choice as deferred rather than guessed.
+The adapter intentionally leaves Podman rootless network backend selection unpinned in `rt_run`. Under the chosen libkrun design, TSI already removes the host-side TAP/bridge/NAT plumbing class discussed above ([§2.1](#21-what-it-is), [§2.2](#22-why-it-wins-on-each-criterion)), so there is no current evidence forcing a `slirp4netns` vs `pasta` override on the krun path. A later smoke pass can revisit pinning if a concrete compatibility or performance preference emerges, but for now the implementation keeps the runtime unpinned and treats backend choice as deferred rather than guessed.
 
 ---
 
