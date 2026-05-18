@@ -101,6 +101,12 @@ repos:
 
   - repo: local
     hooks:
+      - id: check-no-docker
+        name: check-no-docker grep gate
+        language: system
+        entry: make check-no-docker
+        pass_filenames: false
+        always_run: true
       - id: bats-unit
         name: bats unit tests
         language: system

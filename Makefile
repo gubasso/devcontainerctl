@@ -20,7 +20,8 @@ CHECK_NO_DOCKER_GLOBS := --include='*.sh' --include='*.bats' --include='*.md' \
 #  - is-docker   npm transitive dep in slides/package-lock.json (not author-controlled)
 #  - Docker Hub        the openSUSE/Tumbleweed image is published to Docker Hub; the
 #                       phrase names the upstream registry, not a docker dependency.
-CHECK_NO_DOCKER_WHITELIST := build\.dockerfile|CVE-2025-9074|Leaky Vessels|outcoldman|firedocker|is-docker|Docker Hub
+#  - check-no-docker   the gate's own target name, referenced by CI and pre-commit.
+CHECK_NO_DOCKER_WHITELIST := build\.dockerfile|CVE-2025-9074|Leaky Vessels|outcoldman|firedocker|is-docker|Docker Hub|check-no-docker
 # Path exclusions: whole-file survivors that contain the gate's own machinery
 # or the legacy `dockerfile` registry-key migration path. Excluding by path
 # (rather than enlarging the regex whitelist) keeps the content token list

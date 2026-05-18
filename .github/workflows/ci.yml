@@ -1,8 +1,13 @@
 name: CI
 
-# Temporarily disabled: auto-triggers removed while CI is hanging.
-# Implementation is preserved; re-enable by restoring `push:` and `pull_request:` below.
+# Release-only triggers: CI runs on tagged versions pushed to the repo
+# (tags are commit-scoped, so a `v*` tag implicitly represents a release
+# cut from master) and on manual dispatch. Day-to-day push/PR runs are
+# intentionally off — see docs/specs/sandbox-runtime/IMPLEMENTATION-PLAN.md.
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -49,6 +54,7 @@ jobs:
           make gate-no-eval
           make gate-no-raw-ansi
           make gate-one-public-fn-per-file
+          make check-no-docker
 
   test:
     runs-on: ubuntu-latest
