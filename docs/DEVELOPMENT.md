@@ -10,7 +10,7 @@ the sandbox, seed data is auto-detected from the working tree:
 
 ```bash
 cd /path/to/devcontainerctl
-export DCTL_HOME=$HOME/.dctl-dev
+export DCTL_HOME=$PWD/.dctl-dev
 
 ./bin/dctl doctor
 ./bin/dctl init

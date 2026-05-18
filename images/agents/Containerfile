@@ -61,7 +61,7 @@ RUN zypper --non-interactive --gpg-auto-import-keys refresh -f \
             rsync \
             stow \
             kitty-terminfo \
-            parallel \
+            gnu_parallel \
             gcc \
             gcc-c++ \
             make \
