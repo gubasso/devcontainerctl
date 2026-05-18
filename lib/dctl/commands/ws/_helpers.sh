@@ -16,6 +16,7 @@ __dctl_require _lib/term/collect_env.sh
 __dctl_require _lib/auth/collect_env.sh
 __dctl_require runtime/common.sh
 __dctl_require runtime/krun.sh
+__dctl_require commands/ws/up.sh
 
 list_ws_containers() {
   rt_ps --quiet "$WORKSPACE_FOLDER"

@@ -14,6 +14,7 @@ __dctl_require _lib/registry/lookup_manifest.sh
 __dctl_require commands/net/_compose.sh
 __dctl_require commands/net/_user_allowlist.sh
 __dctl_require commands/init/_generate_cache.sh
+__dctl_require commands/net/show.sh
 
 cmd_net_allow() {
   local host="${1:-}"

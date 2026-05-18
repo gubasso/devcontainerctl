@@ -28,6 +28,7 @@ __dctl_require _lib/registry/has_project.sh
 __dctl_require _lib/registry/register_project_defaults.sh
 __dctl_require commands/init/_select_interactive.sh
 __dctl_require commands/init/_generate_cache.sh
+__dctl_require commands/test/run.sh
 
 cmd_init_do() {
   local devcontainer=""
