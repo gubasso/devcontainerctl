@@ -2,9 +2,9 @@
 
 > Status: Draft
 > Scope: Per-option evaluation of every sandbox/runtime/VMM considered for `devcontainerctl`.
-> Companion: [SPEC.md](./SPEC.md). Reading order: SPEC.md §1 (premises) and §3 (threat model) first, then this catalog.
+> Companion: [spec.md](../spec.md). Reading order: spec.md §1 (premises) and §3 (threat model) first, then this catalog.
 
-This document catalogs every sandbox option evaluated for `dctl`, the verdict for each, and the reasoning behind it. The final default backend is **not chosen yet** — see SPEC.md §4 for the current candidate set and the criteria for selection.
+This document catalogs every sandbox option evaluated for `dctl`, the verdict for each, and the reasoning behind it. The final default backend is **not chosen yet** — see spec.md §4 for the current candidate set and the criteria for selection.
 
 ## 0. How to read this document
 
@@ -29,7 +29,7 @@ Rejection reasoning is required so future revisions can audit whether the constr
 
 ## 1. Rejected — shared-kernel containers as the primary boundary
 
-These options are documented to make the rejection reasoning explicit (SPEC.md §1.5). They are **not** acceptable as the primary sandbox under SPEC.md §3.
+These options are documented to make the rejection reasoning explicit (spec.md §1.5). They are **not** acceptable as the primary sandbox under spec.md §3.
 
 ### 1.1 Bare Podman (rootful)
 
@@ -42,7 +42,7 @@ These options are documented to make the rejection reasoning explicit (SPEC.md �
 
 ### 1.2 Hardened-container path (seccomp / AppArmor / cap-drop only)
 
-- **What it is** — Strong seccomp profile, AppArmor profile, `cap-drop=ALL`, `no-new-privileges`. The hygiene hardening already enumerated in SPEC.md §5.1 (Tier 0).
+- **What it is** — Strong seccomp profile, AppArmor profile, `cap-drop=ALL`, `no-new-privileges`. The hygiene hardening already enumerated in spec.md §5.1 (Tier 0).
 - **Security posture** — Defense-in-depth: each layer raises the cost of an exploit but cannot prevent kernel-level LPEs from succeeding.
 - **Verdict — `defense-in-depth only`.** Required **inside** the chosen primary boundary, not as a substitute for it.
 
@@ -81,7 +81,7 @@ These options are documented to make the rejection reasoning explicit (SPEC.md �
 
 ## 4. Hardware-virtualization microVMs — the primary candidate set
 
-These options meet SPEC.md §1.2: a hypervisor-class boundary between agent-executed code and the host kernel. **No final default has been chosen** among them; SPEC.md §4.4 lists the selection criteria.
+These options meet spec.md §1.2: a hypervisor-class boundary between agent-executed code and the host kernel. **No final default has been chosen** among them; spec.md §4.4 lists the selection criteria.
 
 ### 4.1 Bare Firecracker (dctl-owned controller)
 
@@ -126,7 +126,7 @@ These options meet SPEC.md §1.2: a hypervisor-class boundary between agent-exec
 
 - **What it is** — Rust VMM under [containers/libkrun](https://github.com/containers/libkrun) (v1.18.0, 2026-04-24). Code partly **derived from Firecracker, Cloud Hypervisor, and rust-vmm**. Integrates with `crun` via `crun --krun`, which is a Podman-native OCI runtime. [Red Hat: RamaLama + libkrun (Jul 2025)](https://developers.redhat.com/articles/2025/07/02/supercharging-ai-isolation-microvms-ramalama-libkrun); [containers/krunvm](https://github.com/containers/krunvm).
 - **Security posture** — KVM microVM; same hardware-isolation class as FC. Maintainer's threat model ([libkrun #538](https://github.com/containers/libkrun/discussions/538)): "the guest and the VMM pertain to the same security context… should be thought of as a single entity." `crun --krun` wraps the microVM in Podman-rootless's userns + seccomp envelope, providing the host-side containment FC's `jailer` provides standalone.
-- **Residual host-facing device set vs. bare Firecracker** — same boundary class, **wider** host-side surface in three places: **virtio-fs is the default rootfs path** (how `crun --krun` mounts the OCI bundle into the guest; Firecracker has no virtio-fs and pays a devmapper-snapshotter cost in Kata-on-FC); **TSI's host-side proxy** terminates per-connection TCP on the host's `AF_INET` stack via real userspace sockets ([libkrunfw TSI patch](https://github.com/containers/libkrunfw/blob/main/patches/0009-Transparent-Socket-Impersonation-implementation.patch)) — different from FC's TAP+netfilter path, not strictly smaller; **virtio-gpu (virgl/venus)** is available via `krun_set_gpu_options` (FC has no GPU support) but is **off by default** in `podman --runtime krun`. These are the technical content behind the §4.4 trade-off, not a boundary-class regression — a guest-kernel LPE remains a guest-kernel compromise, not a host compromise. See [SPEC.md §4.1 "Residual host-kernel surface"](./SPEC.md) for the cross-candidate framing.
+- **Residual host-facing device set vs. bare Firecracker** — same boundary class, **wider** host-side surface in three places: **virtio-fs is the default rootfs path** (how `crun --krun` mounts the OCI bundle into the guest; Firecracker has no virtio-fs and pays a devmapper-snapshotter cost in Kata-on-FC); **TSI's host-side proxy** terminates per-connection TCP on the host's `AF_INET` stack via real userspace sockets ([libkrunfw TSI patch](https://github.com/containers/libkrunfw/blob/main/patches/0009-Transparent-Socket-Impersonation-implementation.patch)) — different from FC's TAP+netfilter path, not strictly smaller; **virtio-gpu (virgl/venus)** is available via `krun_set_gpu_options` (FC has no GPU support) but is **off by default** in `podman --runtime krun`. These are the technical content behind the §4.4 trade-off, not a boundary-class regression — a guest-kernel LPE remains a guest-kernel compromise, not a host compromise. See [spec.md §4.1 "Residual host-kernel surface"](../spec.md) for the cross-candidate framing.
 - **OCI fit** — full. `podman --runtime krun run <image>` consumes OCI images directly; rootfs conversion is internal to `crun-krun`. No bespoke builder.
 - **Networking** — TSI (Transparent Socket Impersonation) removes TAP/bridge/NAT plumbing on the host in exchange for a host-side userspace proxy.
 - **Maintenance** — active under `containers/` org (same org as Podman, crun, Buildah). Powers Microsandbox, RamaLama, krunvm.
@@ -182,7 +182,7 @@ These options meet SPEC.md §1.2: a hypervisor-class boundary between agent-exec
 ### 5.6 Confidential Containers / Kata-CoCo (TDX / SEV-SNP)
 
 - **What it is** — Kata variant designed against a *malicious host* (untrusted cloud operator). Hardware-attested isolation.
-- **Verdict — `rejected (wrong threat model)`.** SPEC.md §3 trusts the host (the developer's laptop) and distrusts the workload. CoCo solves the inverse problem (trusted workload, untrusted host).
+- **Verdict — `rejected (wrong threat model)`.** spec.md §3 trusts the host (the developer's laptop) and distrusts the workload. CoCo solves the inverse problem (trusted workload, untrusted host).
 
 ### 5.7 V8 isolates / WebAssembly sandboxes
 
@@ -230,4 +230,4 @@ These options meet SPEC.md §1.2: a hypervisor-class boundary between agent-exec
 
 ## 7. References
 
-Cited inline; the consolidated list also lives in SPEC.md §9.
+Cited inline; the consolidated list also lives in spec.md §9.

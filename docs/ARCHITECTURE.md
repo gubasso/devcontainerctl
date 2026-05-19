@@ -161,7 +161,7 @@ The permissive `seccomp-bwrap.json` profile remains an opt-in asset for nested
 `bwrap` workflows; the default `agents` layer is the stricter path.
 
 See [SECURITY.md](./SECURITY.md) for the operational details and
-[docs/specs/sandbox-runtime/SPEC.md](./specs/sandbox-runtime/SPEC.md) for the
+[docs/specs/sandbox-runtime/spec.md](./specs/sandbox-runtime/spec.md) for the
 threat-model rationale.
 
 ## Common workflow

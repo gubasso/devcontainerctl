@@ -13,7 +13,7 @@ info() {
 }
 
 # Check for podman command (dctl uses rootless podman exclusively;
-# see docs/specs/sandbox-runtime/DECISION-LINUX.md)
+# see docs/specs/sandbox-runtime/decisions/02-runtime-linux.md)
 if ! command -v podman &>/dev/null; then
   warn "podman not found. Install podman to build devcontainer images."
   exit 0

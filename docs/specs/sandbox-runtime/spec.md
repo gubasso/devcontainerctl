@@ -1,9 +1,9 @@
 # Sandbox Runtime — Security Specification
 
-> Status: Decided. §1–§4 record the threat model and viable backend catalog and remain authoritative. §5 (tiered build-out) and §6 (migration sketch) are the **original proposal**: the chosen path is libkrun-only as committed in [DECISION-LINUX.md](./DECISION-LINUX.md), and the as-built tree lives under `lib/dctl/{runtime,commands,_lib}/`. The other backends sketched here (kata-fc/ch, bare-FC, gvisor, apple) remain catalog-only.
+> Status: Decided. §1–§4 record the threat model and viable backend catalog and remain authoritative. §5 (tiered build-out) and §6 (migration sketch) are the **original proposal**: the chosen path is libkrun-only as committed in [02-runtime-linux.md](decisions/02-runtime-linux.md), and the as-built tree lives under `lib/dctl/{runtime,commands,_lib}/`. The other backends sketched here (kata-fc/ch, bare-FC, gvisor, apple) remain catalog-only.
 > Scope: Major security re-architecture of `devcontainerctl`'s container/sandbox layer.
 > Audience: Maintainers, contributors, and security reviewers.
-> Companion: [RUNTIMES.md](./RUNTIMES.md) — full per-option catalog and rejection reasoning.
+> Companion: [runtimes-catalog.md](research/runtimes-catalog.md) — full per-option catalog and rejection reasoning.
 
 ## 0. Purpose
 
@@ -14,10 +14,10 @@ This document specifies the **podman-first sandbox architecture** for `dctl`:
 1. States the project's premises — what the sandbox must achieve and what it must not be (§1).
 2. Describes the configured posture (§2).
 3. Defines the threat model relevant to AI-agent execution (§3).
-4. Names the **viable candidate set** of runtime backends (§4). Full per-option analysis lives in `RUNTIMES.md`.
+4. Names the **viable candidate set** of runtime backends (§4). Full per-option analysis lives in `runtimes-catalog.md`.
 5. Proposes a tiered build-out plan (§5) keeping the project's ergonomics goals intact (declarative, composable, shareable configuration) while delivering a real security boundary.
 
-The Linux backend is committed in [DECISION-LINUX.md §2](./DECISION-LINUX.md): **libkrun via `crun --krun`, fronted by rootless Podman**. Every container operation in the codebase invokes `podman` and nothing else; `dctl` interprets `devcontainer.json` itself.
+The Linux backend is committed in [02-runtime-linux.md §2](decisions/02-runtime-linux.md): **libkrun via `crun --krun`, fronted by rootless Podman**. Every container operation in the codebase invokes `podman` and nothing else; `dctl` interprets `devcontainer.json` itself.
 
 ---
 
@@ -47,7 +47,7 @@ This section is load-bearing for the rest of the spec. Every later decision must
 - Runtime selection composes through the same precedence as other config keys: leaf-project pin → user default → env / flag override.
 - The runtime adapter is the **only** place runtime-specific code lives. `lib/dctl/runtime/<name>.sh` modules implement a small interface (`rt_run`, `rt_exec`, `rt_ps`, `rt_rm`, `rt_build`); everything else in `lib/dctl/` stays runtime-agnostic.
 - Workflows must remain **simple, declarative, composable, and shareable** across machines and teams. Projects must be able to pin a runtime via a manifest field; users must be able to set a global default; both must be overridable.
-- We are willing to **implement parts of the build/run plumbing ourselves** if that buys a stronger security boundary — provided the implementation is bounded in scope and the user-facing surface remains declarative. See `RUNTIMES.md` §4.1 for the bare-Firecracker cost estimate (~3–5 weeks one-time + ongoing maintenance).
+- We are willing to **implement parts of the build/run plumbing ourselves** if that buys a stronger security boundary — provided the implementation is bounded in scope and the user-facing surface remains declarative. See `runtimes-catalog.md` §4.1 for the bare-Firecracker cost estimate (~3–5 weeks one-time + ongoing maintenance).
 
 ### 1.4 Anti-premises (what we explicitly reject)
 
@@ -57,7 +57,7 @@ This section is load-bearing for the rest of the spec. Every later decision must
 - **Hardware-attested isolation against the host (Confidential Containers / TDX / SEV-SNP)** as the threat-model framing. The host is trusted; the workload is not. We solve workload isolation, not host distrust.
 - **Language-level sandboxes** (V8 isolates, WebAssembly) as the boundary. Cannot host the agent's full toolchain (`pytest`, `cargo`, `git`, native compilers).
 - **CI-only / cluster-only runtimes** (firecracker-containerd, flintlock, AWS Nomad FC driver) as the laptop default. Useful as components; wrong shape for a per-developer CLI.
-- **Larger-TCB hypervisors when a smaller-TCB one is available.** QEMU full-fat is rejected as the laptop default for this reason; see `RUNTIMES.md` §4.5.
+- **Larger-TCB hypervisors when a smaller-TCB one is available.** QEMU full-fat is rejected as the laptop default for this reason; see `runtimes-catalog.md` §4.5.
 
 ### 1.5 Why bare containers are insufficient (the reasoning behind §1.4)
 
@@ -67,7 +67,7 @@ The shared-kernel container model is a resource-isolation boundary, not a securi
 2. **Kernel LPE cadence.** Linux kernel local-privilege-escalation surfaces at roughly monthly cadence (bpf, io_uring, netfilter, page-cache aging, and so on). Each one is a host compromise on shared-kernel runtimes. Hypervisor escapes, by contrast, are a $250K–$500K bug class ([emirb microvm-2026](https://emirb.github.io/blog/microvm-2026/)).
 3. **Namespaces are a resource-control mechanism, not a security boundary.** This is a design fact, not a bug. Namespaces let the kernel partition resources for non-malicious tenants; they do not constitute a barrier against an adversary running code on the same kernel.
 
-Rootless mode reduces *blast radius* (escape lands as the invoking user instead of host root) but does not change the *probability*: every kernel LPE still lands on the host. The November 2025 runc CVEs explicitly affect rootless Podman. Rootless Podman remains valuable as a **controller around** a microVM (see `RUNTIMES.md` §4.4 for libkrun + `crun --krun`); it is not the boundary.
+Rootless mode reduces *blast radius* (escape lands as the invoking user instead of host root) but does not change the *probability*: every kernel LPE still lands on the host. The November 2025 runc CVEs explicitly affect rootless Podman. Rootless Podman remains valuable as a **controller around** a microVM (see `runtimes-catalog.md` §4.4 for libkrun + `crun --krun`); it is not the boundary.
 
 ---
 
@@ -136,7 +136,7 @@ Even without a kernel or runtime bug:
 
 ## 4. Candidate Set
 
-The viable backends fall into three categories. **No single default is chosen in this revision** — selection is deferred to a prototyping milestone (§4.4). Per-option analysis (security posture, OCI fit, maintenance, what `dctl` would own, verdict) is in `RUNTIMES.md`; this section is the index.
+The viable backends fall into three categories. **No single default is chosen in this revision** — selection is deferred to a prototyping milestone (§4.4). Per-option analysis (security posture, OCI fit, maintenance, what `dctl` would own, verdict) is in `runtimes-catalog.md`; this section is the index.
 
 ### 4.1 Hardware-virt microVM candidates (primary)
 
@@ -144,28 +144,28 @@ All four candidates provide a KVM-class hypervisor boundary. They are FC-class o
 
 | Candidate | One-line characterization | Reference |
 |---|---|---|
-| **Bare Firecracker** with a `dctl`-owned controller | Smallest TCB, highest implementation cost (~3–5 wk one-time + ongoing rootfs/kernel maintenance). High-assurance escape hatch. | `RUNTIMES.md` §4.1 |
-| **Kata Containers + Firecracker** | OCI-native via containerd; Kata-on-FC is second-class within Kata (no virtio-fs, devmapper snapshotter required). | `RUNTIMES.md` §4.2 |
-| **Kata Containers + Cloud Hypervisor** | Same KVM boundary class as FC, slightly larger device surface in default config; virtio-fs available; the path the Kata community actively exercises. | `RUNTIMES.md` §4.3 |
-| **libkrun + `crun --krun`** on Podman-rootless | Rust VMM derived from FC and CH; same hardware-isolation class; lowest plumbing cost (`podman --runtime krun run` consumes OCI images directly). | `RUNTIMES.md` §4.4 |
+| **Bare Firecracker** with a `dctl`-owned controller | Smallest TCB, highest implementation cost (~3–5 wk one-time + ongoing rootfs/kernel maintenance). High-assurance escape hatch. | `runtimes-catalog.md` §4.1 |
+| **Kata Containers + Firecracker** | OCI-native via containerd; Kata-on-FC is second-class within Kata (no virtio-fs, devmapper snapshotter required). | `runtimes-catalog.md` §4.2 |
+| **Kata Containers + Cloud Hypervisor** | Same KVM boundary class as FC, slightly larger device surface in default config; virtio-fs available; the path the Kata community actively exercises. | `runtimes-catalog.md` §4.3 |
+| **libkrun + `crun --krun`** on Podman-rootless | Rust VMM derived from FC and CH; same hardware-isolation class; lowest plumbing cost (`podman --runtime krun run` consumes OCI images directly). | `runtimes-catalog.md` §4.4 |
 
 **Residual host-kernel surface under a hardware-virt boundary.** A hardware-virt boundary **shifts** the host-kernel attack surface; it does not reduce it to zero. Every KVM-based VMM retains two well-defined host-facing surfaces: (a) `/dev/kvm` ioctls (the hypercall path), and (b) the VMM's virtio device backends (block, net, vsock, fs, optionally gpu). This is a different category from the shared-kernel case — a compromise here is a hypervisor- or virtio-class bug ($250K–$500K bounty class per [emirb microvm-2026](https://emirb.github.io/blog/microvm-2026/)), not a routine kernel LPE or syscall trick — but it is not the empty set. Recent precedent: [CVE-2026-5747](https://aws.amazon.com/security/security-bulletins/2026-015-aws/) (Firecracker virtio-pci OOB write, opt-in flag) shows that "small VMM" is not "no VMM CVEs."
 
 The size and shape of (b) varies between the §4.1 candidates and is an operational trade-off rather than a boundary-class difference:
 
 - **Firecracker** ships the smallest device set by design: virtio-net, virtio-blk, serial, no virtio-fs, no virtio-gpu. Kata-on-FC is forced into the devmapper snapshotter for the same reason.
-- **Cloud Hypervisor** adds virtio-fs, virtio-mem, PCI hotplug, VFIO, GPU passthrough (Landlock-sandboxed host-side; see `RUNTIMES.md` §4.3).
+- **Cloud Hypervisor** adds virtio-fs, virtio-mem, PCI hotplug, VFIO, GPU passthrough (Landlock-sandboxed host-side; see `runtimes-catalog.md` §4.3).
 - **libkrun** uses virtio-fs as the default rootfs path (how `crun --krun` mounts the OCI bundle), and its TSI feature (Transparent Socket Impersonation) terminates per-connection TCP state on the **host's** TCP/IP stack via a userspace proxy in the VMM process — different from Firecracker's TAP/bridge path, neither strictly smaller. virtio-gpu (virgl/venus) is available via `krun_set_gpu_options` but **off by default** in the Podman+krun path; enabling it would meaningfully widen the host-side surface and is therefore gated behind an explicit profile opt-in.
 
-The colleague-style critique "krun shares the kernel with the host" conflates (b) with shared-kernel namespacing and is **wrong on the boundary class** — the guest runs its own kernel (`init.krun` as guest PID 1; `libkrunfw` bundles it), runc-class breakouts do not reach the host, and kernel LPEs inside the guest stay inside the guest. But the underlying intuition (libkrun's host-side device-backend surface is non-zero and **wider** than bare Firecracker's) is correct and is accepted as the trade-off in `DECISION-LINUX.md` §2.4 and §6 Risk #1. The bare-Firecracker escape hatch in `RUNTIMES.md` §4.1 / `DECISION-LINUX.md` §2.5 remains documented for cases where minimizing this surface is worth the plumbing cost.
+The colleague-style critique "krun shares the kernel with the host" conflates (b) with shared-kernel namespacing and is **wrong on the boundary class** — the guest runs its own kernel (`init.krun` as guest PID 1; `libkrunfw` bundles it), runc-class breakouts do not reach the host, and kernel LPEs inside the guest stay inside the guest. But the underlying intuition (libkrun's host-side device-backend surface is non-zero and **wider** than bare Firecracker's) is correct and is accepted as the trade-off in `02-runtime-linux.md` §2.4 and §6 Risk #1. The bare-Firecracker escape hatch in `runtimes-catalog.md` §4.1 / `02-runtime-linux.md` §2.5 remains documented for cases where minimizing this surface is worth the plumbing cost.
 
 ### 4.2 Platform-specific candidate
 
-- **Apple `container`** — the macOS-native equivalent of an FC-class microVM via Virtualization.framework. Pairs with any of the §4.1 options on the Linux side. See `RUNTIMES.md` §4.6.
+- **Apple `container`** — the macOS-native equivalent of an FC-class microVM via Virtualization.framework. Pairs with any of the §4.1 options on the Linux side. See `runtimes-catalog.md` §4.6.
 
 ### 4.3 Fallback
 
-- **gVisor (`runsc`)** — userspace-kernel sandbox. Documented fallback for environments without KVM (CI runners, cloud VMs without nested virt). Not a replacement for hardware isolation. See `RUNTIMES.md` §3.1.
+- **gVisor (`runsc`)** — userspace-kernel sandbox. Documented fallback for environments without KVM (CI runners, cloud VMs without nested virt). Not a replacement for hardware isolation. See `runtimes-catalog.md` §3.1.
 
 ### 4.4 Selection criteria
 
@@ -180,19 +180,19 @@ A prototyping milestone should produce concrete numbers (cold-start, mount laten
 
 ### 4.5 What is explicitly *not* in the candidate set
 
-The following options were evaluated and rejected. Reasoning is in `RUNTIMES.md`; pointers here:
+The following options were evaluated and rejected. Reasoning is in `runtimes-catalog.md`; pointers here:
 
-- Bare Podman (rootful) — `RUNTIMES.md` §1.1
-- Hardened-container path alone — `RUNTIMES.md` §1.2
-- Podman rootless as the boundary — `RUNTIMES.md` §2.1 (kept as defense-in-depth and as a controller front-end for libkrun)
-- bubblewrap / Landlock / seccomp-only as the boundary — `RUNTIMES.md` §2.3
-- QEMU full-fat — `RUNTIMES.md` §4.5 (rejected on TCB grounds)
-- firecracker-containerd, flintlock, Ignite, AWS Nomad FC driver — cluster-shaped, see `RUNTIMES.md` §5.1–§5.3, §5.9
-- SUSE flake-pilot — `RUNTIMES.md` §5.4 (inspirational only)
-- Hyperlight — `RUNTIMES.md` §5.5 (cannot host the agent toolchain)
-- Confidential Containers — `RUNTIMES.md` §5.6 (wrong threat model)
-- V8 isolates / WebAssembly — `RUNTIMES.md` §5.7
-- youki without an FC integration — `RUNTIMES.md` §5.8
+- Bare Podman (rootful) — `runtimes-catalog.md` §1.1
+- Hardened-container path alone — `runtimes-catalog.md` §1.2
+- Podman rootless as the boundary — `runtimes-catalog.md` §2.1 (kept as defense-in-depth and as a controller front-end for libkrun)
+- bubblewrap / Landlock / seccomp-only as the boundary — `runtimes-catalog.md` §2.3
+- QEMU full-fat — `runtimes-catalog.md` §4.5 (rejected on TCB grounds)
+- firecracker-containerd, flintlock, Ignite, AWS Nomad FC driver — cluster-shaped, see `runtimes-catalog.md` §5.1–§5.3, §5.9
+- SUSE flake-pilot — `runtimes-catalog.md` §5.4 (inspirational only)
+- Hyperlight — `runtimes-catalog.md` §5.5 (cannot host the agent toolchain)
+- Confidential Containers — `runtimes-catalog.md` §5.6 (wrong threat model)
+- V8 isolates / WebAssembly — `runtimes-catalog.md` §5.7
+- youki without an FC integration — `runtimes-catalog.md` §5.8
 
 ---
 

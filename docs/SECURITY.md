@@ -5,7 +5,7 @@
 `dctl` assumes AI agents execute attacker-controlled commands. After the move to
 libkrun, the most common remaining risks are still token exfiltration and open
 network egress rather than container escape. See
-`docs/specs/sandbox-runtime/SPEC.md` section 3.1.
+[`docs/specs/sandbox-runtime/spec.md`](./specs/sandbox-runtime/spec.md) §3.1.
 
 ## Tier 0 Hygiene
 
@@ -93,7 +93,7 @@ with `dctl net allow` if a workflow depends on one.
 Anthropic does not currently publish a documented short-lived token export path
 equivalent to `gh auth token`. The ephemeral file copy described above is the
 current mitigation until a better host-side export path exists. This remains an
-open question in `docs/specs/sandbox-runtime/SPEC.md` section 8.
+open question in [`docs/specs/sandbox-runtime/spec.md`](./specs/sandbox-runtime/spec.md) §8.
 
 ## Permissive Profile
 
