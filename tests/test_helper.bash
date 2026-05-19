@@ -12,6 +12,10 @@ setup_test_fixtures() {
   mkdir -p "${TEST_TMPDIR}/bin"
   mkdir -p "${TEST_TMPDIR}/argv"
   : >"${TEST_TMPDIR}/mock_calls.log"
+  # DCTL_HOME redirects config/cache/data roots and would silently override
+  # any XDG_* fixtures the test sets. Strip it so tests get a predictable
+  # XDG-rooted layout regardless of the dev shell's environment.
+  unset DCTL_HOME 2>/dev/null || true
 }
 
 teardown_test_fixtures() {
