@@ -75,12 +75,21 @@ EOF
 sanitized_bin_excluding() {
   local sanitized="${TEST_TMPDIR}/sanitized_bin"
   mkdir -p "$sanitized"
-  local src dst
-  for src in /usr/bin/* /bin/*; do
-    [[ -e $src ]] || continue
-    dst="${sanitized}/$(basename "$src")"
-    [[ -e $dst ]] && continue
-    ln -s "$src" "$dst" 2>/dev/null || true
+  # Derive the sanitized bin set from the live PATH rather than a hardcoded
+  # /usr/bin + /bin, so store-provided tools (e.g. jq/yq under a nix devShell)
+  # are preserved instead of silently dropped.
+  local dir src dst
+  local -a path_dirs
+  IFS=':' read -r -a path_dirs <<<"$PATH"
+  for dir in "${path_dirs[@]}"; do
+    [[ -n $dir && -d $dir ]] || continue
+    [[ $dir == "${TEST_TMPDIR}/bin" || $dir == "$sanitized" ]] && continue
+    for src in "$dir"/*; do
+      [[ -e $src ]] || continue
+      dst="${sanitized}/$(basename "$src")"
+      [[ -e $dst ]] && continue
+      ln -s "$src" "$dst" 2>/dev/null || true
+    done
   done
   local name
   for name in "$@"; do
