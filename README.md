@@ -51,20 +51,21 @@ User config (runtime source of truth, user-editable)
   ~/.config/dctl/devcontainer/python/devcontainer.json     ← leaf layer
   ~/.config/dctl/images/python-dev/Dockerfile              ← managed Dockerfile
 
-        ──merge──>
-
-Cache (generated, not edited)
-  ~/.cache/dctl/devcontainer/python/devcontainer.json      ← merged output used by dctl ws up
-
         ──dctl init──>
 
-Project registry
+Project registry + managed image
   ~/.config/dctl/projects.yaml                             ← stores the selected manifest name for this project
+
+        ──regenerated fresh on every command──>
+
+Runtime generated (ephemeral, never cached, regenerated in place)
+  $XDG_RUNTIME_DIR/dctl/devcontainer/python/devcontainer.json  ← merged output used by dctl ws up/reup/test
 ```
 
 All runtime operations (`dctl image build`, `dctl ws up`, `dctl test`) use only
-the user config and cache — never the installed files directly. You can freely
-edit the user config files to customize your setup.
+the user config — never the installed files directly. The merged output is
+regenerated fresh on every command, so config edits apply immediately. You can
+freely edit the user config files to customize your setup.
 
 ### Composable config
 
@@ -85,9 +86,12 @@ layers:
   settings and is protected from overwrites on deploy
 - All preceding layers are **shared** and reconciled automatically
 
-`dctl init` reads the selected manifest from `~/.config/dctl/devcontainer/<name>.yaml`,
-resolves each layer from its `<layer>/devcontainer.json`, merges them in order,
-and writes the result under `~/.cache/dctl/devcontainer/` for `dctl ws up`.
+`dctl init` registers the manifest name for the project; the merge itself runs
+on demand. Each command that needs the config reads the selected manifest from
+`~/.config/dctl/devcontainer/<name>.yaml`, resolves each layer from its
+`<layer>/devcontainer.json`, merges them in order, and writes the result fresh
+under `$XDG_RUNTIME_DIR/dctl/devcontainer/<name>/devcontainer.json` — never
+cached, so layer edits are picked up immediately.
 
 Manifests are validated against `schemas/compose.schema.yaml` (JSON Schema
 Draft 2020-12). The only field is `layers` (non-empty array of strings);
@@ -114,9 +118,9 @@ dctl ws shell
 1. `make install` — installs `dctl` and copies images/templates to `~/.local/share/dctl/` (seed sources only)
 2. `dctl deploy devcontainer python` — deploys the Python manifest plus its managed shared layers into `~/.config/dctl/devcontainer/`
 3. `dctl deploy image python-dev` — deploys the managed Dockerfile into `~/.config/dctl/images/python-dev/`
-4. `dctl init --devcontainer python` — merges config to `~/.cache/dctl/`, auto-builds the managed image if missing, and registers the project
+4. `dctl init --devcontainer python` — registers the project, auto-builds the managed image if missing, and runs the smoke test (`jq` is required for manifest-backed projects)
 5. `dctl image build` — optional rebuild from deployed managed images via an explicit target, the no-arg picker, or `--all`
-6. `dctl ws up` — starts the devcontainer using the merged config from `~/.cache/dctl/`
+6. `dctl ws up` — starts the devcontainer, regenerating the merged config fresh under `$XDG_RUNTIME_DIR/dctl/devcontainer/`
 7. `dctl ws shell` — drops you into a shell inside the running container
 
 ## Workflow Comparison
@@ -168,11 +172,10 @@ If you work in sibling clones such as `repo/` and `repo.42-add-auth/`, `dctl` ca
 ```bash
 $EDITOR ~/.config/dctl/devcontainer/python/devcontainer.json
 dctl deploy devcontainer python   # optional: resync managed manifest/layers from install
-dctl init
 dctl ws reup
 ```
 
-Edit the user layer or manifest file, rerun `dctl init` to regenerate the cached merged config if needed, then use `dctl ws reup` to recreate the container from that updated cache.
+Edit the user layer or manifest file, then use `dctl ws reup` to recreate the container. The merged config is regenerated fresh on every `dctl ws up`/`reup`/`test`, so layer edits are picked up immediately — no `dctl init` re-run is needed.
 
 ## CLI Reference
 
@@ -212,12 +215,12 @@ user-protected unless `--reset` is used.
 
 ```bash
 dctl init --devcontainer python
-dctl init --force --devcontainer rust
+dctl init --devcontainer rust
 dctl init
 ```
 
 - `--devcontainer <name>` selects a deployed manifest from `~/.config/dctl/devcontainer/<name>.yaml`
-- `--force` rebuilds the cached merged config and re-registers the project
+- every `dctl init` re-registers the project and applies the legacy `projects.yaml` `devcontainer:` → `devcontainer-manifest:` migration automatically
 
 If the selected devcontainer references a managed image like
 `devimg/python-dev:latest`, `dctl init` validates that
@@ -226,8 +229,8 @@ the image when it is missing locally.
 
 After registering the project, `dctl init` runs `dctl test` (the workspace
 smoke test) and prints a final summary covering the chosen devcontainer,
-image status, cache and registry paths, and the smoke-test result. `dctl
-init` exits non-zero if the smoke test fails.
+image status, generated config and registry paths, and the smoke-test result.
+`dctl init` exits non-zero if the smoke test fails.
 
 ### `dctl ws`
 
@@ -312,9 +315,10 @@ devimg/agents:latest
 | --- | --- | --- |
 | `~/.local/share/dctl/` | Installed assets: Dockerfiles, devcontainer templates, schemas. Seed sources only. | No — only read by `dctl deploy` |
 | `~/.config/dctl/` | User config: deployed devcontainer layers, deployed Dockerfiles, project registry, defaults | Yes — sole runtime source for builds, merges, and container operations |
-| `~/.cache/dctl/` | Generated artifacts: merged `devcontainer.json` output | Yes — consumed by `dctl ws up` |
+| `$XDG_RUNTIME_DIR/dctl/` | Runtime-generated merged `devcontainer.json` output, regenerated fresh on every command and never cached (fallback `${TMPDIR:-/tmp}/dctl-$(id -u)/dctl/`) | Yes — regenerated and consumed by `dctl ws up`/`reup`/`test` |
 
-All of these honor `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, and `XDG_CACHE_HOME`.
+The first two honor `XDG_DATA_HOME` and `XDG_CONFIG_HOME`; the generated output
+honors `XDG_RUNTIME_DIR`.
 
 ## Automation
 
@@ -344,7 +348,7 @@ This installs:
 - devcontainer templates to `~/.local/share/dctl/devcontainers/` (seed sources — not used at runtime)
 - schema files to `~/.local/share/dctl/schemas/`
 
-`make install` does not write to `~/.config/dctl/` or `~/.cache/dctl/`. Run
+`make install` does not write to `~/.config/dctl/`. Run
 `dctl deploy ...` after install to copy managed assets into user config, then
 run `dctl init` to register the current project.
 

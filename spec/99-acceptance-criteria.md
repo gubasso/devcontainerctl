@@ -11,7 +11,7 @@ The current bats suite covers the main acceptance areas:
 
 - config precedence and error handling
 - registry parsing, validation, and sibling-discovery opt-out
-- template discovery, merge behavior, and cache invalidation
+- template discovery, merge behavior, and fresh regeneration on every command
 - Dockerfile hierarchy behavior
 - install and systemd integration paths
 
@@ -102,8 +102,8 @@ Scenario:
 
 Expected result:
 
-- The cached config at
-  `~/.cache/dctl/devcontainer/coordinator/devcontainer.json` contains the
+- The generated merged config at
+  `$XDG_RUNTIME_DIR/dctl/devcontainer/coordinator/devcontainer.json` contains the
   parent-area read-only mount from the `coordinator` template and the shared
   mounts from `base`
 
@@ -207,7 +207,7 @@ Expected result:
 - `dctl` reports a schema validation error
 - The command does not proceed with invalid config
 
-### 15. Manifest merge generates complete cached config
+### 15. Manifest merge generates complete merged config
 
 Scenario:
 
@@ -215,8 +215,8 @@ Scenario:
 
 Expected result:
 
-- The cached config contains all shared settings from `base`
-- The cached config contains Python-specific settings from the selected leaf layer
+- The generated merged config contains all shared settings from `base`
+- The generated merged config contains Python-specific settings from the selected leaf layer
 
 ### 16. General manifest merge
 
@@ -226,33 +226,36 @@ Scenario:
 
 Expected result:
 
-- The cached config contains all shared settings from `base`
-- The cached config contains the general leaf layer's `name`, `image`, and
+- The generated merged config contains all shared settings from `base`
+- The generated merged config contains the general leaf layer's `name`, `image`, and
   pre-commit bootstrap
 
-### 17. Cache invalidation on config change
+### 17. Config edits apply on the next command
 
 Scenario:
 
 - User runs `dctl init --devcontainer python`
 - User edits `~/.config/dctl/devcontainer/base/devcontainer.json`
-- User runs `dctl init` again
+- User runs `dctl ws reup` (no `dctl init` re-run)
 
 Expected result:
 
-- The cached config is regenerated because a config file is newer
-- The new cached config reflects the user's edit
+- The merged config is regenerated fresh from the layers
+- The regenerated config reflects the user's edit immediately
 
-### 18. Force regeneration
+### 18. Automatic registry migration on init
 
 Scenario:
 
-- User runs `dctl init --force --devcontainer python`
+- `~/.config/dctl/projects.yaml` has a legacy `devcontainer:` entry for the
+  project
+- User runs `dctl init --devcontainer python`
 
 Expected result:
 
-- Config files are re-seeded from installed templates
-- The cached config is regenerated regardless of mtime freshness
+- The legacy `devcontainer:` key is migrated to `devcontainer-manifest:`
+  automatically (no separate flag needed)
+- The project is re-registered
 
 ### 19. User edits `base` layer config
 
@@ -260,12 +263,12 @@ Scenario:
 
 - User runs `dctl init --devcontainer python`
 - User edits `~/.config/dctl/devcontainer/base/devcontainer.json`
-- User runs `dctl init --force --devcontainer python`
+- User runs `dctl ws reup`
 
 Expected result:
 
-- With `--force`, config is re-seeded from templates and cache regenerated
-- Without `--force`, the user's edit is preserved and merged into cache
+- The user's edit is preserved and merged into the freshly regenerated config
+- No `dctl init` re-run is required to pick up the edit
 
 ### 20. User edits a template config
 
@@ -278,19 +281,19 @@ Scenario:
 Expected result:
 
 - The user's edited template config is preserved
-- The cached config reflects the user's custom template settings merged with
+- The generated merged config reflects the user's custom template settings merged with
   `base`
 
-### 21. Cache deletion is safe
+### 21. Generated-output deletion is safe
 
 Scenario:
 
-- User deletes `~/.cache/dctl/` entirely
+- User deletes `$XDG_RUNTIME_DIR/dctl/` entirely
 - User runs `dctl init --devcontainer python`
 
 Expected result:
 
-- `dctl` regenerates the cached config without error
+- `dctl` regenerates the merged config without error
 - Behavior is identical to a fresh install
 
 ### 22. Dockerfile is a pure container builder
@@ -326,7 +329,7 @@ Scenario:
 Expected result:
 
 - Files are written only to installed data/bin/lib locations
-- No files are written to `~/.config/dctl/` or `~/.cache/dctl/`
+- No files are written to `~/.config/dctl/` or the runtime generated dir
 
 ### 25. `deploy --list` shows deployment state for both categories
 
@@ -377,9 +380,9 @@ Scenario:
 
 Expected result:
 
-- The cached config is generated from user config
+- The merged config is generated from user config
 - The project registry stores the manifest name (`devcontainer-manifest: python`)
-- The cached config is generated under `~/.cache/dctl/devcontainer/python/devcontainer.json`
+- The merged config is generated fresh under `$XDG_RUNTIME_DIR/dctl/devcontainer/python/devcontainer.json` (never cached)
 - The registry does not store image-selection duplication from `init`
 - The registry does not store paths
 
@@ -407,4 +410,4 @@ Scenario:
 Expected result:
 
 - `dctl` automatically runs `dctl image build python-dev`
-- cache generation and registry registration proceed after a successful build
+- registry registration and the smoke test proceed after a successful build

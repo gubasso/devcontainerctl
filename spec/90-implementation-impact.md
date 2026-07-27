@@ -18,7 +18,7 @@ This document records how the approved design work landed in the repository.
 
 - `lib/dctl/ws.sh` resolves config for `up` and `reup`
 - `lib/dctl/test.sh` resolves config before smoke-test validation
-- `lib/dctl/init.sh` works with deployed config and generated cache paths
+- `lib/dctl/init.sh` works with deployed config and the runtime-generated merged config path (regenerated fresh, never cached)
 
 ### Templates and Dockerfiles
 
@@ -38,7 +38,7 @@ The bats suite now covers:
 
 - config precedence
 - registry parsing and validation
-- manifest-driven merge and cache invalidation
+- manifest-driven merge regenerated fresh on every command
 - Dockerfile hierarchy behavior
 - install/systemd integration paths
 

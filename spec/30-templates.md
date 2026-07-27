@@ -60,7 +60,7 @@ Managed images are a parallel category:
 | --- | --- | --- |
 | `~/.local/share/dctl/devcontainers/` | Installed templates | `make install` |
 | `~/.config/dctl/devcontainer/` | Seeded config, then user-edited | `dctl deploy` + user |
-| `~/.cache/dctl/devcontainer/` | Generated merged config | `dctl` |
+| `$XDG_RUNTIME_DIR/dctl/devcontainer/` | Runtime-generated merged config, regenerated fresh every command (never cached) | `dctl` |
 
 `base` owns the shared infrastructure settings. Selectable manifests add the
 full ordered layer list whose last entry provides the project-specific image,
@@ -68,9 +68,11 @@ cache mounts, and lifecycle hooks.
 
 ## Merge Semantics
 
-`dctl init` reads a deployed manifest from `~/.config/dctl/devcontainer/*.yaml`,
-resolves each listed layer from user config, and merges them two-by-two with
-`jq` in manifest order.
+On every command that resolves a manifest-backed config (`dctl ws up`/`reup`,
+`dctl ws exec`/`shell`/`run`, `dctl test`, and `dctl init`'s smoke test), `dctl`
+reads the deployed manifest from `~/.config/dctl/devcontainer/*.yaml`, resolves
+each listed layer from user config, and merges them two-by-two with `jq` in
+manifest order — regenerated fresh each time, never cached, so `jq` is required.
 
 - scalar fields use last-wins behavior
 - `mounts` are concatenated
@@ -91,18 +93,21 @@ resolves each listed layer from user config, and merges them two-by-two with
 `dctl init`:
 
 1. selects a deployed manifest (`<name>.yaml`) from `~/.config/dctl/devcontainer/`
-2. reads the selected manifest and merges all referenced user-config layers
-   into `~/.cache/dctl/devcontainer/<name>/devcontainer.json`
-3. reads the `.image` field from the merged cached config
+2. regenerates the merged config fresh from all referenced user-config layers
+   under `$XDG_RUNTIME_DIR/dctl/devcontainer/<name>/devcontainer.json` (never
+   cached)
+3. reads the `.image` field from the merged config
 4. for managed `devimg/<name>:latest` images, validates that the corresponding
    Dockerfile exists in `~/.config/dctl/images/<name>/Dockerfile`
 5. for managed images, auto-builds the local image when missing
 6. registers the manifest name in `~/.config/dctl/projects.yaml` — the
    entry contains `devcontainer-manifest:` only, plus `sibling_discovery: false` when
-   explicitly overridden
-7. runs `dctl test` (the workspace smoke test) against the resolved cache
-8. prints a final summary with project, devcontainer, image status, cache and
-   registry paths, and the smoke-test result
+   explicitly overridden — applying the legacy `devcontainer:` →
+   `devcontainer-manifest:` migration automatically
+7. runs `dctl test` (the workspace smoke test), which regenerates the merged
+   config on its own
+8. prints a final summary with project, devcontainer, image status, generated
+   config and registry paths, and the smoke-test result
 
 `dctl init` exits non-zero if the smoke test fails. If no deployed
 devcontainers exist, `dctl init` fails and instructs the user to run `dctl

@@ -29,7 +29,7 @@ Tests are written with `bats`.
 
 ## Key Invariants
 
-- `dctl init` writes to XDG-managed config/cache under `~/.config/dctl/` and `~/.cache/dctl/`, not to a local workspace `.devcontainer/`
+- `dctl init` registers the project in XDG config under `~/.config/dctl/`, not in a local workspace `.devcontainer/`; the merged `devcontainer.json` is regenerated fresh on every command under `$XDG_RUNTIME_DIR/dctl/devcontainer/<name>/` (never cached)
 - Selectable devcontainers are defined by YAML manifests (`*.yaml`) with a `layers` array declaring composition order; the last layer is the leaf (user-protected on deploy), preceding layers are shared (reconciled on deploy); layer directories without manifests are not listed or selectable
 - `dctl` resolves `devcontainer.json` through a six-level precedence chain: CLI flag, env var, registry, local file, sibling discovery, user default
 - `dctl ws` commands match containers by workspace label, so work-clones keep separate container identity

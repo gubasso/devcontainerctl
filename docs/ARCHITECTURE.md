@@ -107,15 +107,16 @@ are live in the current codebase:
   user-default precedence
 - per-project registry support in `~/.config/dctl/projects.yaml` for
   `devcontainer-manifest` selection and explicit `sibling_discovery: false`
-- YAML manifest-driven layer composition with generated cache output under
-  `~/.cache/dctl/devcontainer/`
+- YAML manifest-driven layer composition, regenerated fresh on every command
+  (never cached) under `$XDG_RUNTIME_DIR/dctl/devcontainer/`
 - `dctl deploy` as the install-to-config seeding command for managed templates
   and managed Dockerfiles
 - user-config-only Dockerfile resolution for `dctl image build`, with no
   project-registry coupling
 - metadata extraction from the Dockerfile into the template system
 - slim `dctl init` that reads only deployed user config, auto-builds missing
-  managed images, writes cache, and registers the project
+  managed images, registers the project, and runs the smoke test — the merged
+  config is regenerated fresh on every command rather than persisted
 
 The spec set remains useful as a design record and glossary:
 
@@ -858,7 +859,7 @@ alongside it.
 
 ### Base Configuration Reuse via the `base` Layer
 
-Shared devcontainer defaults live in the `base` layer at `devcontainers/base/devcontainer.json` (installed to `~/.local/share/dctl/devcontainers/base/`). When you run `dctl deploy devcontainer ...`, non-leaf layers referenced by the manifest are always copied (reconciled) into `~/.config/dctl/devcontainer/`, while the leaf layer (last in the manifest) is only created if absent and skipped if it already exists (use `--reset` to overwrite). When you run `dctl init`, layers declared in the YAML manifest are merged in the declared order.
+Shared devcontainer defaults live in the `base` layer at `devcontainers/base/devcontainer.json` (installed to `~/.local/share/dctl/devcontainers/base/`). When you run `dctl deploy devcontainer ...`, non-leaf layers referenced by the manifest are always copied (reconciled) into `~/.config/dctl/devcontainer/`, while the leaf layer (last in the manifest) is only created if absent and skipped if it already exists (use `--reset` to overwrite). The layers declared in the YAML manifest are merged in the declared order on demand — regenerated fresh on every `dctl ws up`/`reup`/`test` (and by `dctl init`'s smoke test), never cached — so edits to any layer apply immediately.
 
 **Defaults provided by `base`:**
 
@@ -896,10 +897,9 @@ Add your layer directory with a `devcontainer.json` at
 `~/.config/dctl/devcontainer/dotfiles/devcontainer.json`, then run
 `dctl init --devcontainer myproject`.
 
-After editing `base`, a custom layer, or a manifest, regenerate and recreate:
+After editing `base`, a custom layer, or a manifest, just recreate the container — the merged config is regenerated fresh on `ws reup`, so no `dctl init` re-run is needed:
 
 ```bash
-dctl init
 dctl ws reup
 ```
 
@@ -1152,14 +1152,17 @@ to keep in mind is:
 - `dctl deploy devcontainer ...` and `dctl deploy image ...` copy installed
   managed assets into `~/.config/dctl/`
 - `dctl init` selects a deployed manifest from `~/.config/dctl/devcontainer/`,
-  merges the declared layers, and writes the result to
-  `~/.cache/dctl/devcontainer/<name>/devcontainer.json`
+  registers the project, auto-builds the managed image, and runs the smoke test
 - `dctl ws up` and `dctl ws reup` resolve config through the six-level
-  precedence chain before invoking the Dev Container CLI
+  precedence chain — for a registered project this regenerates the merged config
+  fresh from the manifest layers under
+  `$XDG_RUNTIME_DIR/dctl/devcontainer/<name>/devcontainer.json` (never cached) —
+  before invoking the Dev Container CLI (manifest-backed projects require `jq`)
 - `dctl ws shell`, `exec`, and `run` attach to containers by workspace label and
   forward auth plus terminal environment
-- `dctl ws reup` is the right move after changing managed images or merged
-  config; `dctl init` regenerates cache, and `reup` recreates the container
+- `dctl ws reup` is the right move after changing managed images or a config
+  layer; it regenerates the merged config and recreates the container, so no
+  `dctl init` re-run is needed
 
 Common lifecycle commands:
 

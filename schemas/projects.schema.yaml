@@ -12,8 +12,9 @@ additionalProperties:
       pattern: "^[A-Za-z0-9._-]+$"
       description: >
         Name (stem) of a deployed devcontainer manifest under
-        ~/.config/dctl/devcontainer/<name>.yaml. Runtime derives the
-        merged-cache path at ~/.cache/dctl/devcontainer/<name>/devcontainer.json.
+        ~/.config/dctl/devcontainer/<name>.yaml. Its layers are merged and
+        regenerated fresh (never cached) under
+        $XDG_RUNTIME_DIR/dctl/devcontainer/<name>/devcontainer.json.
         Do not include the .yaml extension and do not write a path here.
     sibling_discovery:
       type: boolean

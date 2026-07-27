@@ -155,7 +155,7 @@ $EDITOR ~/.config/dctl/devcontainer/python/devcontainer.json
 
 **Where it lives:** The Dockerfile at `~/.config/dctl/images/python-dev/Dockerfile` and the config layers under `~/.config/dctl/devcontainer/`. These are user-level files, not per-project — the same Dockerfile and config are reused across every Python workspace Ana creates.
 
-**3. Registers the current project** by merging the deployed layers into `~/.cache/dctl/devcontainer/python/devcontainer.json`, auto-building the managed image if needed, and writing the manifest name (`devcontainer-manifest: python`) to `~/.config/dctl/projects.yaml`.
+**3. Registers the current project** by writing the manifest name (`devcontainer-manifest: python`) to `~/.config/dctl/projects.yaml` and auto-building the managed image if needed. The merged config is not persisted here — it is regenerated fresh from the deployed layers under `$XDG_RUNTIME_DIR/dctl/devcontainer/python/devcontainer.json` on every `dctl ws up`/`reup`/`test`.
 
 **How the team shares it:** `dctl` ships the defaults. Every teammate runs `make install`, `dctl deploy ...`, and then `dctl init --devcontainer python` inside each project. No Dockerfile to copy between repos, no per-project config to keep in sync. When the team adds a tool to the image, they update the shared Dockerfile in one place and every project picks it up on the next `dctl deploy image ...` plus `dctl image build`.
 
@@ -471,14 +471,14 @@ layers:
   - python    # leaf layer (image tag, cache volumes, bootstrap)
 ```
 
-This merges `base/devcontainer.json`, `agents/devcontainer.json`, then
-`python/devcontainer.json` into
-`~/.cache/dctl/devcontainer/python/devcontainer.json`. Both Python projects
-reuse the exact same deployed config layers and image. The Rust project uses a
+On each `dctl ws up`/`reup`/`test`, this merges `base/devcontainer.json`,
+`agents/devcontainer.json`, then `python/devcontainer.json` fresh into
+`$XDG_RUNTIME_DIR/dctl/devcontainer/python/devcontainer.json` (never cached).
+Both Python projects reuse the exact same deployed config layers and image. The Rust project uses a
 different manifest (`rust.yaml` with `layers: [base, agents, rust]`) and image,
 but shares the same `base` and `agents` layers.
 
-When the team adds a new shared mount, Ana edits `base` once, runs `dctl init` in each project to refresh the cache, and every workspace picks up the change. No files to copy, no duplication to maintain.
+When the team adds a new shared mount, Ana edits `base` once, and every workspace picks up the change on its next `dctl ws up`/`reup` — the merged config is regenerated fresh each time, so no `dctl init` re-run is needed. No files to copy, no duplication to maintain.
 
 | | Docker | Dev Container CLI | dctl |
 |---|---|---|---|
@@ -717,16 +717,9 @@ What pain remains:
 
 ### dctl
 
-For a config-only change:
+For a config or config-layer change:
 
 ```bash
-dctl ws reup
-```
-
-For a config layer change:
-
-```bash
-dctl init
 dctl ws reup
 ```
 
@@ -740,15 +733,14 @@ dctl ws reup
 Benefits:
 
 - `dctl ws reup` recreates the workspace container without repeating discovery flags.
-- `dctl ws reup` does not regenerate the merged cache by itself.
-- `dctl init` is the refresh step when Ana changed a composable config layer and needs the merged cache regenerated first.
+- `dctl ws reup` regenerates the merged config fresh from the layers, so config-layer edits are picked up immediately with no `dctl init` re-run.
 - `dctl image build` covers the image side before the container recreation step.
 
 | | Docker | Dev Container CLI | dctl |
 |---|---|---|---|
 | Config-only rebuild | 3 commands (build + rm + re-run 15 lines) | 1 command | 1 command (`dctl ws reup`) |
 | Image rebuild | 3 commands (same) | 2 commands (build + recreate) | 2 commands (`dctl image build` + `dctl ws reup`) |
-| Config layer change | N/A | N/A | 2 commands (`dctl init` + `dctl ws reup`) |
+| Config layer change | N/A | N/A | 1 command (`dctl ws reup`) |
 | Re-types runtime flags | Yes — full `docker run` every time | No | No |
 
 ## Step 8: Build managed base images

@@ -83,8 +83,9 @@ Examples:
 
 - manifest stem only, with no `.yaml` suffix and no path
 - maps to `~/.config/dctl/devcontainer/<name>.yaml`
-- participates in the main resolution chain by deriving
-  `~/.cache/dctl/devcontainer/<name>/devcontainer.json`
+- participates in the main resolution chain by regenerating the merged config
+  fresh from the manifest layers (never cached) and returning
+  `$XDG_RUNTIME_DIR/dctl/devcontainer/<name>/devcontainer.json`
 
 ### `sibling_discovery`
 
@@ -101,5 +102,5 @@ CLI flag and environment variable and before the local workspace file.
 
 - the registry is parsed as data, not sourced as shell
 - validation happens before field use
-- derived cache paths are checked before use
+- generated config paths are checked before use
 - the registry is only read from the XDG config path

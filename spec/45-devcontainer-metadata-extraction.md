@@ -20,29 +20,33 @@ The implemented system now uses:
 - `devcontainers/base/devcontainer.json` for shared infrastructure settings
 - selectable templates for project-specific deltas
 - `~/.config/dctl/devcontainer/` for user-editable config
-- `~/.cache/dctl/devcontainer/` for merged generated output
+- `$XDG_RUNTIME_DIR/dctl/devcontainer/` for the runtime-generated merged output,
+  regenerated fresh on every command (never cached)
 
 ## Landed Changes
 
 - `base` is the shared layer used by shipped manifests
 - `general` became the user-facing generic template name
-- `dctl init` now seeds config into XDG config, merges into XDG cache, and
-  registers the generated path
+- `dctl init` now seeds config into XDG config and registers the project; the
+  merge is regenerated fresh on every command under the XDG runtime dir rather
+  than persisted
 - the agents Dockerfile is now a pure container builder
-- documentation and acceptance criteria were updated to the cache-based model
+- documentation and acceptance criteria were updated to the always-fresh model
 
 ## Migration Note
 
-Projects configured before this change needed a fresh `dctl init` or
-`dctl init --force` so the shared settings moved into the new template-driven
-config flow.
+Projects configured before this change pick up the shared settings on the next
+run of any config-resolving command, since the merged config is regenerated
+fresh every time. A normal `dctl init` also re-registers the project and applies
+the legacy `devcontainer:` → `devcontainer-manifest:` registry migration
+automatically.
 
 ## Verification
 
 The current test suite covers:
 
 - shared-layer exclusion from manifest discovery
-- merged cache generation
-- cache invalidation on config edits
+- merged config generation
+- fresh regeneration reflecting config edits on every command
 - registry manifest updates
-- install behavior that leaves config/cache alone
+- install behavior that leaves user config alone

@@ -9,9 +9,11 @@ setup() {
   export XDG_DATA_HOME="${TEST_TMPDIR}/xdg-data"
   export XDG_CONFIG_HOME="${TEST_TMPDIR}/xdg-config"
   export XDG_CACHE_HOME="${TEST_TMPDIR}/xdg-cache"
+  # The merged config is regenerated (never cached) under $XDG_RUNTIME_DIR.
+  export XDG_RUNTIME_DIR="${TEST_TMPDIR}/xdg-runtime"
   export WORKSPACE_FOLDER="${TEST_TMPDIR}/workspace"
   mkdir -p "${XDG_DATA_HOME}/dctl/images" "${XDG_DATA_HOME}/dctl/schemas" \
-    "${XDG_CONFIG_HOME}/dctl" "${XDG_CACHE_HOME}/dctl" "$WORKSPACE_FOLDER"
+    "${XDG_CONFIG_HOME}/dctl" "${XDG_RUNTIME_DIR}/dctl" "$WORKSPACE_FOLDER"
   unset DCTL_CONFIG DCTL_CLI_CONFIG 2>/dev/null || true
 
   local repo_root="${BATS_TEST_DIRNAME}/.."
@@ -274,8 +276,17 @@ YAML
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "local"}\n' >"$(workspace_devcontainer_file)"
 
-  mkdir -p "${XDG_CACHE_HOME}/dctl/devcontainer/general"
-  printf '{"image": "registry"}\n' >"${XDG_CACHE_HOME}/dctl/devcontainer/general/devcontainer.json"
+  # Deploy a manifest + layers so resolution can merge the registered config
+  # fresh (there is no cache to pre-seed).
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/base" \
+    "${XDG_CONFIG_HOME}/dctl/devcontainer/general"
+  printf '{"image": "base"}\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json"
+  printf '{"image": "registry"}\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/general/devcontainer.json"
+  cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/general.yaml" <<'YAML'
+layers:
+  - base
+  - general
+YAML
 
   # Need canonical name for the current workspace
   local canonical
@@ -285,9 +296,14 @@ ${canonical}:
   devcontainer-manifest: general
 YAML
 
+  local gen
+  gen="$(devcontainer_generated_path_for_manifest general)"
+
   run resolve_devcontainer_config
   [ "$status" -eq 0 ]
-  [[ $output == *"/dctl/devcontainer/general/devcontainer.json" ]]
+  # Resolution returns the freshly-merged registry config, not the local file.
+  [[ $output == *"$gen"* ]]
+  [ "$(jq -r '.image' "$gen")" = "registry" ]
 }
 
 # --- Sibling discovery opt-out ---
@@ -323,7 +339,7 @@ YAML
   [ "$(yq -r '."proj-a" | has("sibling_discovery")' "$registry")" = "false" ]
 }
 
-@test "register_project_defaults skips existing project with warning" {
+@test "register_project_defaults updates existing project and preserves sibling_discovery" {
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
   cat >"$registry" <<'YAML'
 proj-a:
@@ -333,28 +349,13 @@ YAML
 
   run register_project_defaults "proj-a" "python"
   [ "$status" -eq 0 ]
-  [[ $output == *"already registered"* ]]
-  [ "$(yq -r '.["proj-a"]["devcontainer-manifest"]' "$registry")" = "general" ]
-  [ "$(yq -r '."proj-a".sibling_discovery' "$registry")" = "false" ]
-}
-
-@test "register_project_defaults with force updates existing project" {
-  local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
-  cat >"$registry" <<'YAML'
-proj-a:
-  devcontainer-manifest: general
-  sibling_discovery: false
-YAML
-
-  run register_project_defaults "proj-a" "python" "true"
-  [ "$status" -eq 0 ]
   [ "$(yq -r '.["proj-a"]["devcontainer-manifest"]' "$registry")" = "python" ]
   [ "$(yq -r '."proj-a" | has("dockerfile")' "$registry")" = "false" ]
   [ "$(yq -r '."proj-a" | has("image")' "$registry")" = "false" ]
   [ "$(yq -r '."proj-a".sibling_discovery' "$registry")" = "false" ]
 }
 
-@test "register_project_defaults with force strips default sibling_discovery" {
+@test "register_project_defaults strips default sibling_discovery on re-register" {
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
   cat >"$registry" <<'YAML'
 proj-a:
@@ -362,7 +363,7 @@ proj-a:
   sibling_discovery: true
 YAML
 
-  run register_project_defaults "proj-a" "python" "true"
+  run register_project_defaults "proj-a" "python"
   [ "$status" -eq 0 ]
   [ "$(yq -r '.["proj-a"]["devcontainer-manifest"]' "$registry")" = "python" ]
   [ "$(yq -r '."proj-a" | has("dockerfile")' "$registry")" = "false" ]
@@ -416,7 +417,7 @@ YAML
   [ "$(yq -r '.["proj-a"]["devcontainer-manifest"]' "${XDG_CONFIG_HOME}/dctl/projects.yaml")" = "general" ]
 }
 
-@test "register_project_defaults force scrubs legacy devcontainer key" {
+@test "register_project_defaults scrubs legacy devcontainer key" {
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
   cat >"$registry" <<'YAML'
 proj-a:
@@ -424,7 +425,7 @@ proj-a:
   sibling_discovery: false
 YAML
 
-  run register_project_defaults "proj-a" "general" "true"
+  run register_project_defaults "proj-a" "general"
   [ "$status" -eq 0 ]
   [ "$(yq -r '.["proj-a"]["devcontainer-manifest"]' "$registry")" = "general" ]
   [ "$(yq -r '.["proj-a"] | has("devcontainer")' "$registry")" = "false" ]

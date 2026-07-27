@@ -10,12 +10,12 @@ devcontainers/  ──make install──>  ~/.local/share/dctl/devcontainers/
                                   │
                                   └──dctl deploy──>  ~/.config/dctl/devcontainer/
                                                              │
-                                                             └──merge manifest-declared layers──>  ~/.cache/dctl/devcontainer/
+                                                             └──merge manifest-declared layers (regenerated fresh)──>  $XDG_RUNTIME_DIR/dctl/devcontainer/
 ```
 
 - **Installed** (`~/.local/share/dctl/devcontainers/`): built-in manifests and layers shipped by `make install`
 - **Config** (`~/.config/dctl/devcontainer/`): deployed config files, then user-editable
-- **Cache** (`~/.cache/dctl/devcontainer/`): generated merged `devcontainer.json` output consumed by `dctl ws up`
+- **Runtime generated** (`$XDG_RUNTIME_DIR/dctl/devcontainer/`): ephemeral merged `devcontainer.json` output, regenerated fresh (never cached) on every `dctl ws up`/`reup`/`test`
 
 ## Installed Files Are Seed Sources Only
 

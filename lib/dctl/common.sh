@@ -11,8 +11,10 @@ WORKSPACE_FOLDER="$(cd -- "$WORKSPACE_FOLDER" && pwd -P)"
 : "${IMAGES_DIR:=${XDG_DATA_HOME:-$HOME/.local/share}/dctl/images}"
 : "${DEVCONTAINERS_DIR:=${XDG_DATA_HOME:-$HOME/.local/share}/dctl/devcontainers}"
 : "${DCTL_CONFIG_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/dctl}"
-: "${DCTL_CACHE_DIR:=${XDG_CACHE_HOME:-$HOME/.cache}/dctl}"
-: "${DCTL_DEVCONTAINER_CACHE_DIR:=${DCTL_CACHE_DIR}/devcontainer}"
+# The merged devcontainer.json is regenerated fresh on every command (never
+# cached), so it lives in a runtime/ephemeral dir — tmpfs-backed and cleared on
+# logout under $XDG_RUNTIME_DIR, with a per-user /tmp fallback.
+: "${DCTL_DEVCONTAINER_GEN_DIR:=${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}/dctl-$(id -u)}/dctl/devcontainer}"
 : "${DCTL_DEVCONTAINER_DIR:=${DCTL_CONFIG_DIR}/devcontainer}"
 : "${DCTL_IMAGES_DIR:=${DCTL_CONFIG_DIR}/images}"
 : "${DCTL_SCHEMAS_DIR:=${XDG_DATA_HOME:-$HOME/.local/share}/dctl/schemas}"
@@ -22,8 +24,7 @@ readonly WORKSPACE_FOLDER
 readonly IMAGES_DIR
 readonly DEVCONTAINERS_DIR
 readonly DCTL_CONFIG_DIR
-readonly DCTL_CACHE_DIR
-readonly DCTL_DEVCONTAINER_CACHE_DIR
+readonly DCTL_DEVCONTAINER_GEN_DIR
 readonly DCTL_DEVCONTAINER_DIR
 readonly DCTL_IMAGES_DIR
 readonly DCTL_SCHEMAS_DIR
@@ -83,9 +84,9 @@ workspace_label_filter() {
   printf 'label=devcontainer.local_folder=%s' "$(workspace_path)"
 }
 
-devcontainer_cache_path_for_manifest() {
+devcontainer_generated_path_for_manifest() {
   local name="$1"
-  printf '%s/%s/devcontainer.json\n' "$DCTL_DEVCONTAINER_CACHE_DIR" "$name"
+  printf '%s/%s/devcontainer.json\n' "$DCTL_DEVCONTAINER_GEN_DIR" "$name"
 }
 
 config_devcontainer_path() {
@@ -158,6 +159,13 @@ _registry_lookup_sibling_discovery() {
   printf 'true\n'
 }
 
+_generate_devcontainer_impl() {
+  # Stub — overridden in config.sh, which owns the layer merge. Reaching this
+  # means config.sh was not sourced; every command that resolves a registered
+  # config loads config.sh transitively, so this should be unreachable.
+  err "internal error: config.sh not loaded (generate_devcontainer unavailable)"
+}
+
 resolve_work_clone_sibling() {
   require_cmd realpath
 
@@ -224,8 +232,10 @@ resolve_devcontainer_config() {
   canonical_name="$(resolve_canonical_project_name)"
   registry_manifest="$(_registry_lookup_devcontainer_manifest "$canonical_name")"
   if [[ -n $registry_manifest ]]; then
-    registry_path="$(devcontainer_cache_path_for_manifest "$registry_manifest")"
-    [[ -f $registry_path ]] || err "Registry manifest '${registry_manifest}' for project '${canonical_name}' has no generated cache at $registry_path. Run: dctl init --devcontainer ${registry_manifest}"
+    # No cache: merge the manifest's layers fresh on every resolve.
+    if ! registry_path="$(_generate_devcontainer_impl "$registry_manifest")"; then
+      return 1
+    fi
     config_path="$(realpath "$registry_path")"
     log "Using devcontainer config from project registry: ${canonical_name} (manifest: ${registry_manifest}) -> $config_path" >&2
     printf '%s\n' "$config_path"

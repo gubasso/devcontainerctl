@@ -52,6 +52,111 @@ _read_manifest_layers() {
   yq eval '.layers[]' "$manifest"
 }
 
+_strip_jsonc_comments() {
+  sed '/^[[:space:]]*\/\//d' "$1"
+}
+
+merge_two_configs() {
+  local base_path="$1"
+  local template_path="$2"
+
+  local base_json tmpl_json jq_err
+
+  base_json="$(_strip_jsonc_comments "$base_path")" || return 1
+  tmpl_json="$(_strip_jsonc_comments "$template_path")" || return 1
+
+  if ! jq_err="$(jq empty <<<"$base_json" 2>&1)"; then
+    printf 'JSON syntax error in %s:\n  %s\n' "$base_path" "$jq_err" >&2
+    return 1
+  fi
+  if ! jq_err="$(jq empty <<<"$tmpl_json" 2>&1)"; then
+    printf 'JSON syntax error in %s:\n  %s\n' "$template_path" "$jq_err" >&2
+    return 1
+  fi
+
+  jq -s '
+    .[0] as $base | .[1] as $tmpl |
+    $base * $tmpl |
+    .mounts = (($base.mounts // []) + ($tmpl.mounts // [])) |
+    .postCreateCommand = (($base.postCreateCommand // {}) * ($tmpl.postCreateCommand // {})) |
+    .containerEnv = (($base.containerEnv // {}) * ($tmpl.containerEnv // {})) |
+    .remoteEnv = (($base.remoteEnv // {}) * ($tmpl.remoteEnv // {}))
+  ' <(echo "$base_json") <(echo "$tmpl_json")
+}
+
+_validate_deployed_devcontainer() {
+  local template="$1"
+  local manifest
+  manifest="$(config_compose_manifest_path "$template")"
+  [[ -f $manifest ]] || err "Unknown deployed devcontainer: $template (no manifest at $manifest)"
+}
+
+discover_config_layers() {
+  local config_name="$1"
+  local manifest
+  manifest="$(config_compose_manifest_path "$config_name")"
+
+  [[ -f $manifest ]] || err "No manifest found for '$config_name' at $manifest"
+  _validate_compose_manifest "$manifest"
+
+  local -a layers=()
+  local layer_name layer_path
+  while IFS= read -r layer_name; do
+    [[ -n $layer_name ]] || continue
+    layer_path="${DCTL_DEVCONTAINER_DIR}/${layer_name}/devcontainer.json"
+    [[ -f $layer_path ]] || err "Layer '$layer_name' referenced in manifest '$config_name' not found: $layer_path"
+    layers+=("$layer_path")
+  done < <(_read_manifest_layers "$manifest")
+
+  [[ ${#layers[@]} -gt 0 ]] || err "No layers found in manifest for '$config_name'"
+  printf '%s\n' "${layers[@]}"
+}
+
+# Merge a deployed devcontainer's manifest layers into a single config and
+# write it to the runtime generated path, freshly, every call — there is no
+# cache and no freshness check. Echoes the generated path.
+generate_devcontainer() {
+  local template="$1"
+
+  require_cmd jq
+  _validate_deployed_devcontainer "$template"
+
+  local gen_path
+  gen_path="$(devcontainer_generated_path_for_manifest "$template")"
+
+  local -a config_layers=()
+  mapfile -t config_layers < <(discover_config_layers "$template")
+  if [[ ${#config_layers[@]} -eq 0 ]]; then
+    err "No composable config layers found for ${template}. Run: dctl deploy devcontainer ${template}"
+  fi
+
+  mkdir -p "$(dirname "$gen_path")"
+  local tmp_path tmp_acc
+  tmp_path="$(mktemp "${gen_path}.tmp.XXXXXX")"
+  tmp_acc="$(mktemp "${gen_path}.layers.XXXXXX")"
+  cp "${config_layers[0]}" "$tmp_acc"
+
+  local layer_path tmp_next
+  for layer_path in "${config_layers[@]:1}"; do
+    tmp_next="$(mktemp "${gen_path}.layers.XXXXXX")"
+    if ! merge_two_configs "$tmp_acc" "$layer_path" >"$tmp_next"; then
+      rm -f "$tmp_path" "$tmp_acc" "$tmp_next"
+      err "Failed to merge layer '$layer_path' for '$template'"
+    fi
+    rm -f "$tmp_acc"
+    tmp_acc="$tmp_next"
+  done
+
+  mv "$tmp_acc" "$tmp_path"
+  mv "$tmp_path" "$gen_path"
+  printf '%s\n' "$gen_path"
+}
+
+# Override the common.sh stub so resolve_devcontainer_config regenerates.
+_generate_devcontainer_impl() {
+  generate_devcontainer "$@"
+}
+
 _registry_exists() {
   local registry
   registry="$(_registry_file)"
@@ -226,7 +331,6 @@ _registry_has_project() {
 register_project_defaults() {
   local canonical_name="$1"
   local manifest_name="$2"
-  local force="${3:-false}"
 
   require_cmd yq
   _registry_ensure_file
@@ -234,28 +338,19 @@ register_project_defaults() {
   local registry
   registry="$(_registry_file)"
 
+  # Lenient pre-write check only: the migration step below scrubs legacy keys
+  # that strict validation would reject, and _validate_registry runs after the
+  # write to enforce the final shape.
   if [[ -s $registry ]]; then
-    if [[ $force == true ]]; then
-      if ! yq eval '.' "$registry" >/dev/null 2>&1; then
-        err "Invalid YAML in $registry"
-      fi
-    else
-      _validate_registry "$registry"
+    if ! yq eval '.' "$registry" >/dev/null 2>&1; then
+      err "Invalid YAML in $registry"
     fi
   fi
 
-  local project_exists=false
-  if _registry_has_project "$canonical_name"; then
-    project_exists=true
-    if [[ $force != true ]]; then
-      warn "Project '$canonical_name' already registered in $registry; skipping"
-      return 0
-    fi
-  fi
-
-  # Use env vars to pass values safely to yq (avoids injection via special chars)
+  # Use env vars to pass values safely to yq (avoids injection via special chars).
+  # Preserve an explicit sibling_discovery for this project across re-registration.
   local existing_sibling="true"
-  if [[ $force == true && $project_exists == true ]]; then
+  if _registry_has_project "$canonical_name"; then
     local has_sibling_key
     has_sibling_key="$(YQ_KEY="$canonical_name" yq -r '.[env(YQ_KEY)] | has("sibling_discovery")' "$registry" 2>/dev/null || true)"
     if [[ $has_sibling_key == "true" ]]; then
@@ -270,26 +365,23 @@ register_project_defaults() {
   else
     yq_expr+=' | del(.[env(YQ_KEY)].sibling_discovery)'
   fi
-  if [[ $force == true ]]; then
-    # Migrate legacy keys registry-wide so a forced write is also a one-shot
-    # migration path. For each entry that still has a legacy `devcontainer:`
-    # path of the form `<...>/<manifest>/devcontainer.json` (the only shape
-    # the prior contract emitted), derive `devcontainer-manifest` from
-    # basename(dirname(path)) when the manifest field is not already set.
-    # Then drop the legacy `devcontainer`, `dockerfile`, and `image` keys.
-    # Entries that have neither key are left untouched. Any derived manifest
-    # name that does not match the schema pattern is caught by the post-write
-    # _validate_registry call below.
-    yq_expr+=' | with_entries(.value |= ('
-    yq_expr+='(.["devcontainer-manifest"] = ('
-    yq_expr+='(.["devcontainer-manifest"] // (.["devcontainer"] | sub("/devcontainer\.json$"; "") | sub("^.*/"; "")))'
-    yq_expr+=')) | ('
-    yq_expr+='select(.["devcontainer-manifest"] == null or .["devcontainer-manifest"] == "") '
-    yq_expr+='| del(.["devcontainer-manifest"])'
-    yq_expr+=') // . '
-    yq_expr+='| del(.["devcontainer"]) | del(.dockerfile) | del(.image)'
-    yq_expr+='))'
-  fi
+  # Migrate legacy keys registry-wide so a normal init also upgrades an old
+  # registry in one shot. For each entry that still has a legacy `devcontainer:`
+  # path of the form `<...>/<manifest>/devcontainer.json` (the only shape the
+  # prior contract emitted), derive `devcontainer-manifest` from
+  # basename(dirname(path)) when the manifest field is not already set. Then
+  # drop the legacy `devcontainer`, `dockerfile`, and `image` keys. Entries that
+  # have neither key are left untouched. Any derived manifest name that does not
+  # match the schema pattern is caught by the post-write _validate_registry call.
+  yq_expr+=' | with_entries(.value |= ('
+  yq_expr+='(.["devcontainer-manifest"] = ('
+  yq_expr+='(.["devcontainer-manifest"] // (.["devcontainer"] | sub("/devcontainer\.json$"; "") | sub("^.*/"; "")))'
+  yq_expr+=')) | ('
+  yq_expr+='select(.["devcontainer-manifest"] == null or .["devcontainer-manifest"] == "") '
+  yq_expr+='| del(.["devcontainer-manifest"])'
+  yq_expr+=') // . '
+  yq_expr+='| del(.["devcontainer"]) | del(.dockerfile) | del(.image)'
+  yq_expr+='))'
 
   local tmp_registry="${registry}.tmp.$$"
   export YQ_KEY="$canonical_name" YQ_MANIFEST="$manifest_name"
@@ -300,8 +392,19 @@ register_project_defaults() {
   fi
   unset YQ_KEY YQ_MANIFEST
 
+  # Validate the migrated candidate before it replaces the live registry so
+  # genuinely-invalid input fails closed and leaves projects.yaml untouched.
+  # _validate_registry calls `err` (which exits) on failure, so run it in a
+  # subshell to catch the result, clean up the temp file, and re-emit the
+  # message without having mutated the user's registry.
+  local validation_output
+  if ! validation_output="$(_validate_registry "$tmp_registry" 2>&1)"; then
+    rm -f "$tmp_registry"
+    # Map the temp path back to the real registry in the surfaced message.
+    err "${validation_output//"$tmp_registry"/"$registry"}"
+  fi
+
   mv "$tmp_registry" "$registry"
-  _validate_registry "$registry"
 
   log "Registered project '$canonical_name' (devcontainer-manifest: $manifest_name) in $registry"
 }

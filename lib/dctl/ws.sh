@@ -151,43 +151,11 @@ cmd_ws_reup() {
     args=("${args[@]:1}")
   fi
 
+  # resolve_devcontainer_config merges the manifest layers fresh on every call
+  # for a registered project, so there is nothing extra to regenerate here.
   local config_path
   if ! config_path="$(resolve_devcontainer_config)"; then
     return 1
-  fi
-
-  # Decide whether to regenerate the merged cache before re-up. Two paths:
-  #   (a) The current project has a manifest registered — use it directly.
-  #   (b) No registry entry, but the resolved config still lives inside the
-  #       cache dir (likely came from --config/DCTL_CONFIG pointing at a
-  #       cached file). Recover the manifest name from the parent dir.
-  local template_name=""
-  local canonical_name registry_manifest
-  canonical_name="$(resolve_canonical_project_name)"
-  if command -v yq >/dev/null 2>&1; then
-    registry_manifest="$(_registry_lookup_devcontainer_manifest "$canonical_name" || true)"
-  else
-    registry_manifest=""
-  fi
-
-  if [[ -n $registry_manifest ]]; then
-    template_name="$registry_manifest"
-  else
-    local cache_root_canonical="$DCTL_DEVCONTAINER_CACHE_DIR"
-    if [[ -d $DCTL_DEVCONTAINER_CACHE_DIR ]]; then
-      cache_root_canonical="$(realpath "$DCTL_DEVCONTAINER_CACHE_DIR")"
-    fi
-    if [[ $config_path == "${cache_root_canonical}/"* ]]; then
-      template_name="$(basename "$(dirname "$config_path")")"
-    fi
-  fi
-
-  if [[ -n $template_name ]]; then
-    local cache_output config_status
-    cache_output="$(generate_cached_devcontainer "$template_name")" || return $?
-    config_path="$(head -1 <<<"$cache_output")"
-    config_status="$(tail -1 <<<"$cache_output")"
-    log "Config cache status: $config_status"
   fi
 
   local -a git_wt_mounts=()

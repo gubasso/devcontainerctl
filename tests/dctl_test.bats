@@ -114,8 +114,11 @@ setup() {
   export XDG_DATA_HOME="${TEST_TMPDIR}/xdg-data"
   export XDG_CONFIG_HOME="${TEST_TMPDIR}/xdg-config"
   export XDG_CACHE_HOME="${TEST_TMPDIR}/xdg-cache"
+  # The merged config is regenerated (never cached); it lands under
+  # $XDG_RUNTIME_DIR/dctl/devcontainer/<manifest>/devcontainer.json.
+  export XDG_RUNTIME_DIR="${TEST_TMPDIR}/xdg-runtime"
   export WORKSPACE_FOLDER="${TEST_TMPDIR}/workspace"
-  mkdir -p "${XDG_DATA_HOME}/dctl/images" "${XDG_CONFIG_HOME}/dctl" "${XDG_CACHE_HOME}/dctl" "$WORKSPACE_FOLDER"
+  mkdir -p "${XDG_DATA_HOME}/dctl/images" "${XDG_CONFIG_HOME}/dctl" "${XDG_RUNTIME_DIR}/dctl" "$WORKSPACE_FOLDER"
   unset DCTL_CONFIG DCTL_CLI_CONFIG 2>/dev/null || true
   source_dctl_functions
   create_base_template_fixture
@@ -299,28 +302,7 @@ teardown() {
   assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config $(workspace_devcontainer_file) --remove-existing-container"
 }
 
-@test "cmd_ws_reup regenerates cached config when a layer mtime is newer" {
-  create_user_base_layer_fixture
-  create_user_devcontainer_fixture python "devimg/python-dev:latest"
-
-  run generate_cached_devcontainer python
-  [ "$status" -eq 0 ]
-  local cached="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
-  [ -f "$cached" ]
-
-  sleep 1
-  touch "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
-
-  enable_mocks
-  create_mock devcontainer 0 ""
-
-  DCTL_CLI_CONFIG="$cached" run cmd_ws_reup
-  [ "$status" -eq 0 ]
-  [[ $output == *"Config cache status: generated"* ]]
-  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config ${cached} --remove-existing-container"
-}
-
-@test "cmd_ws_reup regenerates manifest-backed cache via registry" {
+@test "cmd_ws_reup regenerates the merged config fresh for a registered project" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
   create_user_image_fixture python-dev
@@ -330,51 +312,19 @@ teardown() {
 org-myproj:
   devcontainer-manifest: python
 YAML
-
-  run generate_cached_devcontainer python
-  [ "$status" -eq 0 ]
-  local cached="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
-
-  sleep 1
-  touch "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
-
   enable_mocks
   create_mock devcontainer 0 ""
+
+  local gen
+  gen="$(devcontainer_generated_path_for_manifest python)"
 
   run cmd_ws_reup
   [ "$status" -eq 0 ]
-  [[ $output == *"Config cache status: generated"* ]]
-  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config ${cached} --remove-existing-container"
-}
-
-@test "cmd_ws_reup reuses cached config when all inputs are older" {
-  create_user_base_layer_fixture
-  create_user_devcontainer_fixture python "devimg/python-dev:latest"
-
-  run generate_cached_devcontainer python
-  [ "$status" -eq 0 ]
-  local cached="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
-  [ -f "$cached" ]
-
-  enable_mocks
-  create_mock devcontainer 0 ""
-
-  DCTL_CLI_CONFIG="$cached" run cmd_ws_reup
-  [ "$status" -eq 0 ]
-  [[ $output == *"Config cache status: cached"* ]]
-  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config ${cached} --remove-existing-container"
-}
-
-@test "cmd_ws_reup does not regenerate when resolved config is outside cache dir" {
-  mkdir -p "$(workspace_devcontainer_dir)"
-  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
-  enable_mocks
-  create_mock devcontainer 0 ""
-
-  run cmd_ws_reup
-  [ "$status" -eq 0 ]
+  [ -f "$gen" ]
+  # Merge reflects the current layers with no separate generate step.
+  [ "$(jq -r '.image' "$gen")" = "devimg/python-dev:latest" ]
   [[ $output != *"Config cache status:"* ]]
-  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config $(workspace_devcontainer_file) --remove-existing-container"
+  assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config ${gen} --remove-existing-container"
 }
 
 @test "collect_term_env includes remote env flags for set vars" {
@@ -517,7 +467,7 @@ YAML
   run cmd_init --help
   [ "$status" -eq 0 ]
   [[ $output == *"--devcontainer"* ]]
-  [[ $output == *"--force"* ]]
+  [[ $output != *"--force"* ]]
   [[ $output != *"--image"* ]]
   [[ $output != *"--deploy-only"* ]]
   [[ $output != *"--pick-only"* ]]
@@ -1205,58 +1155,16 @@ YAML
   [[ $output == *"No manifest found for 'missing'"* ]]
 }
 
-@test "cache_is_fresh checks all layer files" {
-  local cached="${TEST_TMPDIR}/cached.json"
-  local layer_a="${TEST_TMPDIR}/layer-a.json"
-  local layer_b="${TEST_TMPDIR}/layer-b.json"
-  local template="${TEST_TMPDIR}/template.json"
-
-  printf '{}\n' >"$layer_a"
-  printf '{}\n' >"$layer_b"
-  printf '{}\n' >"$template"
-  sleep 1
-  printf '{}\n' >"$cached"
-
-  run cache_is_fresh "$cached" "$layer_a" "$layer_b" "$template"
-  [ "$status" -eq 0 ]
-
-  sleep 1
-  touch "$layer_b"
-  run cache_is_fresh "$cached" "$layer_a" "$layer_b" "$template"
-  [ "$status" -ne 0 ]
-}
-
-@test "cache_is_fresh checks manifest files too" {
-  local cached="${TEST_TMPDIR}/cached.json"
-  local manifest="${TEST_TMPDIR}/python.yaml"
-  local layer="${TEST_TMPDIR}/layer.json"
-
-  cat >"$manifest" <<'YAML'
-layers:
-  - base
-  - python
-YAML
-  printf '{}\n' >"$layer"
-  sleep 1
-  printf '{}\n' >"$cached"
-
-  run cache_is_fresh "$cached" "$manifest" "$layer"
-  [ "$status" -eq 0 ]
-
-  sleep 1
-  touch "$manifest"
-  run cache_is_fresh "$cached" "$manifest" "$layer"
-  [ "$status" -ne 0 ]
-}
-
-@test "generate_cached_devcontainer works with manifest-defined layers" {
+@test "generate_devcontainer works with manifest-defined layers" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
 
-  run generate_cached_devcontainer python
+  run generate_devcontainer python
   [ "$status" -eq 0 ]
 
-  local deployed="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
+  local deployed
+  deployed="$(devcontainer_generated_path_for_manifest python)"
+  [ "${lines[0]}" = "$deployed" ]
   [ -f "$deployed" ]
   [ "$(jq -r '.remoteUser' "$deployed")" = "testuser" ]
   [ "$(jq -r '.init' "$deployed")" = "true" ]
@@ -1264,7 +1172,7 @@ YAML
   [ "$(jq -r '.image' "$deployed")" = "devimg/python-dev:latest" ]
 }
 
-@test "generate_cached_devcontainer merges multiple manifest layers with correct ordering" {
+@test "generate_devcontainer merges multiple manifest layers with correct ordering" {
   create_user_base_layer_fixture
   mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/middle"
   cat >"${XDG_CONFIG_HOME}/dctl/devcontainer/middle/devcontainer.json" <<'JSON'
@@ -1301,10 +1209,11 @@ JSON
 JSON
   create_user_manifest_fixture python base middle python
 
-  run generate_cached_devcontainer python
+  run generate_devcontainer python
   [ "$status" -eq 0 ]
 
-  local deployed="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
+  local deployed
+  deployed="$(devcontainer_generated_path_for_manifest python)"
   [ -f "$deployed" ]
   [ "$(jq -r '.name' "$deployed")" = "top" ]
   [ "$(jq -r '.containerEnv.LEVEL' "$deployed")" = "top" ]
@@ -1342,26 +1251,34 @@ JSON
   [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/agents/devcontainer.json" ]
   [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/agents/seccomp-bwrap.json" ]
 
-  run generate_cached_devcontainer general
+  run generate_devcontainer general
   [ "$status" -eq 0 ]
 
-  local deployed="${XDG_CACHE_HOME}/dctl/devcontainer/general/devcontainer.json"
+  local deployed
+  deployed="$(devcontainer_generated_path_for_manifest general)"
   [ -f "$deployed" ]
   # shellcheck disable=SC2016 # ${localEnv:HOME} is a devcontainer.json variable; must NOT be shell-expanded
   [ "$(jq -r '.runArgs[1]' "$deployed")" = 'seccomp=${localEnv:HOME}/.config/dctl/devcontainer/agents/seccomp-bwrap.json' ]
 }
 
-@test "generate_cached_devcontainer reuses cache when fresh" {
+@test "generate_devcontainer regenerates a fresh artifact every call" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
 
-  run generate_cached_devcontainer python
-  [ "$status" -eq 0 ]
-  [ "${lines[1]}" = "generated" ]
+  local deployed
+  deployed="$(devcontainer_generated_path_for_manifest python)"
 
-  run generate_cached_devcontainer python
+  run generate_devcontainer python
   [ "$status" -eq 0 ]
-  [ "${lines[1]}" = "cached" ]
+  [ "${lines[0]}" = "$deployed" ]
+  [ "$(jq -r '.image' "$deployed")" = "devimg/python-dev:latest" ]
+
+  # A layer edit is reflected on the next call with no freshness gate.
+  printf '{\n  "image": "devimg/python-dev:latest",\n  "name": "edited"\n}\n' \
+    >"${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
+  run generate_devcontainer python
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.name' "$deployed")" = "edited" ]
 }
 
 @test "cmd_init reads only user config and ignores installed templates" {
@@ -1376,7 +1293,7 @@ JSON
 
   run cmd_init --devcontainer python
   [ "$status" -eq 0 ]
-  [ "$(jq -r '.image' "${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json")" = "devimg/python-dev:latest" ]
+  [ "$(jq -r '.image' "$(devcontainer_generated_path_for_manifest python)")" = "devimg/python-dev:latest" ]
 }
 
 @test "cmd_init errors when managed image Dockerfile is not deployed" {
@@ -1422,7 +1339,7 @@ JSON
   assert_mock_not_called "CMD_IMAGE_BUILD_CALLED python-dev"
 }
 
-@test "cmd_init registers manifest name and produces cache file" {
+@test "cmd_init registers manifest name and produces generated config" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
   create_user_image_fixture python-dev
@@ -1434,7 +1351,8 @@ JSON
   run cmd_init --devcontainer python
   [ "$status" -eq 0 ]
 
-  local deployed="${XDG_CACHE_HOME}/dctl/devcontainer/python/devcontainer.json"
+  local deployed
+  deployed="$(devcontainer_generated_path_for_manifest python)"
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
   local canonical
   canonical="$(resolve_canonical_project_name)"
@@ -1447,7 +1365,7 @@ JSON
   [ "$(yq -r ".\"${canonical}\" | has(\"sibling_discovery\")" "$registry")" = "false" ]
 }
 
-@test "cmd_init --force migrates the registry even when unrelated entries are legacy" {
+@test "cmd_init auto-migrates the registry even when unrelated entries are legacy" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
   create_user_image_fixture python-dev
@@ -1457,7 +1375,7 @@ JSON
   canonical="$(resolve_canonical_project_name)"
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
   # Active project has a legacy entry; an unrelated project also still has
-  # one. The forced write must auto-migrate the unrelated entry's legacy
+  # one. A normal init must auto-migrate the unrelated entry's legacy
   # `devcontainer:` path to a `devcontainer-manifest` stem (preserving the
   # user's project-selection intent) instead of silently dropping it.
   cat >"$registry" <<YAML
@@ -1470,7 +1388,7 @@ YAML
   # shellcheck disable=SC2329
   cmd_test() { :; }
 
-  run cmd_init --force --devcontainer python
+  run cmd_init --devcontainer python
   [ "$status" -eq 0 ]
   [ "$(yq -r ".\"${canonical}\"[\"devcontainer-manifest\"]" "$registry")" = "python" ]
   [ "$(yq -r ".\"${canonical}\" | has(\"devcontainer\")" "$registry")" = "false" ]
@@ -1481,7 +1399,7 @@ YAML
   [ "$(yq -r '.["other-project"].sibling_discovery' "$registry")" = "false" ]
 }
 
-@test "cmd_init --force scrubs legacy devcontainer key for the active project" {
+@test "cmd_init auto-scrubs legacy devcontainer key for the active project" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
   create_user_image_fixture python-dev
@@ -1491,9 +1409,8 @@ YAML
   canonical="$(resolve_canonical_project_name)"
   local registry="${XDG_CONFIG_HOME}/dctl/projects.yaml"
   # Seed a registry that still uses the legacy `devcontainer:` key for the
-  # current project. Without --force this would (correctly) fail strict
-  # validation; with --force the lookup must be skipped so register_project_defaults
-  # can scrub the legacy key.
+  # current project. The switching lookup tolerates the legacy entry and
+  # register_project_defaults scrubs it during the normal write.
   cat >"$registry" <<YAML
 ${canonical}:
   devcontainer: \$HOME/cache/path/devcontainer.json
@@ -1502,14 +1419,14 @@ YAML
   # shellcheck disable=SC2329
   cmd_test() { :; }
 
-  run cmd_init --force --devcontainer python
+  run cmd_init --devcontainer python
   [ "$status" -eq 0 ]
   [ "$(yq -r ".\"${canonical}\"[\"devcontainer-manifest\"]" "$registry")" = "python" ]
   [ "$(yq -r ".\"${canonical}\" | has(\"devcontainer\")" "$registry")" = "false" ]
   [ "$(yq -r ".\"${canonical}\".sibling_discovery" "$registry")" = "false" ]
 }
 
-@test "cmd_init --force preserves explicit sibling_discovery: false" {
+@test "cmd_init preserves explicit sibling_discovery: false" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
   create_user_image_fixture python-dev
@@ -1526,7 +1443,7 @@ YAML
   # shellcheck disable=SC2329
   cmd_test() { :; }
 
-  run cmd_init --force --devcontainer python
+  run cmd_init --devcontainer python
   [ "$status" -eq 0 ]
   [ "$(yq -r ".\"${canonical}\"[\"devcontainer-manifest\"]" "$registry")" = "python" ]
   [ "$(yq -r ".\"${canonical}\".dockerfile // \"\"" "$registry")" = "" ]

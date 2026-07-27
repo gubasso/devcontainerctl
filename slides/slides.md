@@ -640,7 +640,7 @@ class: act-dctl
 
 - <mdi-source-branch class="inline text-brand-accent" /> &nbsp; **Version-controlled and shareable** — your `~/.config/dctl/` is just files. Commit it to a personal dotfiles repo or share a team-wide baseline.
 
-- <mdi-account-group-outline class="inline text-brand-warn" /> &nbsp; **Edit once, every project picks it up** — fix a mount in `base`, every workspace inherits the fix on the next `dctl init`.
+- <mdi-account-group-outline class="inline text-brand-warn" /> &nbsp; **Edit once, every project picks it up** — fix a mount in `base`, every workspace inherits the fix on its next `dctl ws up`/`reup` (the merged config is regenerated fresh each time).
 
 <div class="mt-12 text-center text-lg opacity-80">
 The duplication problem collapses because there is <span class="underline decoration-brand decoration-2 underline-offset-4">nothing left to duplicate</span>.
@@ -764,15 +764,15 @@ The final `devcontainer.json` is **assembled** from named layers — not authore
   <mdi-source-merge class="text-4xl text-brand-accent" />
   <div>
     <div class="font-mono text-sm">dctl init</div>
-    <div class="text-sm opacity-70">Merges the layers and caches the result</div>
+    <div class="text-sm opacity-70">Registers the project and builds the image</div>
   </div>
 </div>
 
 <div class="flex items-center gap-4">
   <mdi-database-outline class="text-4xl text-brand-warn" />
   <div>
-    <div class="font-mono text-xs">~/.cache/dctl/devcontainer/&lt;name&gt;/devcontainer.json</div>
-    <div class="text-sm opacity-70">Generated, schema-validated, never edited by hand</div>
+    <div class="font-mono text-xs">$XDG_RUNTIME_DIR/dctl/devcontainer/&lt;name&gt;/devcontainer.json</div>
+    <div class="text-sm opacity-70">Regenerated fresh on every command, never cached or edited by hand</div>
   </div>
 </div>
 
@@ -816,7 +816,7 @@ Layers merge in manifest order — later layers override earlier ones on conflic
 <!--
 The composition graph: many manifests, shared layers, one merged JSON per
 project type. Edit base once, both python.yaml and rust.yaml pick it up.
-The cache is the only thing devcontainer up actually reads.
+The freshly regenerated merged config is the only thing devcontainer up actually reads.
 -->
 
 ---
@@ -856,7 +856,7 @@ Three projects. Two manifests. <strong>Zero per-project files.</strong>
   <mdi-numeric-1-circle-outline class="text-3xl text-brand" />
   <div>
     <div class="font-mono text-sm">dctl init</div>
-    <div class="text-xs opacity-70">Pick a manifest, merge layers, register the project</div>
+    <div class="text-xs opacity-70">Pick a manifest, register the project, build the image</div>
   </div>
 </div>
 
@@ -864,7 +864,7 @@ Three projects. Two manifests. <strong>Zero per-project files.</strong>
   <mdi-numeric-2-circle-outline class="text-3xl text-brand" />
   <div>
     <div class="font-mono text-sm">dctl ws up</div>
-    <div class="text-xs opacity-70">Start the container from the merged cache</div>
+    <div class="text-xs opacity-70">Regenerate the merged config and start the container</div>
   </div>
 </div>
 
@@ -1010,7 +1010,7 @@ class: act-dctl
 
 - <mdi-clock-outline class="inline text-brand-accent" /> &nbsp; **Weekly image refresh, opt-in.** A user-systemd timer runs `dctl image build --all` so the fleet stays current.
 
-- <mdi-folder-multiple-outline class="inline text-brand-warn" /> &nbsp; **XDG-clean.** Seed ready-to-use templates in `~/.local/share/dctl/`, runtime config in `~/.config/dctl/`, generated cache in `~/.cache/dctl/`. Honors `XDG_*_HOME`. Nothing in the project repo.
+- <mdi-folder-multiple-outline class="inline text-brand-warn" /> &nbsp; **XDG-clean.** Seed ready-to-use templates in `~/.local/share/dctl/`, runtime config in `~/.config/dctl/`, the merged output regenerated fresh (never cached) in `$XDG_RUNTIME_DIR/dctl/`. Honors `XDG_*_HOME`. Nothing in the project repo.
 
 <!--
 The non-obvious wins. Each of these would be a custom shell snippet or wiki

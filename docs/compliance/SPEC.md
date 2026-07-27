@@ -190,7 +190,8 @@ Resolution order (first wins):
 5. Built-in default
 
 Environment overrides for file locations: `DCTL_CONFIG_PATH`,
-`DCTL_REGISTRY_PATH`, `DCTL_LIB_DIR`, `DCTL_CACHE_DIR`, `DCTL_STATE_DIR`.
+`DCTL_REGISTRY_PATH`, `DCTL_LIB_DIR`, `DCTL_DEVCONTAINER_GEN_DIR`,
+`DCTL_STATE_DIR`.
 
 Missing-config errors always name the env var **and** the file path the
 user could set.

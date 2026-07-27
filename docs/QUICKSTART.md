@@ -30,9 +30,12 @@ layers:
 ```
 
 Each layer name maps to a directory containing a `devcontainer.json`.
-`dctl init` reads the manifest, resolves each layer from
-`~/.config/dctl/devcontainer/<layer>/devcontainer.json`, and merges them in
-order into a single cached `devcontainer.json` consumed by `dctl ws up`.
+`dctl init` registers the manifest for the project; the merge runs on demand.
+On each command that needs it, `dctl` reads the manifest, resolves each layer
+from `~/.config/dctl/devcontainer/<layer>/devcontainer.json`, and merges them in
+order into a single `devcontainer.json` regenerated fresh under
+`$XDG_RUNTIME_DIR/dctl/devcontainer/<name>/` (never cached) and consumed by
+`dctl ws up`/`reup`/`test`. Manifest-backed commands require `jq`.
 
 The **last layer** in the manifest is the **leaf** — it holds your
 project-specific settings and is protected from overwrites on deploy. All
