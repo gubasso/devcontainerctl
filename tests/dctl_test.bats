@@ -432,6 +432,27 @@ YAML
   [[ $output == *"devimg/agents:latest"* ]]
 }
 
+@test "cmd_image_build --full-rebuild honours an explicit target" {
+  create_user_image_fixture agents
+  create_user_image_fixture python-dev
+
+  run cmd_image_build --dry-run --full-rebuild agents
+  [ "$status" -eq 0 ]
+  [[ $output == *"devimg/agents:latest"* ]]
+  [[ $output != *"python-dev"* ]]
+  [[ $output == *"--no-cache"* ]]
+}
+
+@test "cmd_image_build --full-rebuild with no target still builds all" {
+  create_user_image_fixture agents
+  create_user_image_fixture python-dev
+
+  run cmd_image_build --dry-run --full-rebuild
+  [ "$status" -eq 0 ]
+  [[ $output == *"devimg/agents:latest"* ]]
+  [[ $output == *"devimg/python-dev:latest"* ]]
+}
+
 # bats test_tags=integration
 @test "make install puts Dockerfiles in DATA_DIR/images" {
   local bin_dir data_home lib_dir

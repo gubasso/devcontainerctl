@@ -135,9 +135,17 @@ cmd_image_build() {
     esac
   done
 
+  # --full-rebuild means "from scratch, and pull the latest base" (ADR-0026's
+  # "full rebuild = latest"). It must NOT also mean "every image": with explicit
+  # targets that silently discarded them and rebuilt everything --no-cache, so
+  # the `agents` in `dctl image build --full-rebuild agents` — the recovery
+  # command printed by nix-reconcile.sh — was ignored. Only imply --all when no
+  # target was named.
   if [[ $full_rebuild == true ]]; then
-    all=true
     no_cache=true
+    if [[ ${#targets[@]} -eq 0 ]]; then
+      all=true
+    fi
   fi
 
   if [[ "$(id -u)" -eq 0 ]]; then
@@ -242,7 +250,11 @@ cmd_image_build() {
 
     local -a pull_flag
     pull_flag=()
-    if [[ $target == "agents" && $all == true ]]; then
+    # Gated on --full-rebuild, not on --all: "full rebuild = latest" is what wants
+    # a fresh base, and --all on its own is an ordinary cached build. This also
+    # matches what the dry-run above has always printed. Before the targets fix
+    # these agreed only by accident, because --full-rebuild forced --all.
+    if [[ $target == "agents" && $full_rebuild == true ]]; then
       pull_flag=(--pull)
     fi
 
