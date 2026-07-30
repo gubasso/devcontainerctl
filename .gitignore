@@ -1,2 +1,6 @@
 .plan/
 .codex
+
+# nix / direnv
+.direnv/
+/result
