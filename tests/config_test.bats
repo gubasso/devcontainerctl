@@ -189,6 +189,43 @@ YAML
   [ "$status" -eq 0 ]
 }
 
+@test "registry validation accepts a valid registry at a path without a .yaml extension" {
+  # check-jsonschema picks its parser from the instance's extension, so a
+  # candidate path like projects.yaml.tmp.<pid> was parsed as JSON and died with
+  # a JSONDecodeError, breaking every `dctl init`. Content, not name, decides.
+  local candidate="${XDG_CONFIG_HOME}/dctl/projects.yaml.tmp.4242"
+  cat >"$candidate" <<YAML
+my-repo:
+  devcontainer-manifest: general
+YAML
+
+  run _validate_registry "$candidate"
+  [ "$status" -eq 0 ]
+}
+
+@test "registry validation still rejects an invalid registry at a path without a .yaml extension" {
+  local candidate="${XDG_CONFIG_HOME}/dctl/projects.yaml.tmp.4243"
+  cat >"$candidate" <<YAML
+my-repo:
+  unknown_key: value
+YAML
+
+  run _validate_registry "$candidate"
+  [ "$status" -ne 0 ]
+}
+
+@test "register_project_defaults writes the registry when the schema is deployed" {
+  # End-to-end guard for the same bug: register_project_defaults validates a
+  # temp candidate before swapping it in, so a parser mismatch there fails
+  # every init even though the resulting registry is valid.
+  run register_project_defaults "my-repo" "general"
+  [ "$status" -eq 0 ]
+
+  run yq -r '.["my-repo"]["devcontainer-manifest"]' "${XDG_CONFIG_HOME}/dctl/projects.yaml"
+  [ "$status" -eq 0 ]
+  [ "$output" = "general" ]
+}
+
 @test "registry validation rejects invalid YAML" {
   printf 'not: valid: yaml: [broken\n' >"${XDG_CONFIG_HOME}/dctl/projects.yaml"
 

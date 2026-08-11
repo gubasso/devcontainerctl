@@ -23,7 +23,9 @@ _validate_compose_manifest() {
     local schema="${DCTL_SCHEMAS_DIR}/compose.schema.yaml"
     if [[ -f $schema ]]; then
       local validation_output
-      if ! validation_output="$(check-jsonschema --schemafile "$schema" "$manifest" 2>&1)"; then
+      # --force-filetype yaml: never infer the parser from the path (see the
+      # matching note in _validate_registry).
+      if ! validation_output="$(check-jsonschema --force-filetype yaml --schemafile "$schema" "$manifest" 2>&1)"; then
         err "Schema validation failed for $manifest: $validation_output"
       fi
       return 0
@@ -183,7 +185,11 @@ _validate_registry() {
     local schema="${DCTL_SCHEMAS_DIR}/projects.schema.yaml"
     if [[ -f $schema ]]; then
       local validation_output
-      if ! validation_output="$(check-jsonschema --schemafile "$schema" "$registry" 2>&1)"; then
+      # --force-filetype yaml: check-jsonschema picks its parser from the
+      # instance's extension, so a caller passing a temp path (see
+      # register_project_defaults) would otherwise be parsed as JSON and fail
+      # with a JSONDecodeError. The registry is always YAML regardless of name.
+      if ! validation_output="$(check-jsonschema --force-filetype yaml --schemafile "$schema" "$registry" 2>&1)"; then
         err "Schema validation failed for $registry: $validation_output"
       fi
       return 0
@@ -383,7 +389,9 @@ register_project_defaults() {
   yq_expr+='| del(.["devcontainer"]) | del(.dockerfile) | del(.image)'
   yq_expr+='))'
 
-  local tmp_registry="${registry}.tmp.$$"
+  # Keep the .yaml suffix on the candidate: tooling that infers a file's format
+  # from its extension must see YAML here, not a `.tmp.<pid>` tail.
+  local tmp_registry="${registry%.yaml}.tmp.$$.yaml"
   export YQ_KEY="$canonical_name" YQ_MANIFEST="$manifest_name"
   if [[ -s $registry ]]; then
     yq eval "$yq_expr" "$registry" >"$tmp_registry"
