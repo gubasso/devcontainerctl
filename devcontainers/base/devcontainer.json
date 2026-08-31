@@ -5,7 +5,10 @@
   "shutdownAction": "none",
   "containerEnv": {
     "TERM": "${localEnv:TERM}",
-    "COLORTERM": "truecolor"
+    "COLORTERM": "truecolor",
+    "GH_CONFIG_DIR": "/run/forge-auth/gh",
+    "GLAB_CONFIG_DIR": "/run/forge-auth/glab-cli",
+    "GIT_SSH_COMMAND": "ssh -o StrictHostKeyChecking=accept-new"
   },
   "mounts": [
     {
@@ -13,16 +16,6 @@
       "target": "${localEnv:HOME}/.gitconfig",
       "type": "bind",
       "readonly": true
-    },
-    {
-      "source": "${localEnv:HOME}/.config/gh",
-      "target": "${localEnv:HOME}/.config/gh",
-      "type": "bind"
-    },
-    {
-      "source": "${localEnv:HOME}/.config/glab-cli",
-      "target": "${localEnv:HOME}/.config/glab-cli",
-      "type": "bind"
     },
     {
       "source": "/tmp",

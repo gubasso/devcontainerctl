@@ -276,7 +276,7 @@ dctl ws up
 
 The config deployed in Step 1 and registered in Step 2 already includes all the runtime configuration that Docker required as CLI flags and Dev Container CLI required as manual JSON:
 
-- **Mounts:** `.gitconfig` (read-only), `~/.config/gh`, `~/.config/glab-cli`, `~/.claude`, `~/.claude.json`, `/tmp` — all from the shared base config. The Poetry cache volume comes from the Python template.
+- **Mounts:** `.gitconfig` (read-only), `~/.claude`, `~/.claude.json`, `/tmp` — from the shared base config — plus the runtime forge-auth seed dir dctl injects at `/run/forge-auth` (gh/glab credentials; the host config dirs themselves are never mounted). The Poetry cache volume comes from the Python template.
 - **Env vars:** `TERM` and `COLORTERM` are set in the base config.
 - **Hooks:** `pre-commit install` is configured in the Python template.
 - **Worktrees:** `dctl ws up` automatically detects and mounts the git worktree common directory when Ana works from a linked worktree.
@@ -289,7 +289,7 @@ Ana did not write any of this. It came from the deployed defaults, and she can c
 | Runtime config location | CLI flags (re-typed every run) | `devcontainer.json` (declared once) | Pre-deployed config (already done) |
 | Commands to start | 2 (volume create + 15-line `docker run`) + manual setup commands | 1 (`devcontainer up`) | 1 (`dctl ws up`) |
 | Post-create hooks | None — manual `docker exec` after every creation | `postCreateCommand` in JSON | Pre-configured in deployed config |
-| Credential forwarding | Manual `$(gh auth token)` extraction | Manual `${localEnv:GH_TOKEN}` + host export | Automatic at exec time (gh/glab; silently skipped if unavailable) |
+| Credential forwarding | Manual `$(gh auth token)` extraction | Manual `${localEnv:GH_TOKEN}` + host export | Automatic — seeded gh/glab config dirs mounted at up/exec time; no token in the container env; silently skipped if unavailable |
 | Config reuse across projects | None | None — per-project JSON | Shared across all workspaces |
 
 ## Step 3: Scale to multiple projects
@@ -434,7 +434,7 @@ graph TD
 
 The layers:
 
-1. **`base/devcontainer.json`** is shared across all projects. It provides `remoteUser`, `containerEnv` (TERM, COLORTERM), and the shared mounts (`.gitconfig`, `.config/gh`, `.config/glab-cli`, `/tmp`). Ana edits this file once at `~/.config/dctl/devcontainer/base/devcontainer.json`, and every project inherits the change.
+1. **`base/devcontainer.json`** is shared across all projects. It provides `remoteUser`, `containerEnv` (TERM, COLORTERM, the `/run/forge-auth` config-dir paths), and the shared mounts (`.gitconfig`, `/tmp`). Ana edits this file once at `~/.config/dctl/devcontainer/base/devcontainer.json`, and every project inherits the change.
 
 2. **Optional user layers** add personal config. For example, the [`examples/dotfiles/devcontainer.json`](../examples/dotfiles/devcontainer.json) shows editor mounts, dotfiles, and Kitty terminal vars. Ana adds a `dotfiles/` layer directory to `~/.config/dctl/devcontainer/` once and references it in her manifests — it applies to every project automatically.
 
@@ -544,14 +544,14 @@ Benefits:
 
 - `dctl` finds the container by workspace label.
 - It forwards `TERM`, `COLORTERM`, `TERM_PROGRAM`, `TERM_PROGRAM_VERSION`, and Kitty-specific vars automatically.
-- It also forwards `GH_TOKEN` and `GITLAB_TOKEN` automatically — extracted from `gh auth token` / `glab auth status` on the host. If either CLI is missing or not authenticated, that token is silently skipped (no errors, no prompts).
+- It also forwards forge auth automatically — an ephemeral copy of the host `gh`/`glab` config, seeded by the `forge-seed` host tool with tokens read from the keyring, is bind-mounted at `/run/forge-auth` and reached through `GH_CONFIG_DIR`/`GLAB_CONFIG_DIR`. No token enters the container environment. If either CLI is missing or not authenticated, that seed is silently skipped (no errors, no prompts).
 
 | | Docker | Dev Container CLI | dctl |
 |---|---|---|---|
 | Commands | 2 (`docker ps` + `docker exec`) | 1 (`devcontainer exec`) | 1 (`dctl ws shell`) |
 | Container lookup | Manual — scan `docker ps` output | Automatic — by workspace label | Automatic — by workspace label |
 | Terminal env forwarding | No | No | Yes (`TERM`, `COLORTERM`, Kitty vars) |
-| Credential forwarding | No | No | Yes (`GH_TOKEN`, `GITLAB_TOKEN`; graceful fallback if CLIs are missing) |
+| Credential forwarding | No | No | Yes (seeded `GH_CONFIG_DIR`/`GLAB_CONFIG_DIR` mount; no token in the env; graceful fallback if CLIs are missing) |
 
 ## Step 5: Run an agent
 

@@ -81,7 +81,7 @@ Rootless mode reduces *blast radius* (escape lands as the invoking user instead 
 - `lib/dctl/ws.sh:55-65` — every container query is `docker ps …` keyed on the `devcontainer.local_folder` label. Runtime is hardcoded to Docker at the Bash level.
 - `lib/dctl/ws.sh:129-197` — `dctl ws up/reup` shells out to `devcontainer up`.
 - `lib/dctl/ws.sh:252-267` — `dctl ws down` runs `docker rm -f`.
-- `lib/dctl/auth.sh:60-70` — host `gh`/`glab` tokens are extracted on the host and forwarded into the container as `GH_TOKEN`/`GITLAB_TOKEN` via `--remote-env`. **This is the highest-value secret in the current threat model and is provided to the agent on every `exec`/`shell`/`run`.**
+- `lib/dctl/auth.sh:60-70` — host `gh`/`glab` tokens are extracted on the host and forwarded into the container as `GH_TOKEN`/`GITLAB_TOKEN` via `--remote-env`. **This is the highest-value secret in the current threat model and is provided to the agent on every `exec`/`shell`/`run`.** *Remediation status: fixed — the host tool `forge-seed` (called from `lib/dctl/auth.sh`; see `docs/specs/secret-forwarding/SPEC.md`) now seeds an ephemeral per-project config copy mounted at `/run/forge-auth`; no token enters the container environment.*
 
 ### 2.2 Configured posture
 
@@ -93,7 +93,7 @@ Reading `devcontainers/base/devcontainer.json:1-33` and `devcontainers/agents/de
 - **Custom seccomp profile, weaker than Docker's default.** `devcontainers/agents/seccomp-bwrap.json` is **default-allow** with explicit `EPERM` denies on ~20 high-risk syscalls (`bpf`, `userfaultfd`, `perf_event_open`, `keyctl`, `kexec_*`, `init_module`, `iopl/ioperm`, `swapon`, `reboot`, `syslog`, plus legacy syscalls). The profile's `_meta` block is honest about the trade-off: it exists so `bwrap` (Codex CLI's inner sandbox) can `unshare(CLONE_NEWUSER)` without being blocked. This is materially weaker than the upstream moby default-deny baseline.
 - **AppArmor and `/proc` masking are off.** `devcontainers/agents/devcontainer.json:108-110` sets `apparmor=unconfined` and `systempaths=unconfined` for the same `bwrap` reason: `bwrap` probes `/proc/sys/kernel/unprivileged_userns_clone` and bails if masked. This removes a layer that has historically blunted real-world Linux LPEs.
 - **No user-namespace remap.** `updateRemoteUserUID: false` in `base/devcontainer.json:3`; the host UID is mapped 1-to-1 inside the container. There is no `userns=auto`, no rootless Docker, no `userns-remap`.
-- **Bind mounts that matter:** `~/.gitconfig` (RO), `~/.config/gh`, `~/.config/glab-cli`, `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.gemini`, **`/tmp` host bind**, plus `coordinator/devcontainer.json:4-10` mounting `~/Projects` read-only. The agent CLI configuration directories contain **OAuth refresh tokens** (Claude session, GitHub/GitLab tokens). Anything inside the container that can read files-as-user can exfiltrate them.
+- **Bind mounts that matter:** `~/.gitconfig` (RO), the forge-auth seed dir at `/run/forge-auth` (live gh/glab tokens, no refresh material — the host `~/.config/gh`/`~/.config/glab-cli` dirs are no longer mounted), `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.gemini`, **`/tmp` host bind**, plus `coordinator/devcontainer.json:4-10` mounting `~/Projects` read-only. The agent CLI configuration directories contain **OAuth refresh tokens** (Claude session). Anything inside the container that can read files-as-user can exfiltrate them.
 - **Network egress is open by default.** `docs/ARCHITECTURE.md:1119,1138` — bridge/NAT, outbound internet allowed (required for the model APIs). There is no egress allowlist.
 - **`/tmp` is bind-mounted from the host** (`base/devcontainer.json:27-30`). Writable shared surface between host and container; not a privilege boundary, but a covert/IPC channel and a place to drop persistence.
 
@@ -121,7 +121,7 @@ The realistic attack tree, in order of frequency and skill required:
 
 ### 3.1 Token exfiltration without escape (highest frequency, lowest skill)
 
-The agent reads `~/.config/gh/hosts.yml`, `~/.claude/.credentials.json`, `$GH_TOKEN` env, `$GITLAB_TOKEN` env — all mounted/injected by design — and POSTs them to an attacker-controlled URL via the open egress.
+The agent reads `~/.claude/.credentials.json` and the seeded gh/glab config at `/run/forge-auth` — mounted by design — and POSTs them to an attacker-controlled URL via the open egress. The host `~/.config/gh` and `~/.config/glab-cli` dirs are no longer mounted and no token is injected into the environment, but be honest about the residual: a token the container can use is a token an in-container agent can read at `/run/forge-auth`. The seeding removes the environment exposure and the host at-rest exposure, not the in-container reach of a live token.
 
 **This works today and is unrelated to the container boundary. No escape is required.** Switching the runtime does not address this.
 
@@ -214,7 +214,7 @@ The following options were evaluated and rejected. Reasoning is in `RUNTIMES.md`
 
 These are cheap and address the realistic attack tree (§3.1, §3.4) more effectively than any runtime change.
 
-1. **Stop bind-mounting full token directories.** Replace `~/.config/gh` and `~/.config/glab-cli` mounts (`devcontainers/base/devcontainer.json:17-26`) and the `~/.claude*` mounts (`devcontainers/agents/devcontainer.json:113-122`) with **scoped, ephemeral token forwarding**. The `gh auth token` extraction in `lib/dctl/auth.sh:30` is the right model — extend it: the agent should never see the OAuth refresh token, only a short-lived `GH_TOKEN`. Same for Claude.
+1. **Stop bind-mounting full token directories.** *Done for gh/glab:* the base-layer `~/.config/gh` and `~/.config/glab-cli` mounts are gone; the `forge-seed` host tool (called from `lib/dctl/auth.sh`, specified in `docs/specs/secret-forwarding/SPEC.md`) forwards a scoped, ephemeral config copy at `/run/forge-auth` and the agent never sees the OAuth refresh material or a token env var. A `claude` scope in the same convention is the natural vehicle. *Still open for Claude:* the `~/.claude*` mounts (`devcontainers/agents/devcontainer.json:113-122`) remain and deserve the same treatment.
 2. **Drop the host `/tmp` bind** (`devcontainers/base/devcontainer.json:27-30`). Use a per-container `tmpfs`. There is no good reason an AI agent's `/tmp` should be the host's `/tmp`.
 3. **Egress allowlist by default.** A `dctl`-managed `iptables`/`nftables` rule (or a userspace proxy) restricting outbound to model APIs (`api.anthropic.com`, `api.openai.com`, `*.googleapis.com`), the package mirrors actually used, and the user's git remotes. This single change defangs the most common exfiltration scenario.
 4. **Add `no-new-privileges` and `--cap-drop=ALL`** to `runArgs` in the agents layer. The seccomp profile is permissive on syscalls; cap-drop covers the rest of the historical privilege paths.

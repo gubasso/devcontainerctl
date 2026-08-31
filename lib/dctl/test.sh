@@ -243,7 +243,9 @@ cmd_test() {
     fi
 
     if [[ $bind_sources_ok == true ]]; then
-      if devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path"; then
+      local -a forge_mounts=()
+      collect_forge_auth_mounts forge_mounts
+      if devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" "${forge_mounts[@]}"; then
         check_pass "devcontainer up succeeded"
         container_started=true
       else
@@ -253,7 +255,9 @@ cmd_test() {
     fi
 
     if [[ $container_started == true ]]; then
-      if devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" printf 'dctl-smoke\n' >/dev/null; then
+      local -a forge_env=()
+      collect_forge_auth_env forge_env
+      if devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" "${forge_env[@]}" printf 'dctl-smoke\n' >/dev/null; then
         check_pass "devcontainer exec succeeded"
       else
         check_fail "devcontainer exec failed"

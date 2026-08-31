@@ -122,7 +122,7 @@ devcontainer_exec() {
   fi
   local -a term_args auth_args
   collect_term_env term_args
-  collect_auth_env auth_args
+  collect_forge_auth_env auth_args
   devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" "${term_args[@]}" "${auth_args[@]}" "$@"
 }
 
@@ -140,8 +140,10 @@ cmd_ws_up() {
 
   local -a git_wt_mounts=()
   collect_git_worktree_mounts git_wt_mounts
+  local -a forge_mounts=()
+  collect_forge_auth_mounts forge_mounts
   log "Starting devcontainer for $(workspace_path)"
-  devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" "${git_wt_mounts[@]}" "${args[@]}"
+  devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" "${git_wt_mounts[@]}" "${forge_mounts[@]}" "${args[@]}"
 }
 
 cmd_ws_reup() {
@@ -160,8 +162,10 @@ cmd_ws_reup() {
 
   local -a git_wt_mounts=()
   collect_git_worktree_mounts git_wt_mounts
+  local -a forge_mounts=()
+  collect_forge_auth_mounts forge_mounts
   log "Recreating devcontainer for $(workspace_path)"
-  devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" --remove-existing-container "${git_wt_mounts[@]}" "${args[@]}"
+  devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" --remove-existing-container "${git_wt_mounts[@]}" "${forge_mounts[@]}" "${args[@]}"
 }
 
 cmd_ws_exec() {

@@ -134,6 +134,7 @@ setup() {
   workspace_devcontainer_file() { printf '%s/.devcontainer/devcontainer.json\n' "$WORKSPACE_FOLDER"; }
   unset TERM COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION 2>/dev/null || true
   unset GH_TOKEN GITHUB_TOKEN GITLAB_TOKEN 2>/dev/null || true
+  unset SSH_AUTH_SOCK GH_CONFIG_DIR GLAB_CONFIG_DIR 2>/dev/null || true
   # Stub gh/glab to fail fast — avoids slow network calls in non-auth tests
   create_mock gh 1
   create_mock glab 1
@@ -288,6 +289,7 @@ teardown() {
 
   run cmd_ws_up -- --build-no-cache
   [ "$status" -eq 0 ]
+  # No forge-seed on PATH here, so no forge mount is spliced in
   assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config $(workspace_devcontainer_file) --build-no-cache"
 }
 
@@ -625,71 +627,103 @@ YAML
   assert_mock_called "--mount type=bind,source=${main_repo}/.git,target=${main_repo}/.git"
 }
 
-# --- Auth token forwarding via devcontainer exec ---
+# --- Forge auth forwarding: config-dir paths, never tokens ---
 
-@test "cmd_ws_shell forwards GH_TOKEN via remote-env" {
-  mkdir -p "$(workspace_devcontainer_dir)"
-  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
-  enable_mocks
-  create_mock docker 0 "running"
-  create_mock devcontainer 0 ""
-  cat >"${TEST_TMPDIR}/bin/gh" <<'MOCK'
+# forge-seed mock: records the call, materializes the scope dir, honours
+# --print-dir. The seeding itself belongs to nix-secrets, not dctl.
+_write_forge_seed_mock() {
+  cat >"${TEST_TMPDIR}/bin/forge-seed" <<MOCK
 #!/usr/bin/env bash
-[[ "$1" == "auth" && "$2" == "status" ]] && exit 0
-[[ "$1" == "auth" && "$2" == "token" ]] && printf 'ghp_testXYZ' && exit 0
-exit 1
+printf '%s\n' "forge-seed \$*" >>"${TEST_TMPDIR}/mock_calls.log"
+scope=""
+print_dir=false
+while [[ \$# -gt 0 ]]; do
+  case "\$1" in
+    --scope) scope="\$2"; shift 2 ;;
+    --print-dir) print_dir=true; shift ;;
+    *) shift ;;
+  esac
+done
+dir="${TEST_TMPDIR}/seed/\${scope}"
+mkdir -p "\$dir/gh" "\$dir/glab-cli"
+[[ \$print_dir == true ]] && printf '%s\n' "\$dir"
+exit 0
 MOCK
-  chmod +x "${TEST_TMPDIR}/bin/gh"
-
-  run cmd_ws_shell
-  [ "$status" -eq 0 ]
-  assert_mock_called "--remote-env GH_TOKEN=ghp_testXYZ"
+  chmod +x "${TEST_TMPDIR}/bin/forge-seed"
 }
 
-@test "cmd_ws_shell forwards GITLAB_TOKEN via remote-env" {
+@test "cmd_ws_shell forwards config-dir paths, never a token" {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
   create_mock docker 0 "running"
   create_mock devcontainer 0 ""
-  cat >"${TEST_TMPDIR}/bin/glab" <<'MOCK'
-#!/usr/bin/env bash
-[[ "$1" == "auth" && "$2" == "status" && "$3" != "--show-token" ]] && exit 0
-[[ "$1" == "auth" && "$2" == "status" && "$3" == "--show-token" ]] && printf 'Token: glpat_testABC\n' && exit 0
-exit 1
-MOCK
-  chmod +x "${TEST_TMPDIR}/bin/glab"
+  _write_forge_seed_mock
+  export GH_TOKEN="ghp_testXYZ"
+  export GITLAB_TOKEN="glpat_testABC"
 
   run cmd_ws_shell
   [ "$status" -eq 0 ]
-  assert_mock_called "--remote-env GITLAB_TOKEN=glpat_testABC"
+  assert_mock_called "forge-seed --scope workspace --print-dir"
+  assert_mock_called "--remote-env GH_CONFIG_DIR=/run/forge-auth/gh"
+  assert_mock_called "--remote-env GLAB_CONFIG_DIR=/run/forge-auth/glab-cli"
+  assert_mock_not_called "--remote-env GH_TOKEN"
+  assert_mock_not_called "--remote-env GITLAB_TOKEN"
+  assert_mock_not_called "ghp_testXYZ"
+  assert_mock_not_called "glpat_testABC"
 }
 
-@test "cmd_ws_shell forwards both tokens when both CLIs authenticated" {
+@test "cmd_ws_shell forwards config-dir paths even when forge-seed is absent" {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
   enable_mocks
   create_mock docker 0 "running"
   create_mock devcontainer 0 ""
-  cat >"${TEST_TMPDIR}/bin/gh" <<'MOCK'
-#!/usr/bin/env bash
-[[ "$1" == "auth" && "$2" == "status" ]] && exit 0
-[[ "$1" == "auth" && "$2" == "token" ]] && printf 'ghp_both999' && exit 0
-exit 1
-MOCK
-  chmod +x "${TEST_TMPDIR}/bin/gh"
-  cat >"${TEST_TMPDIR}/bin/glab" <<'MOCK'
-#!/usr/bin/env bash
-[[ "$1" == "auth" && "$2" == "status" && "$3" != "--show-token" ]] && exit 0
-[[ "$1" == "auth" && "$2" == "status" && "$3" == "--show-token" ]] && printf 'Token: glpat_both888\n' && exit 0
-exit 1
-MOCK
-  chmod +x "${TEST_TMPDIR}/bin/glab"
 
   run cmd_ws_shell
   [ "$status" -eq 0 ]
-  assert_mock_called "--remote-env GH_TOKEN=ghp_both999"
-  assert_mock_called "--remote-env GITLAB_TOKEN=glpat_both888"
+  assert_mock_called "--remote-env GH_CONFIG_DIR=/run/forge-auth/gh"
+  assert_mock_called "--remote-env GLAB_CONFIG_DIR=/run/forge-auth/glab-cli"
+  assert_mock_not_called "--remote-env GH_TOKEN"
+  assert_mock_not_called "--remote-env GITLAB_TOKEN"
+}
+
+@test "cmd_ws_shell forwards no SSH_AUTH_SOCK when the host has no agent" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
+  enable_mocks
+  create_mock docker 0 "running"
+  create_mock devcontainer 0 ""
+
+  run cmd_ws_shell
+  [ "$status" -eq 0 ]
+  assert_mock_not_called "SSH_AUTH_SOCK"
+}
+
+@test "cmd_ws_up mounts the forge auth seed dir" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
+  enable_mocks
+  create_mock devcontainer 0 ""
+  _write_forge_seed_mock
+
+  run cmd_ws_up
+  [ "$status" -eq 0 ]
+  assert_mock_called "--mount type=bind,source=${TEST_TMPDIR}/seed/workspace,target=/run/forge-auth"
+  assert_mock_not_called "--remote-env GH_TOKEN"
+}
+
+@test "cmd_ws_reup mounts the forge auth seed dir" {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
+  enable_mocks
+  create_mock docker 0 ""
+  create_mock devcontainer 0 ""
+  _write_forge_seed_mock
+
+  run cmd_ws_reup
+  [ "$status" -eq 0 ]
+  assert_mock_called "--mount type=bind,source=${TEST_TMPDIR}/seed/workspace,target=/run/forge-auth"
 }
 
 # --- Config resolution chain ---

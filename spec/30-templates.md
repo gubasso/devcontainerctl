@@ -29,7 +29,7 @@ Built-in layer directories and manifests in the repository:
 
 **Layer directories** (each contains a `devcontainer.json`):
 
-- `base/` — shared infrastructure layer (remote user, auth mounts, terminal env)
+- `base/` — shared infrastructure layer (remote user, forge auth config-dir env, terminal env)
 - `agents/` — shared agents layer (bubblewrap-friendly security profile and agent CLI config mounts)
 - `general/` — minimal general-purpose sandbox on `devimg/agents:latest`
 - `coordinator/` — coordinator workflow with parent-area visibility

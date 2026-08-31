@@ -301,11 +301,11 @@ Native installers are preferred over Homebrew in containers (Homebrew adds ~500M
 | gh | `gh auth login` (interactive, GitHub account) |
 | glab | `glab auth login` (interactive, GitLab account) |
 
-All listed CLIs authenticate interactively on first run. For `gh` and `glab`, tokens are extracted on the host and injected into containers at exec-time (see below). Other CLIs persist auth via config directory mounts (see [Pattern 6](#pattern-6-config-with-selective-rw-mounts)).
+All listed CLIs authenticate interactively on first run. For `gh` and `glab`, dctl seeds an ephemeral copy of the host config — tokens included — and mounts it into containers at up/exec time (see below). Other CLIs persist auth via config directory mounts (see [Pattern 6](#pattern-6-config-with-selective-rw-mounts)).
 
 #### GitHub CLI (gh) and GitLab CLI (glab) Setup
 
-Both CLIs are installed in the agents image but require one-time host authentication before they work inside containers. Their config directories (`~/.config/gh`, `~/.config/glab-cli`) are bind-mounted directly from the host — not through dotfiles — because they contain sensitive auth tokens.
+Both CLIs are installed in the agents image but require one-time host authentication before they work inside containers. The host config directories (`~/.config/gh`, `~/.config/glab-cli`) are never mounted: they hold long-lived credentials (gh refresh material, keyring markers), so containers only ever see a seeded, ephemeral copy.
 
 **Prerequisites (host)**:
 
@@ -328,7 +328,7 @@ If missing, install them on the host first:
 # GitHub CLI — creates ~/.config/gh/hosts.yml with your OAuth token
 gh auth login
 
-# GitLab CLI — stores your PAT in ~/.config/glab-cli/config.yml
+# GitLab CLI — stores your token in the system keyring
 glab auth login
 ```
 
@@ -336,12 +336,12 @@ Both commands are interactive and guide you through protocol selection (SSH or H
 
 **How it works in containers**:
 
-Modern `gh` (v2.24.0+) stores OAuth tokens in the system keyring, which is inaccessible from containers. The config directories (`~/.config/gh`, `~/.config/glab-cli`) are still bind-mounted for non-token config (SSH protocol settings, aliases), but **tokens are extracted on the host** at exec-time using `gh auth token` / `glab auth status --show-token` and injected into the container via `devcontainer exec --remote-env`. This happens automatically — `collect_auth_env()` in `lib/dctl/auth.sh` is called by every `devcontainer_exec()` invocation.
+Modern `gh` (v2.24.0+) and `glab` store tokens in the system keyring, which is inaccessible from containers. So on every `up` and `exec`, dctl invokes the host tool `forge-seed` (user-provided; the contract is specified in [docs/specs/secret-forwarding/SPEC.md](./specs/secret-forwarding/SPEC.md)), which writes a per-project copy of the gh/glab config under `$XDG_RUNTIME_DIR/forge-auth/<project>` (tmpfs-backed, `0700`/`0600`), injecting the tokens the host CLIs read from the keyring; dctl bind-mounts that dir into the container at `/run/forge-auth`. The container reaches it through `GH_CONFIG_DIR`/`GLAB_CONFIG_DIR` — **no token ever enters the container environment**. Because the seed dir is a live bind, re-seeding at exec time updates what an already-running container sees.
 
 | Component | What happens |
 | --------- | ------------ |
-| API calls (`gh pr create`, `glab mr list`) | Use `GH_TOKEN` / `GITLAB_TOKEN` injected via `--remote-env` |
-| Git transport (`git push/pull`) | Uses your SSH key (if remotes are `git@...`) or the CLI credential helper (if remotes are `https://...`) |
+| API calls (`gh pr create`, `glab mr list`) | Read the seeded config via `GH_CONFIG_DIR` / `GLAB_CONFIG_DIR` |
+| Git transport (`git push/pull`) | Uses the forwarded SSH agent socket at `/run/dctl/ssh-agent.sock` (if remotes are `git@...`) or the CLI credential helper (if remotes are `https://...`) |
 
 **Verification (inside container)**:
 
@@ -360,7 +360,8 @@ glab api user --jq .username
 | CLI | File | Contains |
 | --- | ---- | -------- |
 | gh | `~/.config/gh/hosts.yml` | OAuth token (plain text fallback when no system keyring) |
-| glab | `~/.config/glab-cli/config.yml` | PAT in the `token:` field under each host entry |
+| glab | `~/.config/glab-cli/config.yml` | Auth state per host; tokens live in the system keyring (`use_keyring`), with a plain-text `token:` field only as the keyringless fallback |
+| both | `$XDG_RUNTIME_DIR/forge-auth/<project>/` | Seeded copies carrying live tokens — tmpfs-backed, cleared at logout, readable inside the container at `/run/forge-auth` |
 
 #### Neovim
 

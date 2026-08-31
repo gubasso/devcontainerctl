@@ -247,10 +247,8 @@ dctl ws down
 
 `dctl ws` adds a few important host-side conveniences:
 
-- **Credential forwarding (GitHub and GitLab):** on every `exec`, `shell`, or `run`, `dctl` extracts tokens and injects them into the container as `GH_TOKEN` and `GITLAB_TOKEN`. The extraction follows a precedence chain:
-  - `GH_TOKEN` env var → `GITHUB_TOKEN` env var → `gh auth token` CLI
-  - `GITLAB_TOKEN` env var → `glab auth status --show-token` CLI
-  - If a CLI is not installed or not authenticated, that token is silently skipped — `dctl` never errors on missing credentials.
+- **Forge auth forwarding (GitHub and GitLab):** on every `up`, `reup`, `exec`, `shell`, or `run`, `dctl` invokes the host tool `forge-seed` (owned by the user's nix config; see [docs/specs/secret-forwarding/SPEC.md](docs/specs/secret-forwarding/SPEC.md)) to materialize an ephemeral per-project copy of the host `gh`/`glab` config — tokens read via the keyring-aware host CLIs — under `$XDG_RUNTIME_DIR/forge-auth/<project>`, then bind-mounts it into the container at `/run/forge-auth`. The container receives `GH_CONFIG_DIR`/`GLAB_CONFIG_DIR` paths, never a secret: no `GH_TOKEN`/`GITLAB_TOKEN` enters the container environment. The seed dir is a live bind, so a rotated host token reaches an already-running container on the next `exec` with no reup. If `forge-seed` is absent, or a CLI is not installed or not authenticated, that seed is silently skipped — `dctl` never errors on missing credentials.
+- **SSH agent forwarding:** when the host exposes a live `SSH_AUTH_SOCK`, `dctl` mounts the socket (never key material) at `/run/dctl/ssh-agent.sock` and points the container's `SSH_AUTH_SOCK` at it, so `git@...` remotes authenticate without any token. A host agent restart replaces the socket inode; running containers hold the dead socket until `dctl ws reup`.
 - forwards terminal-related env vars such as `TERM`, `COLORTERM`, `TERM_PROGRAM`, and Kitty-specific vars
 - bind-mounts the shared git common dir automatically for linked worktrees
 
