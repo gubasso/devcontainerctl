@@ -8,7 +8,7 @@ INSTALL := install
 IMAGE_NAMES := agents python-dev rust-dev zig-dev
 DEVCONTAINER_DIRS := agents python rust zig general coordinator base
 DEVCONTAINER_MANIFESTS := general coordinator python rust zig
-LIB_FILES := common.sh ws.sh image.sh deploy.sh init.sh test.sh auth.sh config.sh
+LIB_FILES := common.sh ws.sh image.sh deploy.sh init.sh test.sh auth.sh config.sh providers.sh
 
 .PHONY: install uninstall install-systemd uninstall-systemd test test-unit test-integration lint check gate-no-eval gate-no-raw-ansi gate-one-public-fn-per-file
 

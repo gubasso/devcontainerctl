@@ -158,6 +158,45 @@ check_bind_mount_sources() {
   return 1
 }
 
+# One check row per declared provider. A missing optional provider is a
+# warning, not a row; a missing required provider, or any present provider
+# whose check phase fails, is a failing row.
+run_provider_checks() {
+  local -a rows=()
+  mapfile -t rows < <(list_project_providers)
+  [[ ${#rows[@]} -gt 0 ]] || return 0
+
+  local failures=0
+  local row name required
+  for row in "${rows[@]}"; do
+    IFS=$'\t' read -r name required <<<"$row"
+    [[ -n $name ]] || continue
+
+    if ! command -v "$name" >/dev/null 2>&1; then
+      if [[ $required == "true" ]]; then
+        check_fail "Required provider '$name' not found on PATH"
+        failures=$((failures + 1))
+      else
+        warn "Optional provider '$name' not found — skipping its check"
+      fi
+      continue
+    fi
+
+    if provider_invoke "$name" check >/dev/null; then
+      check_pass "Provider '$name' check"
+    elif [[ $required == "true" ]]; then
+      check_fail "Provider '$name' check"
+      failures=$((failures + 1))
+    else
+      # The declaration contract: required=false degrades every provider
+      # failure to a warning, the check phase included.
+      warn "Optional provider '$name' check failed — continuing degraded"
+    fi
+  done
+
+  [[ $failures -eq 0 ]]
+}
+
 build_workspace_image_if_managed() {
   local cfg="${1:-$(workspace_devcontainer_file)}"
   local image
@@ -242,10 +281,18 @@ cmd_test() {
       bind_sources_ok=false
     fi
 
-    if [[ $bind_sources_ok == true ]]; then
+    local providers_ok=true
+    if ! run_provider_checks; then
+      failures=$((failures + 1))
+      providers_ok=false
+    fi
+
+    if [[ $bind_sources_ok == true && $providers_ok == true ]]; then
       local -a forge_mounts=()
       collect_forge_auth_mounts forge_mounts
-      if devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" "${forge_mounts[@]}"; then
+      local -a provider_up_args=()
+      collect_provider_args prepare provider_up_args
+      if devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" "${forge_mounts[@]}" "${provider_up_args[@]}"; then
         check_pass "devcontainer up succeeded"
         container_started=true
       else
@@ -257,10 +304,25 @@ cmd_test() {
     if [[ $container_started == true ]]; then
       local -a forge_env=()
       collect_forge_auth_env forge_env
-      if devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" "${forge_env[@]}" printf 'dctl-smoke\n' >/dev/null; then
-        check_pass "devcontainer exec succeeded"
+      local -a provider_exec_args=()
+      # Collect attach args through the capturable form into a FILE — command
+      # substitution strips NUL bytes, so the delimiters only survive on
+      # disk. The subshell contains a required provider's err to a nonzero
+      # status here: one invocation, and cleanup and release below always run.
+      local attach_file
+      attach_file="$(mktemp)"
+      if (collect_provider_args_nul attach >"$attach_file"); then
+        mapfile -t -d '' provider_exec_args <"$attach_file"
+        rm -f "$attach_file"
+        if devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" "${forge_env[@]}" "${provider_exec_args[@]}" printf 'dctl-smoke\n' >/dev/null; then
+          check_pass "devcontainer exec succeeded"
+        else
+          check_fail "devcontainer exec failed"
+          failures=$((failures + 1))
+        fi
       else
-        check_fail "devcontainer exec failed"
+        rm -f "$attach_file"
+        check_fail "Provider attach phase"
         failures=$((failures + 1))
       fi
     fi
@@ -270,6 +332,16 @@ cmd_test() {
     else
       check_fail "Failed to clean up workspace containers"
       failures=$((failures + 1))
+    fi
+    # Pair the smoke test's prepare with release (warn-only) — but only once
+    # no workspace container verifiably remains: release follows container
+    # removal, and a failed status query must read as "containers may
+    # remain", never as an empty list.
+    local remaining_containers
+    if remaining_containers="$(list_ws_containers)" && [[ -z $remaining_containers ]]; then
+      provider_release_all
+    else
+      warn "workspace containers remain or cannot be listed — skipping provider release"
     fi
   fi
 

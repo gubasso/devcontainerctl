@@ -11,6 +11,8 @@ source "${DCTL_LIB_DIR}/common.sh"
 # shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/auth.sh"
 # shellcheck source=/dev/null
+source "${DCTL_LIB_DIR}/providers.sh"
+# shellcheck source=/dev/null
 source "${DCTL_LIB_DIR}/init.sh"
 
 usage_ws() {
@@ -120,10 +122,11 @@ devcontainer_exec() {
   if ! config_path="$(resolve_devcontainer_config)"; then
     return 1
   fi
-  local -a term_args auth_args
+  local -a term_args auth_args provider_args
   collect_term_env term_args
   collect_forge_auth_env auth_args
-  devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" "${term_args[@]}" "${auth_args[@]}" "$@"
+  collect_provider_args attach provider_args
+  devcontainer exec --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" "${term_args[@]}" "${auth_args[@]}" "${provider_args[@]}" "$@"
 }
 
 cmd_ws_up() {
@@ -142,8 +145,10 @@ cmd_ws_up() {
   collect_git_worktree_mounts git_wt_mounts
   local -a forge_mounts=()
   collect_forge_auth_mounts forge_mounts
+  local -a provider_args=()
+  collect_provider_args prepare provider_args
   log "Starting devcontainer for $(workspace_path)"
-  devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" "${git_wt_mounts[@]}" "${forge_mounts[@]}" "${args[@]}"
+  devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" "${git_wt_mounts[@]}" "${forge_mounts[@]}" "${provider_args[@]}" "${args[@]}"
 }
 
 cmd_ws_reup() {
@@ -164,8 +169,10 @@ cmd_ws_reup() {
   collect_git_worktree_mounts git_wt_mounts
   local -a forge_mounts=()
   collect_forge_auth_mounts forge_mounts
+  local -a provider_args=()
+  collect_provider_args prepare provider_args
   log "Recreating devcontainer for $(workspace_path)"
-  devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" --remove-existing-container "${git_wt_mounts[@]}" "${forge_mounts[@]}" "${args[@]}"
+  devcontainer up --workspace-folder "$WORKSPACE_FOLDER" --config "$config_path" --remove-existing-container "${git_wt_mounts[@]}" "${forge_mounts[@]}" "${provider_args[@]}" "${args[@]}"
 }
 
 cmd_ws_exec() {
@@ -231,11 +238,16 @@ cmd_ws_down() {
   ids="$(list_ws_containers)"
   if [[ -z $ids ]]; then
     warn "No devcontainer to remove for workspace: $(workspace_path)"
+    # Still release: a failed `up` can leave provider-prepared host state
+    # behind with no container to show for it, and release is warn-only and
+    # cheap for a provider with nothing to do.
+    provider_release_all
     return 0
   fi
 
   log "Removing devcontainer(s) for $(workspace_path)"
   docker ps -aq --filter "$filter" | xargs -r docker rm -f
+  provider_release_all
 }
 
 main_ws() {

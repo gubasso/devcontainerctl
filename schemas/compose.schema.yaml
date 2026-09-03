@@ -10,6 +10,28 @@ properties:
       minLength: 1
     minItems: 1
     description: Ordered list of layer directory names to compose (last wins for scalars)
+  providers:
+    type: array
+    items:
+      type: object
+      properties:
+        name:
+          type: string
+          pattern: "^[A-Za-z0-9._-]+$"
+          description: >
+            Host executable resolved on PATH and invoked around the workspace
+            lifecycle (prepare/attach/release/check) per
+            docs/specs/host-providers/SPEC.md.
+        required:
+          type: boolean
+          default: true
+          description: >
+            Whether a missing or failing provider aborts the lifecycle command
+            (true) or degrades to a warning (false).
+      required:
+        - name
+      additionalProperties: false
+    description: Host providers invoked around the workspace lifecycle, in order
 required:
   - layers
 additionalProperties: false

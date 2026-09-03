@@ -47,6 +47,66 @@ _validate_compose_manifest() {
   if [[ $layers_len -eq 0 ]]; then
     err "Invalid manifest $manifest: 'layers' must not be empty"
   fi
+
+  # providers is optional; when present it must mirror the schema shape
+  # (an array of {name, required?} rows) so the fallback path refuses the
+  # same manifests check-jsonschema would.
+  local providers_present
+  providers_present="$(yq eval 'has("providers")' "$manifest" 2>/dev/null || true)"
+  if [[ $providers_present == "true" ]]; then
+    # An explicit `providers:` key of any non-array type — null included — is
+    # rejected, matching the schema; only the absent key means "none".
+    local providers_type
+    providers_type="$(yq eval '.providers | type' "$manifest" 2>/dev/null || true)"
+    if [[ $providers_type != "!!seq" ]]; then
+      err "Invalid manifest $manifest: 'providers' must be an array"
+    fi
+
+    # Collect-and-count, never `select(...) | "literal"`: in yq a string
+    # literal after a pipe is emitted even when select filtered the whole
+    # stream away, so the literal pattern flags every manifest as bad.
+    # ... and inside select, always parenthesize a piped operand: yq parses
+    # `select(.name | type != X)` as a different (always-empty) expression,
+    # and misevaluates `a or b` over piped operands too — so one or-free
+    # count per rule, with `(.field | fn)` parenthesized.
+    local bad_name_type_count
+    bad_name_type_count="$(yq eval '
+      [ (.providers // [])[] |
+        select((.name | type) != "!!str") ] |
+      length
+    ' "$manifest" 2>/dev/null || printf '1\n')"
+    local bad_name_pattern_count
+    bad_name_pattern_count="$(yq eval '
+      [ (.providers // [])[] |
+        select((.name | type) == "!!str") |
+        select((.name | test("^[A-Za-z0-9._-]+$")) | not) ] |
+      length
+    ' "$manifest" 2>/dev/null || printf '1\n')"
+    if [[ $bad_name_type_count != "0" || $bad_name_pattern_count != "0" ]]; then
+      err "Invalid manifest $manifest: every provider needs a 'name' matching ^[A-Za-z0-9._-]+\$"
+    fi
+
+    local bad_required_count
+    bad_required_count="$(yq eval '
+      [ (.providers // [])[] |
+        select(has("required")) |
+        select((.required | type) != "!!bool") ] |
+      length
+    ' "$manifest" 2>/dev/null || printf '1\n')"
+    if [[ $bad_required_count != "0" ]]; then
+      err "Invalid manifest $manifest: provider 'required' must be a boolean"
+    fi
+
+    local bad_keys
+    bad_keys="$(yq eval '
+      (.providers // [])[] | to_entries | .[] |
+      select(.key != "name" and .key != "required") |
+      .key
+    ' "$manifest" 2>/dev/null || true)"
+    if [[ -n $bad_keys ]]; then
+      err "Invalid manifest $manifest: unrecognized provider key: $bad_keys"
+    fi
+  fi
 }
 
 _read_manifest_layers() {

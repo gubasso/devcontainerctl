@@ -12,6 +12,7 @@ if [[ ! -d $DCTL_LIB_DIR ]]; then
 fi
 
 source "${DCTL_LIB_DIR}/common.sh"
+source "${DCTL_LIB_DIR}/providers.sh"
 source "${DCTL_LIB_DIR}/ws.sh"
 source "${DCTL_LIB_DIR}/image.sh"
 source "${DCTL_LIB_DIR}/deploy.sh"
