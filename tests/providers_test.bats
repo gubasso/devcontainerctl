@@ -72,14 +72,14 @@ teardown() {
 @test "list_project_providers is empty without a registered manifest" {
   run list_project_providers
   [ "$status" -eq 0 ]
-  [ -z "$output" ]
+  [ "$output" = "" ]
 }
 
 @test "list_project_providers is empty when the manifest declares none" {
   _write_manifest_fixture ""
   run list_project_providers
   [ "$status" -eq 0 ]
-  [ -z "$output" ]
+  [ "$output" = "" ]
 }
 
 @test "list_project_providers reads name and required in manifest order" {
@@ -97,7 +97,7 @@ teardown() {
   export DCTL_CLI_CONFIG="${TEST_TMPDIR}/some.json"
   run list_project_providers
   [ "$status" -eq 0 ]
-  [ -z "$output" ]
+  [ "$output" = "" ]
 }
 
 # --- collect_provider_args ---
@@ -313,7 +313,7 @@ MOCK
   run cmd_test
   [[ $output == *"skipping provider release"* ]]
   # release must NOT have run
-  ! grep -q "prov-a release" "${TEST_TMPDIR}/mock_calls.log"
+  assert_mock_not_called "prov-a release"
 }
 
 # --- manifest validation ---

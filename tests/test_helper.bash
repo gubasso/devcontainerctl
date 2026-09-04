@@ -32,13 +32,22 @@ EOF
 sanitized_bin_excluding() {
   local sanitized="${TEST_TMPDIR}/sanitized_bin"
   mkdir -p "$sanitized"
-  local src dst
-  for src in /usr/bin/* /bin/*; do
-    [[ -e $src ]] || continue
-    dst="${sanitized}/$(basename "$src")"
-    [[ -e $dst ]] && continue
-    ln -s "$src" "$dst" 2>/dev/null || true
-  done
+  # Mirror every directory on PATH, not just /usr/bin and /bin: on a
+  # store-based distribution (Nix, Guix) the core tools live outside the FHS
+  # paths, so a hardcoded list produces a bin/ without realpath or grep and the
+  # command under test fails for the wrong reason. Skip the mock directory so
+  # that a mock never leaks into the sanitized set.
+  local dir src dst
+  while IFS= read -r dir; do
+    [[ -n $dir && -d $dir ]] || continue
+    [[ $dir == "${TEST_TMPDIR}/bin" ]] && continue
+    for src in "$dir"/*; do
+      [[ -e $src ]] || continue
+      dst="${sanitized}/$(basename "$src")"
+      [[ -e $dst ]] && continue
+      ln -s "$src" "$dst" 2>/dev/null || true
+    done
+  done < <(printf '%s\n' "${PATH//:/$'\n'}")
   local name
   for name in "$@"; do
     rm -f "${sanitized}/${name}"

@@ -50,8 +50,16 @@
             pkgs.yq-go
             pkgs.jq
 
-            # per-project git hooks
+            # slides/ (Slidev) build, run by the slidev-build pre-push hook
+            pkgs.nodejs
+
+            # per-project git hooks. commitizen and prettier are here because
+            # their pre-commit hooks run as `language: system`: the upstream
+            # hook repos build an environment around a prebuilt binary that
+            # needs /lib64/ld-linux-x86-64.so.2, which NixOS does not have.
             pkgs.pre-commit
+            pkgs.commitizen
+            pkgs.prettier
           ];
           shellHook = ''echo "dctl dev shell ready"'';
         };

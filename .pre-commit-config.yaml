@@ -16,7 +16,10 @@ repos:
       - id: check-case-conflict
       - id: check-shebang-scripts-are-executable
       - id: no-commit-to-branch
-        args: [--branch, staging, --branch, main, --branch, master]
+        # master is this repository's trunk and the branch you work on, so it
+        # is not in the ban list. staging and main are kept as guards against a
+        # commit landing on a branch this project does not use.
+        args: [--branch, staging, --branch, main]
 
   - repo: https://github.com/maresb/check-json5
     rev: v1.0.1
@@ -65,19 +68,29 @@ repos:
         stages: [commit-msg]
         types_or: [text]
 
-  - repo: https://github.com/commitizen-tools/commitizen
-    rev: v4.13.9
+  # commitizen / prettier run as system hooks (nix devShell), not from their
+  # upstream pre-commit repos. Both upstreams install a prebuilt binary from
+  # PyPI/nodeenv that is linked against /lib64/ld-linux-x86-64.so.2, which does
+  # not exist on NixOS, so the hook environment fails to build. The devShell
+  # already pins both tools. See flake.nix.
+  - repo: local
     hooks:
       - id: commitizen
+        name: commitizen check
+        language: system
+        entry: cz check --allow-abort --commit-msg-file
+        stages: [commit-msg]
 
   # Slides sub-project (Slidev) ----------------------------------------------
   # Prettier formats Markdown, Vue, TS, JSON inside slides/ only.
-  # rbubley fork is used because pre-commit/mirrors-prettier is archived.
-  - repo: https://github.com/rbubley/mirrors-prettier
-    rev: v3.8.3
+  # Prettier comes from the nix devShell (see the note above the commitizen hook).
+  - repo: local
     hooks:
       - id: prettier
-        args: [--write]
+        name: prettier
+        language: system
+        entry: prettier --write --ignore-unknown
+        types: [text]
         files: ^slides/.*\.(md|vue|ts|js|json|ya?ml|css)$
         # slides/slides.md and slides/pages/*.md use Slidev's per-slide
         # frontmatter syntax (`---\nlayout: foo\n---`), which prettier
@@ -115,11 +128,12 @@ repos:
         always_run: true
         stages: [pre-push]
       # slidev build – catches deck breakages before pushing to GitHub Pages.
-      # Requires slides/node_modules (run `npm ci` in slides/ first).
+      # Requires slides/node_modules (run `npm ci` in slides/ first). node comes
+      # from the devShell, like every other tool this hookset calls.
       - id: slidev-build
         name: slidev build
         language: system
-        entry: bash -c 'cd slides && mise exec -- npm run build'
+        entry: bash -c 'cd slides && npm run build'
         files: ^slides/
         pass_filenames: false
         stages: [pre-push]
