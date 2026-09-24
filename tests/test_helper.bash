@@ -1,4 +1,11 @@
 setup_test_fixtures() {
+  # `git commit` exports GIT_DIR and friends to its hooks, and the bats-unit
+  # hook inherits them. An absolute GIT_DIR makes `git -C <fixture>` read this
+  # repository instead of the fixture, so resolve_canonical_project_name
+  # returns the real project name and the provider and forge-auth cases fail
+  # for the wrong reason. The suite owns its own git environment.
+  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX
+
   TEST_TMPDIR="$(mktemp -d "${BATS_TEST_TMPDIR}/dctl.XXXXXX")"
   export TEST_TMPDIR
   mkdir -p "${TEST_TMPDIR}/bin"

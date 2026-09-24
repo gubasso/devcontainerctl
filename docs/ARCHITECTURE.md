@@ -180,6 +180,25 @@ devimg/agents:latest    (openSUSE Tumbleweed + bun + node LTS + agent CLIs + mis
 
 The `agents` base includes a rolling Python runtime for shared tooling. Project-specific Python versions override the base default via mise, while Rust and Zig versions remain unbaked and resolve from `rust-toolchain.toml` and `build.zig.zon`.
 
+`dctl` infers that tree rather than taking it from the operator. `dctl image build` reads the `FROM` lines of every deployed Dockerfile in the requested ancestor closure and builds each parent before its child. The grammar is literal, because an order the engine cannot read is an order it must not guess:
+
+| `FROM` reference | Meaning |
+| --- | --- |
+| `devimg/<name>:latest` | managed parent `<name>` |
+| `devimg/<name>:v2`, `devimg/<name>` | refused as an unsupported managed-parent spelling |
+| any reference holding `$` | refused, because a variable reference cannot be ordered |
+| `scratch`, or a stage alias of the same file | not an image reference, ignored |
+| anything else | external base, pulled but never ordered |
+
+A `--platform=<platform>` flag and a trailing `AS <alias>` are stripped before the reference is read, and a file may carry several `FROM` lines.
+
+Two build semantics follow from the graph:
+
+- An ordinary build builds every requested name, and builds an ancestor pulled in by the graph only when `docker image inspect` does not already find its tag. A present ancestor prints `skipping <name>: present, not requested`.
+- `--full-rebuild` builds every name in the closure with `--no-cache`. Before each build it pulls that Dockerfile's literal external bases by name, once per invocation. It does not pass `--pull` to `docker buildx build`: that flag applies to the whole Dockerfile and would try to resolve a local managed parent such as `devimg/base:latest` against a registry.
+
+A failed build blocks its descendants, which are reported as `blocked by failed parent <name>` rather than built on the older parent tag. Independent branches keep going, and the command fails once with the complete set. `--dry-run` computes the whole order with no Docker daemon, and a cycle or an undeployed parent is refused there rather than mid-build.
+
 **Note**: This guide covers Python, Rust, and Zig as practical examples. The same pattern extends to polyglot environments (combine layers) or hardened variants (remove sudo, drop capabilities, add `no-new-privileges`). Adapt the Dockerfiles as needed for your use case.
 
 ### Image Reuse
@@ -1444,7 +1463,8 @@ docker volume rm rustup-toolchains-${USER} cargo-registry-${USER} cargo-git-${US
 docker volume prune
 
 # Rebuild from scratch
-docker buildx build --load --pull --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ~/.config/dctl/images/agents/
+docker pull opensuse/tumbleweed
+docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ~/.config/dctl/images/agents/
 docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/python-dev:latest ~/.config/dctl/images/python-dev/
 docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/rust-dev:latest ~/.config/dctl/images/rust-dev/
 docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/zig-dev:latest ~/.config/dctl/images/zig-dev/

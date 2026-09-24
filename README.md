@@ -275,6 +275,30 @@ the project registry.
 Run `dctl deploy image <name>` or `dctl deploy --all-images` to seed image
 configs from installed defaults.
 
+`dctl image build` reads the dependency graph from the `FROM` lines of the
+deployed Dockerfiles and builds every parent before its child, so a family
+needs no build order from the operator. The grammar it reads is literal:
+
+- `FROM devimg/<name>:latest` names `<name>` as a managed parent.
+- Any other `devimg/` spelling, such as `FROM devimg/base:v2`, is refused.
+- Any reference holding `$`, such as `FROM devimg/${PARENT}:latest`, is refused.
+- Any other reference is an external base and stays out of the graph.
+- A `FROM <alias>` naming a stage of the same file is not an image reference.
+
+A named target always builds. An ancestor pulled in by the graph builds only
+when `docker image inspect` does not already find its tag. `--full-rebuild`
+builds every name in the graph with `--no-cache`, and pulls each literal
+external base by name first. It does not pass `--pull` to `docker buildx
+build`, because that flag applies to the whole Dockerfile and would resolve a
+local managed parent against a registry.
+
+When a build fails, its descendants are skipped rather than built on the older
+parent tag. Independent branches of the graph continue, and the command reports
+the complete failed and blocked set before it exits.
+
+`dctl image build --dry-run` computes the same order and needs no Docker
+daemon.
+
 ### `dctl config`
 
 ```bash

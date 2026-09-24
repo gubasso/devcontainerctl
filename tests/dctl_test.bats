@@ -109,6 +109,28 @@ create_user_image_fixture() {
   touch "${XDG_CONFIG_HOME}/dctl/images/${name}/Dockerfile"
 }
 
+create_user_image_dockerfile() {
+  local name="$1"
+  shift
+  mkdir -p "${XDG_CONFIG_HOME}/dctl/images/${name}"
+  printf '%s\n' "$@" >"${XDG_CONFIG_HOME}/dctl/images/${name}/Dockerfile"
+}
+
+# base <- agents <- {mise, nix}, with one external base per managed image and a
+# multi-stage agents Dockerfile.
+create_image_family_fixture() {
+  create_user_image_dockerfile base 'FROM opensuse/tumbleweed AS base'
+  create_user_image_dockerfile agents 'FROM rust:1-slim AS tools' 'FROM devimg/base:latest'
+  create_user_image_dockerfile mise 'FROM devimg/agents:latest'
+  create_user_image_dockerfile nix 'FROM devimg/agents:latest'
+}
+
+dry_run_build_order() {
+  printf '%s\n' "$1" \
+    | sed -n 's#.*Would build: devimg/\([^:]*\):latest.*#\1#p' \
+    | tr '\n' ' '
+}
+
 setup() {
   setup_test_fixtures
   export XDG_DATA_HOME="${TEST_TMPDIR}/xdg-data"
@@ -287,9 +309,13 @@ teardown() {
   enable_mocks
   create_mock devcontainer 0 ""
 
-  run cmd_ws_up -- --build-no-cache
+  # The assertion needs the unspliced command, so forge-seed has to be absent.
+  # A developer host that installs it would otherwise fail this test.
+  local sanitized
+  sanitized="$(sanitized_bin_excluding forge-seed)"
+
+  PATH="${TEST_TMPDIR}/bin:${sanitized}" run cmd_ws_up -- --build-no-cache
   [ "$status" -eq 0 ]
-  # No forge-seed on PATH here, so no forge mount is spliced in
   assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config $(workspace_devcontainer_file) --build-no-cache"
 }
 
@@ -453,6 +479,140 @@ YAML
   [ "$status" -eq 0 ]
   [[ $output == *"devimg/agents:latest"* ]]
   [[ $output == *"devimg/python-dev:latest"* ]]
+}
+
+# --- Managed image ordering ---
+
+@test "cmd_image_build --all builds the family in dependency order" {
+  create_image_family_fixture
+
+  run cmd_image_build --dry-run --all
+  [ "$status" -eq 0 ]
+  [ "$(dry_run_build_order "$output")" = "base agents mise nix " ]
+}
+
+@test "cmd_image_build on one leaf builds its ancestors first" {
+  create_image_family_fixture
+
+  run cmd_image_build --dry-run mise
+  [ "$status" -eq 0 ]
+  [ "$(dry_run_build_order "$output")" = "base agents mise " ]
+}
+
+@test "_image_parents reads through a --platform flag and a stage alias" {
+  create_user_image_dockerfile base 'FROM opensuse/tumbleweed'
+  # shellcheck disable=SC2016  # the Dockerfile keeps $BUILDPLATFORM literal
+  create_user_image_dockerfile runtime \
+    'FROM --platform=$BUILDPLATFORM devimg/base:latest AS runtime'
+
+  run _image_parents runtime
+  [ "$status" -eq 0 ]
+  [ "$output" = "base" ]
+}
+
+@test "cmd_image_build refuses a variable managed parent" {
+  create_user_image_dockerfile base 'FROM opensuse/tumbleweed'
+  # shellcheck disable=SC2016  # the Dockerfile keeps ${PARENT} literal
+  create_user_image_dockerfile child 'FROM devimg/${PARENT}:latest'
+
+  run cmd_image_build --dry-run child
+  [ "$status" -ne 0 ]
+  [[ $output == *"a variable reference cannot be ordered"* ]]
+  [[ $output == *"child/Dockerfile:1"* ]]
+}
+
+@test "cmd_image_build refuses an unsupported managed parent spelling" {
+  create_user_image_dockerfile base 'FROM opensuse/tumbleweed'
+  create_user_image_dockerfile child 'FROM devimg/base:v2'
+
+  run cmd_image_build --dry-run child
+  [ "$status" -ne 0 ]
+  [[ $output == *"unsupported managed parent"* ]]
+  [[ $output == *"devimg/base:v2"* ]]
+}
+
+@test "cmd_image_build refuses a parent that is not deployed" {
+  create_user_image_dockerfile mise 'FROM devimg/asdf:latest'
+
+  run cmd_image_build --dry-run mise
+  [ "$status" -ne 0 ]
+  [[ $output == *"is not deployed"* ]]
+  [[ $output == *"dctl deploy image asdf"* ]]
+}
+
+@test "cmd_image_build refuses a dependency cycle" {
+  create_user_image_dockerfile a 'FROM devimg/b:latest'
+  create_user_image_dockerfile b 'FROM devimg/a:latest'
+
+  run cmd_image_build --dry-run --all
+  [ "$status" -ne 0 ]
+  [[ $output == *"image dependency cycle"* ]]
+  [[ $output == *"a"* ]]
+  [[ $output == *"b"* ]]
+}
+
+@test "cmd_image_build --dry-run orders the family without docker on PATH" {
+  create_image_family_fixture
+  local sanitized
+  sanitized="$(sanitized_bin_excluding docker)"
+
+  PATH="$sanitized" run cmd_image_build --dry-run --all
+  [ "$status" -eq 0 ]
+  [ "$(dry_run_build_order "$output")" = "base agents mise nix " ]
+}
+
+@test "cmd_image_build --full-rebuild pulls external bases and not managed parents" {
+  create_image_family_fixture
+  enable_mocks
+  create_mock docker 0 ""
+
+  run cmd_image_build --full-rebuild agents
+  [ "$status" -eq 0 ]
+  assert_mock_called "docker pull rust:1-slim"
+  assert_mock_called "docker pull opensuse/tumbleweed"
+  assert_mock_not_called "pull devimg/base:latest"
+  assert_mock_not_called "--pull"
+  assert_mock_called "docker buildx build --load --no-cache"
+}
+
+@test "cmd_image_build never pulls scratch or a same-file stage alias" {
+  create_user_image_dockerfile base 'FROM opensuse/tumbleweed'
+  create_user_image_dockerfile staged \
+    'FROM scratch AS empty' \
+    'FROM devimg/base:latest AS build' \
+    'FROM empty'
+  enable_mocks
+  create_mock docker 0 ""
+
+  run cmd_image_build --full-rebuild staged
+  [ "$status" -eq 0 ]
+  assert_mock_not_called "docker pull scratch"
+  assert_mock_not_called "docker pull empty"
+  assert_mock_not_called "docker pull devimg/base:latest"
+}
+
+@test "cmd_image_build skips descendants of a failed parent" {
+  create_image_family_fixture
+  enable_mocks
+  # A stale devimg/base:latest is present (inspect succeeds), and its rebuild
+  # fails. No descendant may be built on the stale tag.
+  cat >"${TEST_TMPDIR}/bin/docker" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "docker \$*" >>"${TEST_TMPDIR}/mock_calls.log"
+if [[ "\$*" == *"-t devimg/base:latest"* ]]; then
+  exit 1
+fi
+exit 0
+EOF
+  chmod +x "${TEST_TMPDIR}/bin/docker"
+
+  run cmd_image_build --all
+  [ "$status" -ne 0 ]
+  [[ $output == *"blocked by failed parent base"* ]]
+  [[ $output == *"Failed to build: base"* ]]
+  assert_mock_not_called "-t devimg/agents:latest"
+  assert_mock_not_called "-t devimg/mise:latest"
+  assert_mock_not_called "-t devimg/nix:latest"
 }
 
 # bats test_tags=integration
