@@ -24,7 +24,6 @@ Commands:
       Options:
         --all              Build all discovered images
         --full-rebuild     Rebuild all images from scratch
-        --refresh-agents   Cache-bust the agents CLI layer
         --dry-run, -n      Show what would be built without building
         --help, -h         Show build help
 
@@ -39,7 +38,6 @@ Examples:
   dctl image build agents
   dctl image build --all
   dctl image build --full-rebuild
-  dctl image build --refresh-agents agents
   dctl image build --dry-run
   dctl image list
 EOF
@@ -289,7 +287,6 @@ _pull_external_bases() {
 cmd_image_build() {
   local all=false
   local full_rebuild=false
-  local refresh_agents=false
   local no_cache=false
   local dry_run=false
   local targets=()
@@ -306,10 +303,6 @@ cmd_image_build() {
         ;;
       --full-rebuild)
         full_rebuild=true
-        shift
-        ;;
-      --refresh-agents)
-        refresh_agents=true
         shift
         ;;
       --dry-run | -n)
@@ -456,20 +449,11 @@ cmd_image_build() {
       continue
     fi
 
-    local -a refresh_flag
-    refresh_flag=()
-    if [[ $target == "agents" && $refresh_agents == true ]]; then
-      refresh_flag=(--build-arg "CACHEBUST_AGENTS=$(date +%s)")
-    fi
-
     if [[ $dry_run == true ]]; then
       log "[dry-run] Would build: $tag"
       if [[ $full_rebuild == true ]]; then
         log "[dry-run]   flags: --no-cache"
         _pull_external_bases "$target"
-      fi
-      if [[ ${#refresh_flag[@]} -gt 0 ]]; then
-        log "[dry-run]   flags: --refresh-agents (cache-bust agent CLI layers)"
       fi
       continue
     fi
@@ -504,7 +488,6 @@ cmd_image_build() {
 
     if ! docker buildx build --load \
       "${no_cache_flag[@]}" \
-      "${refresh_flag[@]}" \
       "${build_args[@]}" \
       "${secret_flag[@]}" \
       -t "$tag" \

@@ -175,12 +175,9 @@ RUN --mount=type=secret,id=gh_token,mode=0444 \
     && python -m pipx install trash-cli \
     && mise reshim
 
-# AI Agent CLIs (rolling: rebuild weekly, or on-demand via --refresh-agents)
-# Cache-bust: dctl image build --refresh-agents agents
-ARG CACHEBUST_AGENTS=0
+# AI Agent CLIs (rolling: refresh with dctl image build --full-rebuild)
 # Claude Code (native installer - auto-updates)
-RUN echo "agent-cache-bust=$CACHEBUST_AGENTS" \
-    && curl -fsSL https://claude.ai/install.sh | bash
+RUN curl -fsSL https://claude.ai/install.sh | bash
 # Codex CLI (OpenAI) via Bun | OpenCode via Bun | Gemini CLI via npm
 RUN bun add -g @openai/codex opencode-ai && npm install -g @google/gemini-cli@latest
 

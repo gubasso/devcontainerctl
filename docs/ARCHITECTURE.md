@@ -421,11 +421,8 @@ dctl image build
 # Build a specific image
 dctl image build agents
 
-# Build all images (non-interactive, pulls base updates for agents)
+# Build all images (non-interactive)
 dctl image build --all
-
-# Cache-bust the agent CLI layer
-dctl image build --refresh-agents agents
 
 # Full uncached rebuild of all images
 dctl image build --full-rebuild

@@ -258,7 +258,6 @@ dctl ws down
 dctl image build
 dctl image build agents
 dctl image build --all
-dctl image build --refresh-agents agents
 dctl image build --full-rebuild
 dctl image build --dry-run
 dctl image list
