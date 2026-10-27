@@ -32,9 +32,12 @@ Commands:
 
   shell [<command...>]
       Open an interactive shell, or run a command in an interactive login shell.
+      Each word stays one argument, as the caller wrote it.
 
   run [--] <command...>
-      Execute a command via bash -lc inside the devcontainer.
+      Run a command in a login shell (bash -lc) inside the devcontainer.
+      Each word stays one argument: dctl ws run -- pytest -q
+      For a shell expression, name the shell: dctl ws run -- bash -c 'a && b'
 
   status
       Show devcontainer(s) associated with the current workspace.
@@ -189,11 +192,22 @@ cmd_ws_exec() {
   devcontainer_exec "${args[@]}"
 }
 
+# Joins words into one command string for `bash -c`, quoting each word with
+# printf %q, so the container shell gets each word as one argument: a space, a
+# quote, an empty word, `;`, `|`, `$`, or a newline inside a word stays literal.
+# Joining with "$*" instead would let the container shell split and expand the
+# words a second time.
+ws_command_string() {
+  local quoted
+  printf -v quoted '%q ' "$@"
+  printf '%s' "${quoted% }"
+}
+
 cmd_ws_shell() {
   ensure_ws_container_running
 
   if [[ $# -gt 0 ]]; then
-    devcontainer_exec bash -lic "$*"
+    devcontainer_exec bash -lic "$(ws_command_string "$@")"
   else
     devcontainer_exec bash
   fi
@@ -207,7 +221,7 @@ cmd_ws_run() {
   fi
   [[ $# -gt 0 ]] || err "run requires a command. Example: dctl ws run -- claude-session"
 
-  devcontainer_exec bash -lc "$*"
+  devcontainer_exec bash -lc "$(ws_command_string "$@")"
 }
 
 cmd_ws_status() {

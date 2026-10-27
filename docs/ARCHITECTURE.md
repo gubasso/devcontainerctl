@@ -1189,7 +1189,8 @@ dctl ws reup
 dctl ws shell
 dctl ws shell claude
 dctl ws exec -- pytest
-dctl ws run -- "pytest -q"
+dctl ws run -- pytest -q
+dctl ws run -- bash -c 'make check && make test'
 dctl ws status
 dctl ws down
 ```
@@ -1483,8 +1484,9 @@ dctl ws reup
 # Attach shell
 dctl ws shell
 
-# Execute command
-dctl ws run -- cmd
+# Execute command: each word is one argument; name a shell for an expression
+dctl ws run -- pytest -q
+dctl ws run -- bash -c 'a && b'
 
 # Show container details
 dctl ws status

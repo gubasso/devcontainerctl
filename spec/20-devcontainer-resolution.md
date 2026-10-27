@@ -113,6 +113,7 @@ config lives elsewhere.
 
 - resolve config via the same precedence chain (needed for the `--config` pass-through to `devcontainer exec`)
 - operate on already-running containers selected by workspace label
+- `shell <cmd>` and `run` quote each word with `printf %q` before they hand the command string to `bash -lic` or `bash -lc`, so each word reaches the command as one argument. A shell expression runs only through an explicit shell, such as `bash -c '...'`
 
 ## Failure Modes
 

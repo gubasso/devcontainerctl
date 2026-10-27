@@ -240,10 +240,13 @@ dctl ws reup
 dctl ws shell
 dctl ws shell claude
 dctl ws exec -- pytest
-dctl ws run -- "pytest -q"
+dctl ws run -- pytest -q
+dctl ws run -- bash -c 'make check && make test'
 dctl ws status
 dctl ws down
 ```
+
+`dctl ws shell <cmd>` and `dctl ws run` pass each word to the container as one argument, as you wrote it. A shell expression with `&&`, `|`, or `;` runs only through an explicit shell: `bash -c '...'`.
 
 `dctl ws` adds a few important host-side conveniences:
 

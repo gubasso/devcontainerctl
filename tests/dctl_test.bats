@@ -285,6 +285,74 @@ teardown() {
   assert_mock_called "bash -lc pytest -q"
 }
 
+ws_quoting_fixture() {
+  mkdir -p "$(workspace_devcontainer_dir)"
+  printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
+  enable_mocks
+  create_mock docker 0 "running"
+  create_devcontainer_shell_mock
+}
+
+# The tests run with --separate-stderr, because dctl reports the config it
+# uses and the forge seed on stderr, and only the command's stdout is compared.
+#
+# Each word below is one hard case: a space, an empty word, a single and a
+# double quote, a literal ;, |, and $, and a newline.
+ws_quoting_expected() {
+  # shellcheck disable=SC2016 # the literal $HOME is the case under test
+  printf '%s\n' '<a b>' '<>' "<it's>" '<say "hi">' '<x;y>' '<p|q>' '<$HOME>' '<l1' 'l2>'
+}
+
+@test "cmd_ws_run keeps each word as one argument" {
+  ws_quoting_fixture
+
+  # shellcheck disable=SC2016 # the literal $HOME is the case under test
+  run --separate-stderr cmd_ws_run -- printf '<%s>\n' 'a b' '' "it's" 'say "hi"' 'x;y' 'p|q' '$HOME' $'l1\nl2'
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(ws_quoting_expected)" ]
+}
+
+@test "cmd_ws_shell keeps each word as one argument" {
+  ws_quoting_fixture
+
+  # shellcheck disable=SC2016 # the literal $HOME is the case under test
+  run --separate-stderr cmd_ws_shell printf '<%s>\n' 'a b' '' "it's" 'say "hi"' 'x;y' 'p|q' '$HOME' $'l1\nl2'
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(ws_quoting_expected)" ]
+}
+
+@test "cmd_ws_run passes two words as two arguments" {
+  ws_quoting_fixture
+
+  run --separate-stderr cmd_ws_run -- printf '%s\n' 'a b' c
+  [ "$status" -eq 0 ]
+  [ "$output" = $'a b\nc' ]
+}
+
+@test "cmd_ws_run runs a shell expression only through an explicit shell" {
+  ws_quoting_fixture
+
+  run --separate-stderr cmd_ws_run -- echo 'one && echo two'
+  [ "$status" -eq 0 ]
+  [ "$output" = "one && echo two" ]
+
+  run --separate-stderr cmd_ws_run -- bash -c 'echo one && echo two'
+  [ "$status" -eq 0 ]
+  [ "$output" = $'one\ntwo' ]
+}
+
+@test "cmd_ws_shell runs a shell expression only through an explicit shell" {
+  ws_quoting_fixture
+
+  run --separate-stderr cmd_ws_shell echo 'one; echo two'
+  [ "$status" -eq 0 ]
+  [ "$output" = "one; echo two" ]
+
+  run --separate-stderr cmd_ws_shell bash -c 'echo one; echo two'
+  [ "$status" -eq 0 ]
+  [ "$output" = $'one\ntwo' ]
+}
+
 @test "cmd_ws_status does not auto-start a container" {
   enable_mocks
   create_mock docker 0 "abc123"
