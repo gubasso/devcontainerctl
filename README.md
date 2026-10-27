@@ -390,6 +390,23 @@ make uninstall-systemd
 
 Use `make uninstall` to remove the installed binary, shell modules, templates, Dockerfiles, and schemas. Use `make uninstall-systemd` to remove and disable the weekly rebuild timer.
 
+## Development
+
+The flake dev shell is the one source of the tools that `make check`, `make test`, and the git hooks call. Enter it through `.dev/exec`, which runs `nix develop` and works from any folder of the repository and from any linked worktree:
+
+```bash
+.dev/exec make check          # run one command inside the dev shell
+.dev/exec                     # open a shell inside it
+```
+
+The git hooks are tracked in `.githooks/`, one script for each stage of `default_install_hook_types` in `.pre-commit-config.yaml`. Each script runs pre-commit for its stage through `.dev/exec`, so a commit runs every hook with the dev shell's tools from any shell. Point git at them once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+`pre-commit install` refuses to run once `core.hooksPath` is set, so this repository does not use it. The hook scripts call `pre-commit hook-impl`, which is internal to pre-commit, so check that a commit still runs its hooks after each pre-commit update.
+
 ## Further Reading
 
 - [QUICKSTART.md](docs/QUICKSTART.md) for a short setup path

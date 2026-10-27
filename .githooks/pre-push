@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Runs the pre-commit hooks of this stage inside the dev environment of the repository.
+# The stage is the name of this file. `git config core.hooksPath .githooks` points git here.
+root="$(git rev-parse --show-toplevel)"
+exec "$root/.dev/exec" pre-commit hook-impl --config=.pre-commit-config.yaml \
+  --hook-type="$(basename "$0")" --hook-dir "$(dirname "$0")" -- "$@"

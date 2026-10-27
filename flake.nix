@@ -50,8 +50,11 @@
             pkgs.yq-go
             pkgs.jq
 
-            # slides/ (Slidev) build, run by the slidev-build pre-push hook
+            # slides/ (Slidev) build, run by the slidev-build pre-push hook.
+            # bun sits beside node here rather than in a mise.toml: the flake is
+            # the one manager of this repository's dev environment.
             pkgs.nodejs
+            pkgs.bun
 
             # per-project git hooks. commitizen and prettier are here because
             # their pre-commit hooks run as `language: system`: the upstream
@@ -61,7 +64,9 @@
             pkgs.commitizen
             pkgs.prettier
           ];
-          shellHook = ''echo "dctl dev shell ready"'';
+          # stderr, not stdout: `.dev/exec CMD` runs `nix develop --command CMD`,
+          # which runs this hook first, and the two share stdout.
+          shellHook = ''echo "dctl dev shell ready" >&2'';
         };
       }
     );
