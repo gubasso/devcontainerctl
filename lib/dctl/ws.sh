@@ -197,10 +197,16 @@ cmd_ws_exec() {
 # quote, an empty word, `;`, `|`, `$`, or a newline inside a word stays literal.
 # Joining with "$*" instead would let the container shell split and expand the
 # words a second time.
+#
+# The empty quoted prefix '' keeps the first word lexically quoted even when
+# %q leaves it bare, so a command named `time` or `for`, or a first word such
+# as `A=B`, runs as a command and is not parsed as a reserved word or an
+# assignment. The value of the word does not change, and a function or a
+# builtin of that name is still found.
 ws_command_string() {
   local quoted
   printf -v quoted '%q ' "$@"
-  printf '%s' "${quoted% }"
+  printf "''%s" "${quoted% }"
 }
 
 cmd_ws_shell() {

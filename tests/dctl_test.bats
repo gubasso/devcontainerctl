@@ -257,7 +257,7 @@ teardown() {
   run cmd_ws_shell codex
   [ "$status" -eq 0 ]
   assert_mock_called "devcontainer exec"
-  assert_mock_called "bash -lic codex"
+  assert_mock_called "bash -lic ''codex"
 }
 
 @test "cmd_ws_run requires a command" {
@@ -282,7 +282,7 @@ teardown() {
   run cmd_ws_run -- pytest -q
   [ "$status" -eq 0 ]
   assert_mock_called "devcontainer exec"
-  assert_mock_called "bash -lc pytest -q"
+  assert_mock_called "bash -lc ''pytest -q"
 }
 
 ws_quoting_fixture() {
@@ -351,6 +351,44 @@ ws_quoting_expected() {
   run --separate-stderr cmd_ws_shell bash -c 'echo one; echo two'
   [ "$status" -eq 0 ]
   [ "$output" = $'one\ntwo' ]
+}
+
+# Commands whose names bash would read as a reserved word or an assignment
+# when the first word is left bare. Each fixture prints its name and its
+# arguments.
+ws_command_name_fixtures() {
+  local name
+  for name in time for A=B; do
+    cat >"${TEST_TMPDIR}/bin/${name}" <<'EOF'
+#!/usr/bin/env bash
+printf '%s:[%s]\n' "${0##*/}" "$*"
+EOF
+    chmod +x "${TEST_TMPDIR}/bin/${name}"
+  done
+}
+
+@test "cmd_ws_run runs a command named like a reserved word or an assignment" {
+  ws_quoting_fixture
+  ws_command_name_fixtures
+
+  local name
+  for name in time for A=B; do
+    run --separate-stderr cmd_ws_run -- "$name" --version 'a b'
+    [ "$status" -eq 0 ]
+    [ "$output" = "${name}:[--version a b]" ]
+  done
+}
+
+@test "cmd_ws_shell runs a command named like a reserved word or an assignment" {
+  ws_quoting_fixture
+  ws_command_name_fixtures
+
+  local name
+  for name in time for A=B; do
+    run --separate-stderr cmd_ws_shell "$name" --version 'a b'
+    [ "$status" -eq 0 ]
+    [ "$output" = "${name}:[--version a b]" ]
+  done
 }
 
 @test "cmd_ws_status does not auto-start a container" {
