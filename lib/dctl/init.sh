@@ -19,17 +19,22 @@ usage_init() {
   cat <<'EOF'
 Usage: dctl init [options]
 
-Register the current project against a deployed devcontainer config and run
-the workspace smoke test.
+Register the current project against a devcontainer manifest of the user
+config in ~/.config/dctl/devcontainer/ and run the workspace smoke test.
 
 Options:
-  --devcontainer <name>                Use a specific deployed devcontainer
+  --devcontainer <name>                Use a specific devcontainer manifest
   --help, -h                           Show this help text
 
 Examples:
-  dctl init --devcontainer python
+  dctl init --devcontainer example
   dctl init
 EOF
+}
+
+# The user writes every manifest and layer; dctl ships none.
+_no_devcontainer_hint() {
+  printf 'No devcontainer manifests in %s. Add <name>.yaml and its layer folders there (docs/examples/ in the devcontainerctl repository shows one).\n' "$DCTL_DEVCONTAINER_DIR"
 }
 
 _discover_deployed_selectable_devcontainers() {
@@ -48,12 +53,12 @@ _select_deployed_devcontainer_interactive() {
   local -a available=()
   mapfile -t available < <(_discover_deployed_selectable_devcontainers)
 
-  [[ ${#available[@]} -gt 0 ]] || err "No devcontainers deployed. Run: dctl deploy (or dctl deploy devcontainer <name>)"
+  [[ ${#available[@]} -gt 0 ]] || err "$(_no_devcontainer_hint)"
   command -v fzf >/dev/null 2>&1 || err "fzf not found. Install fzf or pass --devcontainer <name>."
   [[ -t 0 ]] || err "Interactive init requires a terminal. Pass --devcontainer <name>."
 
   printf '%s\n' "${available[@]}" | _fzf_pick \
-    "Select deployed devcontainer: " \
+    "Select devcontainer: " \
     "ENTER: confirm, ESC: cancel"
 }
 
@@ -102,12 +107,12 @@ ensure_image_available_for_devcontainer() {
 
   if ! image_name="$(_image_ref_to_name "$image_ref" 2>/dev/null)"; then
     DCTL_INIT_IMAGE_STATUS="external"
-    log "Using external image from deployed config: $image_ref"
+    log "Using external image from the devcontainer config: $image_ref"
     return 0
   fi
 
   if [[ ! -f "$(config_image_path "$image_name")" ]]; then
-    err "Image '$image_name' is not deployed. Run: dctl deploy image $image_name"
+    err "Image '$image_name' has no Dockerfile. Add $(config_image_path "$image_name")"
   fi
 
   require_cmd docker
@@ -142,7 +147,7 @@ cmd_init() {
 
   local -a available=()
   mapfile -t available < <(_discover_deployed_selectable_devcontainers)
-  [[ ${#available[@]} -gt 0 ]] || err "No devcontainers deployed. Run: dctl deploy (or dctl deploy devcontainer <name>)"
+  [[ ${#available[@]} -gt 0 ]] || err "$(_no_devcontainer_hint)"
 
   if [[ -z $devcontainer ]]; then
     devcontainer="$(_select_deployed_devcontainer_interactive)" || return $?

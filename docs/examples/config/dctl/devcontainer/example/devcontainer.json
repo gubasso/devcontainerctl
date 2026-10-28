@@ -1,0 +1,8 @@
+{
+  // Example leaf layer, the last layer of example.yaml. Copy this folder to
+  // ~/.config/dctl/devcontainer/example/. It names the image that
+  // `dctl image build example` builds, and runs no lifecycle command: each
+  // project sets itself up with its own tools.
+  "name": "${localWorkspaceFolderBasename}-sandbox",
+  "image": "devimg/example:latest"
+}

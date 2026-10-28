@@ -10,9 +10,9 @@ She also wants AI agents like Claude Code and Codex available inside the same co
 
 | Task | `dctl` | Dev Container CLI | Docker |
 | --- | --- | --- | --- |
-| Set up a new Python workspace | `dctl deploy devcontainer python && dctl deploy image python-dev && dctl init --devcontainer python` | Write a `Dockerfile` + `.devcontainer/devcontainer.json` manually | Write a `Dockerfile` manually |
+| Set up a new Python workspace | Write a `Dockerfile` and layered config once in `~/.config/dctl/`, then `dctl init --devcontainer python` | Write a `Dockerfile` + `.devcontainer/devcontainer.json` manually | Write a `Dockerfile` manually |
 | Start the workspace | `dctl ws up` | `devcontainer up --workspace-folder . --config /path/to/devcontainer.json` | `docker run -it ...` |
-| Scale to multiple projects | `dctl deploy ...` once, then `dctl init --devcontainer <name>` per project | Duplicate Dockerfile + JSON per project | Duplicate Dockerfile per project |
+| Scale to multiple projects | Write the user config once, then `dctl init --devcontainer <name>` per project | Duplicate Dockerfile + JSON per project | Duplicate Dockerfile per project |
 | Open a shell | `dctl ws shell` | `devcontainer exec --workspace-folder . bash` | `docker exec -it <container> bash` |
 | Run an agent | `dctl ws shell claude` | `devcontainer exec --workspace-folder . bash -lic claude` | `docker exec -it <container> bash -lic claude` |
 | Run a command | `dctl ws exec -- pytest` | `devcontainer exec --workspace-folder . pytest` | `docker exec -it <container> pytest` |
@@ -130,48 +130,46 @@ What pain remains:
 
 ### dctl
 
-Ana runs one command:
+`dctl` ships no image and no config. Ana writes both once, in her user config under `~/.config/dctl/` instead of in the repo. The [examples](examples/README.md) show the layout to start from.
+
+**1. A Dockerfile** at `~/.config/dctl/images/team-python/Dockerfile`. This is the same ~45-line Dockerfile Ana wrote by hand in the Docker section; she moves it out of the repo into her user config, and `dctl` tags it `devimg/team-python:latest`:
 
 ```bash
-cd ~/projects/snackbar-api
-dctl deploy devcontainer python
-dctl deploy image python-dev
-dctl init --devcontainer python
+$EDITOR ~/.config/dctl/images/team-python/Dockerfile
 ```
 
-This does three things:
-
-**1. Deploys a managed Dockerfile** to `~/.config/dctl/images/python-dev/Dockerfile`. This is the equivalent of the ~45-line Dockerfile Ana wrote by hand in the Docker section — it comes pre-configured with Python, Poetry, Node LTS, gh CLI, Claude Code, Codex, Gemini CLI, pre-commit, and a non-root user. It is ready to build as-is, but Ana can open and edit it at any time:
-
-```bash
-$EDITOR ~/.config/dctl/images/python-dev/Dockerfile
-```
-
-**2. Deploys devcontainer config** to `~/.config/dctl/devcontainer/`. This includes a YAML manifest (`python.yaml`) declaring the ordered layer list, plus the referenced layer directories (the shared `base` layer and the `python` leaf layer). Together they serve the same role as the `devcontainer.json` Ana wrote by hand — image reference, `remoteUser`, and workspace-dependent setup hooks. The Python leaf layer comes with `pre-commit install` as a `postCreateCommand` out of the box, and Ana can add more (like `poetry install`) by editing the leaf config. She can inspect and customize it:
+**2. A devcontainer config** in `~/.config/dctl/devcontainer/`: a YAML manifest (`python.yaml`) declaring the ordered layer list, plus the referenced layer directories (a shared `base` layer and a `python` leaf layer). Together they serve the same role as the `devcontainer.json` Ana wrote by hand — image reference, `remoteUser`, and workspace-dependent setup hooks. The `postCreateCommand` she would write for the Dev Container CLI goes into the `python` leaf layer:
 
 ```bash
 $EDITOR ~/.config/dctl/devcontainer/python/devcontainer.json
 ```
 
-**Where it lives:** The Dockerfile at `~/.config/dctl/images/python-dev/Dockerfile` and the config layers under `~/.config/dctl/devcontainer/`. These are user-level files, not per-project — the same Dockerfile and config are reused across every Python workspace Ana creates.
+**Where it lives:** The Dockerfile at `~/.config/dctl/images/team-python/Dockerfile` and the config layers under `~/.config/dctl/devcontainer/`. These are user-level files, not per-project — the same Dockerfile and config are reused across every Python workspace Ana creates.
 
-**3. Registers the current project** by writing the manifest name (`devcontainer-manifest: python`) to `~/.config/dctl/projects.yaml` and auto-building the managed image if needed. The merged config is not persisted here — it is regenerated fresh from the deployed layers under `$XDG_RUNTIME_DIR/dctl/devcontainer/python/devcontainer.json` on every `dctl ws up`/`reup`/`test`.
+Then Ana runs one command in the project:
 
-**How the team shares it:** `dctl` ships the defaults. Every teammate runs `make install`, `dctl deploy ...`, and then `dctl init --devcontainer python` inside each project. No Dockerfile to copy between repos, no per-project config to keep in sync. When the team adds a tool to the image, they update the shared Dockerfile in one place and every project picks it up on the next `dctl deploy image ...` plus `dctl image build`.
+```bash
+cd ~/projects/snackbar-api
+dctl init --devcontainer python
+```
+
+**3. Registers the current project** by writing the manifest name (`devcontainer-manifest: python`) to `~/.config/dctl/projects.yaml` and auto-building the managed image if needed. The merged config is not persisted here — it is regenerated fresh from the layers under `$XDG_RUNTIME_DIR/dctl/devcontainer/python/devcontainer.json` on every `dctl ws up`/`reup`/`test`.
+
+**How the team shares it:** `~/.config/dctl/` is just files. The team keeps it in a shared repo, and each teammate puts it in place by hand or with a dotfiles manager. Every teammate runs `make install` once and then `dctl init --devcontainer python` inside each project. No Dockerfile to copy between repos, no per-project config to keep in sync. When the team adds a tool to the image, they update the shared Dockerfile in one place and every project picks it up on the next `dctl image build`.
 
 | | Docker | Dev Container CLI | dctl |
 |---|---|---|---|
-| Manual files to write | 1 Dockerfile (~45 lines) | 1 Dockerfile + 1 JSON config | 0 |
+| Manual files to write | 1 Dockerfile (~45 lines) | 1 Dockerfile + 1 JSON config | 1 Dockerfile + 1 manifest + layers, once per user |
 | Build commands | 1 (`docker buildx build`) | 1 (`docker buildx build`) | 0 (deferred to `dctl image build`) |
-| Post-create setup | Manual — `docker exec` or custom entrypoint | Declarative — `postCreateCommand` in JSON | Pre-configured in deployed config |
+| Post-create setup | Manual — `docker exec` or custom entrypoint | Declarative — `postCreateCommand` in JSON | Declarative — `postCreateCommand` in a shared layer |
 | Per-project duplication | Yes — each repo gets its own Dockerfile | Yes — each repo gets both files | No — shared across workspaces |
-| Team onboarding | Clone repo, write/copy Dockerfile, build | Clone repo, write/copy both files, build | `make install && dctl deploy ... && dctl init --devcontainer python` |
+| Team onboarding | Clone repo, write/copy Dockerfile, build | Clone repo, write/copy both files, build | `make install`, the shared `~/.config/dctl/`, then `dctl init --devcontainer python` |
 
 ## Step 2: Start the workspace
 
 **What Ana is trying to do:** launch the container with the project mounted, credentials available, and terminal env forwarded.
 
-In Step 1 Ana prepared the image. Now she needs to configure the runtime: which directories to mount into the container, which env vars to forward, which volumes to persist. With Docker this is all CLI flags typed at run time. With devcontainers it is declared in the `devcontainer.json` file. With `dctl` it is already in the deployed config.
+In Step 1 Ana prepared the image. Now she needs to configure the runtime: which directories to mount into the container, which env vars to forward, which volumes to persist. With Docker this is all CLI flags typed at run time. With devcontainers it is declared in the `devcontainer.json` file. With `dctl` it is already in the user config from Step 1.
 
 ### Docker
 
@@ -274,21 +272,21 @@ cd ~/projects/snackbar-api
 dctl ws up
 ```
 
-The config deployed in Step 1 and registered in Step 2 already includes all the runtime configuration that Docker required as CLI flags and Dev Container CLI required as manual JSON:
+The config written and registered in Step 1 already includes all the runtime configuration that Docker required as CLI flags and Dev Container CLI required as manual JSON:
 
-- **Mounts:** `.gitconfig` (read-only), `~/.claude`, `~/.claude.json`, `/tmp` — from the shared base config — plus the runtime forge-auth seed dir dctl injects at `/run/forge-auth` (gh/glab credentials; the host config dirs themselves are never mounted). The Poetry cache volume comes from the Python template.
-- **Env vars:** `TERM` and `COLORTERM` are set in the base config.
-- **Hooks:** `pre-commit install` is configured in the Python template.
+- **Mounts:** `.gitconfig` (read-only), `~/.claude`, `~/.claude.json`, `/tmp` — from her shared `base` layer — plus the runtime forge-auth seed dir dctl injects at `/run/forge-auth` (gh/glab credentials; the host config dirs themselves are never mounted).
+- **Env vars:** `TERM` and `COLORTERM` are set in the `base` layer.
+- **Hooks:** the `postCreateCommand` comes from her `python` leaf layer.
 - **Worktrees:** `dctl ws up` automatically detects and mounts the git worktree common directory when Ana works from a linked worktree.
 - **Container identity:** keyed to the workspace path, so `~/projects/snackbar-api.fix-auth` would get its own isolated container automatically.
 
-Ana did not write any of this. It came from the deployed defaults, and she can customize any of it by editing the config files under `~/.config/dctl/devcontainer/`.
+Ana wrote this once, in Step 1, not per project, and she can change any of it by editing the config files under `~/.config/dctl/devcontainer/`.
 
 | | Docker | Dev Container CLI | dctl |
 |---|---|---|---|
-| Runtime config location | CLI flags (re-typed every run) | `devcontainer.json` (declared once) | Pre-deployed config (already done) |
+| Runtime config location | CLI flags (re-typed every run) | `devcontainer.json` (declared once) | User config (written once in Step 1) |
 | Commands to start | 2 (volume create + 15-line `docker run`) + manual setup commands | 1 (`devcontainer up`) | 1 (`dctl ws up`) |
-| Post-create hooks | None — manual `docker exec` after every creation | `postCreateCommand` in JSON | Pre-configured in deployed config |
+| Post-create hooks | None — manual `docker exec` after every creation | `postCreateCommand` in JSON | `postCreateCommand` in a shared layer |
 | Credential forwarding | Manual `$(gh auth token)` extraction | Manual `${localEnv:GH_TOKEN}` + host export | Automatic — seeded gh/glab config dirs mounted at up/exec time; no token in the container env; silently skipped if unavailable |
 | Config reuse across projects | None | None — per-project JSON | Shared across all workspaces |
 
@@ -413,14 +411,14 @@ Pain points:
 
 ### dctl
 
-This is where the composable layer model pays off. Instead of duplicating config per repo, Ana reuses shared layers and selects the template that matches each project type.
+This is where the composable layer model pays off. Instead of duplicating config per repo, Ana reuses shared layers and selects the manifest that matches each project type.
 
 ```mermaid
 graph TD
   BASE["base -- remoteUser + auth mounts + terminal env -- SHARED BY ALL"]
   DOT["dotfiles -- optional personal layer"]
-  PY["python template -- python-dev image + Poetry cache"]
-  RS["rust template -- rust-dev image + rustup/cargo caches"]
+  PY["python leaf layer -- team-python image"]
+  RS["rust leaf layer -- team-rust image + rustup/cargo caches"]
 
   BASE --> PY
   BASE --> RS
@@ -436,21 +434,21 @@ The layers:
 
 1. **`base/devcontainer.json`** is shared across all projects. It provides `remoteUser`, `containerEnv` (TERM, COLORTERM, the `/run/forge-auth` config-dir paths), and the shared mounts (`.gitconfig`, `/tmp`). Ana edits this file once at `~/.config/dctl/devcontainer/base/devcontainer.json`, and every project inherits the change.
 
-2. **Optional user layers** add personal config. For example, the [`examples/dotfiles/devcontainer.json`](../examples/dotfiles/devcontainer.json) shows editor mounts, dotfiles, and Kitty terminal vars. Ana adds a `dotfiles/` layer directory to `~/.config/dctl/devcontainer/` once and references it in her manifests — it applies to every project automatically.
+2. **Optional user layers** add personal config. For example, a `dotfiles` layer can add editor mounts, dotfiles, and terminal vars; the [examples](examples/README.md) include one. Ana adds a `dotfiles/` layer directory to `~/.config/dctl/devcontainer/` once and references it in her manifests — it applies to every project automatically.
 
 3. **Project-type layers** add specifics on top of the shared layers:
-   - `python/devcontainer.json` adds `image: "devimg/python-dev:latest"` and `postCreateCommand` with `pre-commit install`. Poetry cache is ephemeral (no volume).
-   - `rust/devcontainer.json` adds `image: "devimg/rust-dev:latest"`, three user-scoped cache volumes (`rustup-toolchains-<user>`, `cargo-registry-<user>`, `cargo-git-<user>`), and `postCreateCommand` with `cargo build` plus `pre-commit install`.
+   - `python/devcontainer.json` adds `image: "devimg/team-python:latest"` and the `postCreateCommand` of her Python projects.
+   - `rust/devcontainer.json` adds `image: "devimg/team-rust:latest"`, three user-scoped cache volumes (`rustup-toolchains-<user>`, `cargo-registry-<user>`, `cargo-git-<user>`), and the `postCreateCommand` of her Rust project.
 
-4. **Image hierarchy:** `devimg/agents:latest` is the shared foundation. `devimg/python-dev:latest` and `devimg/rust-dev:latest` both build on top of it — so the image fleet mirrors the config layering.
+4. **Image hierarchy:** Ana moves the shared part of her Dockerfile into a `team-base` image, `devimg/team-base:latest`. The Dockerfiles of `devimg/team-python:latest` and `devimg/team-rust:latest` both start `FROM devimg/team-base:latest`, and `dctl image build` builds the parent first — so the image fleet mirrors the config layering.
 
 ```mermaid
 graph LR
-  AGENTS["devimg/agents:latest -- shared tools + AI agents"]
-  PYIMG["devimg/python-dev:latest -- + Python + Poetry"]
-  RSIMG["devimg/rust-dev:latest -- + rustup + cargo"]
-  AGENTS --> PYIMG
-  AGENTS --> RSIMG
+  TBASE["devimg/team-base:latest -- shared tools + AI agents"]
+  PYIMG["devimg/team-python:latest -- + Python tooling"]
+  RSIMG["devimg/team-rust:latest -- + rustup + cargo"]
+  TBASE --> PYIMG
+  TBASE --> RSIMG
 ```
 
 Ana runs three commands for three projects:
@@ -474,7 +472,7 @@ layers:
 On each `dctl ws up`/`reup`/`test`, this merges `base/devcontainer.json`,
 `agents/devcontainer.json`, then `python/devcontainer.json` fresh into
 `$XDG_RUNTIME_DIR/dctl/devcontainer/python/devcontainer.json` (never cached).
-Both Python projects reuse the exact same deployed config layers and image. The Rust project uses a
+Both Python projects reuse the exact same config layers and image. The Rust project uses a
 different manifest (`rust.yaml` with `layers: [base, agents, rust]`) and image,
 but shares the same `base` and `agents` layers.
 
@@ -484,9 +482,9 @@ When the team adds a new shared mount, Ana edits `base` once, and every workspac
 |---|---|---|---|
 | Files across 3 projects | 3 Dockerfiles + 3 run commands/scripts | 3 Dockerfiles + 3 JSON configs | 0 per-project files |
 | Shared base config | None — duplicated in each Dockerfile | None — duplicated in each JSON | `base/devcontainer.json` (1 file, shared) |
-| Add another Python project | Copy Dockerfile + build | Copy Dockerfile + JSON + build | `dctl init --devcontainer python` (reuses deployed config) |
-| Add a Rust project | Write new Dockerfile from scratch | Write new Dockerfile + JSON from scratch | `dctl init --devcontainer rust` (reuses deployed config) |
-| Post-create hooks across 3 projects | 3 manual `docker exec` commands (per project type) | Declarative in each JSON (but duplicated) | Pre-configured in shared templates |
+| Add another Python project | Copy Dockerfile + build | Copy Dockerfile + JSON + build | `dctl init --devcontainer python` (reuses the user config) |
+| Add a Rust project | Write new Dockerfile from scratch | Write new Dockerfile + JSON from scratch | `dctl init --devcontainer rust` (reuses the user config) |
+| Post-create hooks across 3 projects | 3 manual `docker exec` commands (per project type) | Declarative in each JSON (but duplicated) | Declared once in shared layers |
 | Change a shared mount | Update 3 `docker run` commands/scripts | Update 3 JSON files | Edit `base` once |
 | Personal config (dotfiles, editor) | Add more `-v` flags per project | Duplicate in each JSON | Add a `dotfiles` layer once — applies everywhere |
 
@@ -594,7 +592,7 @@ dctl ws shell claude
 Benefits:
 
 - The agent name is just the argument — no `bash -lic` ceremony.
-- Auth mounts (`.claude`, `.claude.json`) are part of the default config deployed in Step 1.
+- Auth mounts (`.claude`, `.claude.json`) are part of the `base` layer Ana wrote in Step 1.
 - Tokens are forwarded automatically at exec time.
 - Same pattern for any agent: `dctl ws shell codex`, `dctl ws shell gemini`.
 
@@ -602,7 +600,7 @@ Benefits:
 |---|---|---|---|
 | Commands | 1 (`docker exec`) + possible lookup | 1 (`devcontainer exec`) | 1 (`dctl ws shell claude`) |
 | Requires `bash -lic` | Yes | Yes | No — handled internally |
-| Auth mounts needed at start | Must have been configured in Step 2 | Must have been configured in Step 2 | Already in default config |
+| Auth mounts needed at start | Must have been configured in Step 2 | Must have been configured in Step 2 | Already in the user config |
 
 ## Step 6: Run a command
 
@@ -750,25 +748,23 @@ Benefits:
 ### Docker
 
 ```bash
-docker buildx build --load -t devimg/agents:latest ~/dockerfiles/agents/
-docker buildx build --load -t devimg/python-dev:latest ~/dockerfiles/python-dev/
-docker buildx build --load -t devimg/rust-dev:latest ~/dockerfiles/rust-dev/
-docker buildx build --load -t devimg/zig-dev:latest ~/dockerfiles/zig-dev/
+docker buildx build --load -t devimg/team-base:latest ~/dockerfiles/team-base/
+docker buildx build --load -t devimg/team-python:latest ~/dockerfiles/team-python/
+docker buildx build --load -t devimg/team-rust:latest ~/dockerfiles/team-rust/
 ```
 
 Pain points:
 
-- Ana has to know the dependency chain and build `agents` first.
+- Ana has to know the dependency chain and build `team-base` first.
 - The number of commands grows with the number of managed images.
 - Raw Docker gives her no global orchestration for the image set.
 
 ### Dev Container CLI
 
 ```bash
-docker buildx build --load -t devimg/agents:latest ~/dockerfiles/agents/
-docker buildx build --load -t devimg/python-dev:latest ~/dockerfiles/python-dev/
-docker buildx build --load -t devimg/rust-dev:latest ~/dockerfiles/rust-dev/
-docker buildx build --load -t devimg/zig-dev:latest ~/dockerfiles/zig-dev/
+docker buildx build --load -t devimg/team-base:latest ~/dockerfiles/team-base/
+docker buildx build --load -t devimg/team-python:latest ~/dockerfiles/team-python/
+docker buildx build --load -t devimg/team-rust:latest ~/dockerfiles/team-rust/
 ```
 
 What it solves:
@@ -790,7 +786,7 @@ dctl image build --all
 If Ana only needs one target:
 
 ```bash
-dctl image build python-dev
+dctl image build team-python
 ```
 
 Benefits:
@@ -864,16 +860,16 @@ Benefits:
 
 | Step | Docker | Dev Container CLI | dctl |
 |------|--------|-------------------|------|
-| Setup (image) | 1 Dockerfile (~45 lines) + 1 build | Same Dockerfile + 1 build + 1 JSON file | 1 command, 0 manual files |
+| Setup (image) | 1 Dockerfile (~45 lines) + 1 build | Same Dockerfile + 1 build + 1 JSON file | User config once, then 1 command per project |
 | Start (runtime config) | 2 commands, 15+ lines of flags | 1 command (but ~25 lines of manual JSON first) | 1 command |
-| Scale (3 projects) | 3 Dockerfiles + 3 run commands + 3 manual hooks | 3 Dockerfiles + 3 JSON (duplicated) | 0 per-project files (shared base + templates) |
+| Scale (3 projects) | 3 Dockerfiles + 3 run commands + 3 manual hooks | 3 Dockerfiles + 3 JSON (duplicated) | 0 per-project files (shared base + leaf layers) |
 | Shell | 2 commands + visual scanning | 1 command (long flags) | 1 command |
 | Agent | 1 command + possible lookup | 1 command (long flags) | 1 command |
 | Run command | 1 command | 1 command (long flags) | 1 command |
 | Rebuild | 3 commands (15+ lines re-typed) | 1-2 commands | 1-2 commands |
 | Build images | N commands (manual order) | N commands (same) | 1 command |
 | Teardown | 2+ commands + name lookup | 1 compound Docker command | 1 command |
-| **Manual files** | **1 Dockerfile per project** | **1 Dockerfile + 1 JSON per project** | **0** |
+| **Manual files** | **1 Dockerfile per project** | **1 Dockerfile + 1 JSON per project** | **User config only, written once** |
 | **Per-project duplication** | **Yes** | **Yes (both files)** | **No** |
 
-`dctl` does not replace Docker or devcontainers — it builds on both. The value is in conventions: managed images, shared config, workspace-aware container identity, and automatic credential forwarding for GitHub (`gh`) and GitLab (`glab`) — with graceful degradation when either CLI is missing or unauthenticated. Ana writes zero boilerplate, and her teammates get the same setup with `make install && dctl init`.
+`dctl` does not replace Docker or devcontainers — it builds on both. The value is in conventions: managed images, shared config, workspace-aware container identity, and automatic credential forwarding for GitHub (`gh`) and GitLab (`glab`) — with graceful degradation when either CLI is missing or unauthenticated. Ana writes her image and layers once instead of per project, and her teammates get the same setup with `make install`, the shared `~/.config/dctl/`, and `dctl init`.

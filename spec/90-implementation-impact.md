@@ -18,13 +18,15 @@ This document records how the approved design work landed in the repository.
 
 - `lib/dctl/ws.sh` resolves config for `up` and `reup`
 - `lib/dctl/test.sh` resolves config before smoke-test validation
-- `lib/dctl/init.sh` works with deployed config and the runtime-generated merged config path (regenerated fresh, never cached)
+- `lib/dctl/init.sh` works with the user config and the runtime-generated merged config path (regenerated fresh, never cached)
 
-### Templates and Dockerfiles
+### Layers and Dockerfiles
 
-- `devcontainers/general/` and `devcontainers/coordinator/` are shipped and installed
-- `base` plus manifest-driven multi-layer merge is implemented
-- `lib/dctl/image.sh` resolves user-overridden versus installed Dockerfiles
+- `dctl` ships no image, no layer, and no manifest; `docs/examples/` holds
+  copyable examples that no command reads and `make install` does not install
+- manifest-driven multi-layer merge is implemented
+- `lib/dctl/image.sh` resolves Dockerfiles from user config only and builds
+  each managed parent before its child
 
 ### Project Registry
 
@@ -45,5 +47,5 @@ The bats suite now covers:
 ## Result
 
 The approved design was implemented across the CLI entrypoint, shell modules,
-templates, schema, and tests. The current codebase matches the architecture
+schema, and tests. The current codebase matches the architecture
 described in the implemented spec set.

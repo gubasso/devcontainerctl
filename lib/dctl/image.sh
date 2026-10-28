@@ -19,7 +19,7 @@ Commands:
   build [OPTIONS] [IMAGE...]
       Build devcontainer base images from $XDG_CONFIG_HOME/dctl/images.
       If no image is specified, launches an interactive fzf picker over
-      the deployed managed images under ~/.config/dctl/images/.
+      the managed images under ~/.config/dctl/images/.
 
       Options:
         --all              Build all discovered images
@@ -187,9 +187,9 @@ _visit_image_target() {
 
   if ! resolve_dockerfile "$name" >/dev/null 2>&1; then
     if [[ -n $child ]]; then
-      err "parent \`${name}\` of \`${child}\` is not deployed; run \`dctl deploy image ${name}\`"
+      err "parent \`${name}\` of \`${child}\` has no Dockerfile; add $(config_image_path "$name")"
     fi
-    err "Unknown image: ${name} (not seeded in ${DCTL_IMAGES_DIR})"
+    err "Unknown image: ${name} (no Dockerfile in ${DCTL_IMAGES_DIR})"
   fi
 
   _image_on_stack["$name"]=1
@@ -245,10 +245,15 @@ get_image_tag() {
   printf 'devimg/%s:latest\n' "$1"
 }
 
+# The user writes every image definition; dctl ships none.
+_image_config_hint() {
+  printf 'Add one folder per image with a Dockerfile: %s/<name>/Dockerfile (docs/examples/ in the devcontainerctl repository shows one).\n' "$DCTL_IMAGES_DIR"
+}
+
 ensure_image_dir_exists() {
   if [[ ! -d $DCTL_IMAGES_DIR ]]; then
     log "No user image config found"
-    log "Run: dctl deploy image <name> or dctl deploy --all-images"
+    log "$(_image_config_hint)"
     return 1
   fi
 }
@@ -353,14 +358,14 @@ cmd_image_build() {
   if [[ $all == true ]]; then
     mapfile -t targets < <(discover_image_targets)
     if [[ ${#targets[@]} -eq 0 ]]; then
-      err "No user image config found in $DCTL_IMAGES_DIR. Run: dctl deploy image <name> or dctl deploy --all-images"
+      err "No user image config found in $DCTL_IMAGES_DIR. $(_image_config_hint)"
     fi
   elif [[ ${#targets[@]} -eq 0 ]]; then
     local available=()
     local picked
     mapfile -t available < <(discover_image_targets)
     if [[ ${#available[@]} -eq 0 ]]; then
-      err "No user image config found in $DCTL_IMAGES_DIR. Run: dctl deploy image <name> or dctl deploy --all-images"
+      err "No user image config found in $DCTL_IMAGES_DIR. $(_image_config_hint)"
     fi
     if ! command -v fzf >/dev/null 2>&1; then
       err "fzf not found. Install fzf or specify targets explicitly."
@@ -379,8 +384,8 @@ cmd_image_build() {
   local target
   for target in "${targets[@]}"; do
     if ! resolve_dockerfile "$target" >/dev/null 2>&1; then
-      printf '\033[1;31mERROR:\033[0m Unknown image: %s (not seeded in %s)\n' "$target" "$DCTL_IMAGES_DIR" >&2
-      printf "Run: dctl deploy image <name> or dctl deploy --all-images\n" >&2
+      printf '\033[1;31mERROR:\033[0m Unknown image: %s (no Dockerfile in %s)\n' "$target" "$DCTL_IMAGES_DIR" >&2
+      printf '%s\n' "$(_image_config_hint)" >&2
       printf 'Available images:\n' >&2
       discover_image_targets | sed 's/^/  /' >&2
       exit 1
@@ -392,7 +397,8 @@ cmd_image_build() {
   local -a build_args
   build_args=(--build-arg "USERNAME=${username}" --build-arg "USER_UID=$(id -u)" --build-arg "USER_GID=$(id -g)")
 
-  # GitHub token for mise installs (avoids 60 req/hr anonymous rate limit)
+  # GitHub token for any download from GitHub in a Dockerfile (avoids the
+  # 60 req/hr anonymous rate limit)
   local -a secret_flag=()
   local gh_token_file=""
   if [[ $dry_run != true ]]; then

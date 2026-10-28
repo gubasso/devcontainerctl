@@ -58,7 +58,7 @@ Networking uses **TSI (Transparent Socket Impersonation)**: in-guest sockets are
 - No published hypervisor-escape CVEs in libkrun itself (2024–2026). The two libkrun CVEs that surfaced in 2025 were transitive Rust dependency rolls (`rust-openssl`, `crossbeam-channel`) and were patched through the normal Fedora pipeline, not VMM escapes. References: [FEDORA-2025-f8be7978e3](https://linuxsecurity.com/advisories/fedora/fedora-41-libkrun-2025-f8be7978e3-security-advisory-updates-rh8lbifoalx6), [FEDORA-2025-c53905e83d](https://linuxsecurity.com/advisories/fedora/fedora-41-libkrun-2025-c53905e83d-ohmxvt9uvrww).
 
 **Criterion 2 — enables clean UX.** This is where libkrun pulls decisively ahead.
-- `podman --runtime krun run <image>` consumes the existing `images/` OCI artifacts directly. **No rootfs builder, no kernel-image lifecycle, no in-guest agent, no containerd shim, no devmapper snapshotter.**
+- `podman --runtime krun run <image>` consumes the OCI images that `dctl image build` builds directly. **No rootfs builder, no kernel-image lifecycle, no in-guest agent, no containerd shim, no devmapper snapshotter.**
 - The runtime adapter sketched in [SPEC.md §5.5](./SPEC.md) (`lib/dctl/runtime/krun.sh`) collapses to ~80–150 lines of Bash that adds `--runtime krun` to existing Podman calls.
 - TSI eliminates the entire host-side networking plumbing class (TAP/bridge/NAT/`slirp4netns`).
 - The user-facing surface (`devcontainer.json`, manifest layers, `runtime:` field) does not change. The composition system from `schemas/compose.schema.yaml` keeps working.
@@ -127,7 +127,7 @@ gVisor is a *different* boundary (userspace kernel rather than hypervisor), used
 ### 3.2 Why it wins on macOS
 
 - **Boundary class matches the §1.1 premise.** HVF/Virtualization.framework is the macOS equivalent of KVM-class isolation. "FC-for-Mac" is an accurate analogy.
-- **OCI-native authoring surface** — same `images/` artifacts work.
+- **OCI-native authoring surface** — the same images that `dctl image build` builds work.
 - **Apple-backed maintenance.**
 - **Maturity in 2026.** v0.8.0 (Jan 2026) is described upstream as "validation of concept, usable in specific scenarios." The `dctl` use case (single agent VM, OCI image in, exec out) is exactly that narrow shape. References: [Addo Zhang — "Apple container 0.8.0: seven-month evolution from birth to maturity" (Feb 2026)](https://addozhang.medium.com/apple-container-0-8-0-seven-month-evolution-from-birth-to-maturity-1021e570bbb7), [outcoldman — "Apple container: tired of Docker" (May 2026)](https://www.outcoldman.com/blog/2026/05/02/apple-container-tired-of-docker/).
 - **Why not libkrun's HVF backend?** It exists, but as of 2026 it has documented bind-mount permission gaps relative to Apple's `applehv` driver — see [containers/podman discussion #27679](https://github.com/containers/podman/discussions/27679) and [Sergio López on macOS GPU + virtio-fs](https://sinrega.org/2024-03-06-enabling-containers-gpu-macos/). Until those close, Apple `container` is the cleaner Mac story. This explicitly resolves [SPEC.md §8 — "Cross-platform mental model"](./SPEC.md).
@@ -155,7 +155,7 @@ These were left open in [SPEC.md §8](./SPEC.md). This document closes them:
 | Final §4.1 backend choice | **libkrun via `crun --krun`** on Linux. |
 | Cross-platform mental model on macOS | **Two backends.** Apple `container` on macOS; libkrun on Linux. libkrun's HVF backend is tracked but is not yet at parity. |
 | CI parity default | **gVisor** on no-KVM CI runners; libkrun where KVM is available. |
-| Image distribution: Kata-specific or libkrun-specific build target? | **No new build target.** libkrun consumes the existing `images/` OCI artifacts unchanged via `crun --krun`. |
+| Image distribution: Kata-specific or libkrun-specific build target? | **No new build target.** libkrun consumes the OCI images that `dctl image build` builds unchanged via `crun --krun`. |
 
 These remain open and are unaffected by this decision:
 

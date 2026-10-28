@@ -5,8 +5,8 @@
 ## Purpose
 
 This document defines the implemented config resolution model used by `dctl`.
-It covers `devcontainer.json` resolution, managed asset deployment, and the
-Dockerfile resolution used by `dctl image build`.
+It covers `devcontainer.json` resolution, the user-config-only asset rule, and
+the Dockerfile resolution used by `dctl image build`.
 
 ## Goals
 
@@ -39,11 +39,9 @@ The implemented split is:
 - `~/.config/dctl/`
   - project registry
   - user defaults
-  - deployed devcontainer config
-  - user Dockerfile overrides
+  - devcontainer manifests and layers
+  - managed Dockerfiles
 - `~/.local/share/dctl/`
-  - installed templates
-  - installed managed Dockerfiles
   - schemas
 - `$XDG_RUNTIME_DIR/dctl/devcontainer/`
   - runtime-generated merged `devcontainer.json` files, regenerated fresh on
@@ -57,12 +55,15 @@ merged config honors `XDG_RUNTIME_DIR`.
 
 If files are not in `~/.config/dctl/`, they cannot be used at runtime.
 
-- Installed files under `~/.local/share/dctl/` are seed sources only
-- `dctl deploy` copies managed assets from installed data into user config
-- Runtime operations read only from user config and cache
+- `dctl` ships no image, no layer, and no manifest; `make install` installs
+  only the CLI, its shell modules, and the schemas under `~/.local/share/dctl/`
+- The user writes `~/.config/dctl/`: by hand, with a dotfiles manager, or with
+  home-manager; [`docs/examples/`](../docs/examples/README.md) shows a starting
+  point that no command reads
+- Runtime operations read only from user config
 
-This rule applies to both managed Dockerfiles and managed devcontainer
-templates.
+This rule applies to both managed Dockerfiles and devcontainer manifests and
+layers.
 
 ## Path Normalization
 
@@ -107,10 +108,10 @@ For a managed target, resolution is:
 
 1. `~/.config/dctl/images/<target>/Dockerfile`
 
-No-arg `dctl image build` presents an interactive picker over deployed managed
-images and never consults the project registry. Installed Dockerfiles are seed
-sources only and must be copied into user config by `dctl deploy image ...` or
-`dctl deploy --all-images`.
+No-arg `dctl image build` presents an interactive picker over the managed
+images in user config and never consults the project registry. A target with no
+Dockerfile there fails with guidance to add
+`~/.config/dctl/images/<name>/Dockerfile`.
 
 ## Error Handling
 

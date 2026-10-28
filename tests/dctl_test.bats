@@ -20,8 +20,6 @@ source_dctl_functions() {
   # shellcheck source=/dev/null
   source "${DCTL_LIB_DIR}/image.sh"
   # shellcheck source=/dev/null
-  source "${DCTL_LIB_DIR}/deploy.sh"
-  # shellcheck source=/dev/null
   source "${DCTL_LIB_DIR}/init.sh"
   # shellcheck source=/dev/null
   source "${DCTL_LIB_DIR}/test.sh"
@@ -29,13 +27,14 @@ source_dctl_functions() {
   source "${DCTL_LIB_DIR}/config.sh"
 }
 
-create_template_fixture() {
+# A seed that an older release installed under XDG_DATA_HOME. dctl ignores it.
+create_stale_seed_template_fixture() {
   local name="$1"
   local image="$2"
   mkdir -p "${XDG_DATA_HOME}/dctl/devcontainers/${name}"
   printf '{\n  "image": "%s"\n}\n' "$image" >"${XDG_DATA_HOME}/dctl/devcontainers/${name}/devcontainer.json"
   if [[ $name != "base" ]]; then
-    create_installed_manifest_fixture "$name" base "$name"
+    create_stale_seed_manifest_fixture "$name" base "$name"
   fi
 }
 
@@ -49,7 +48,7 @@ create_user_devcontainer_fixture() {
   fi
 }
 
-create_installed_manifest_fixture() {
+create_stale_seed_manifest_fixture() {
   local name="$1"
   shift
   mkdir -p "${XDG_DATA_HOME}/dctl/devcontainers"
@@ -86,18 +85,7 @@ create_user_base_layer_fixture() {
 USERBASE
 }
 
-create_base_template_fixture() {
-  mkdir -p "${XDG_DATA_HOME}/dctl/devcontainers/base"
-  cat >"${XDG_DATA_HOME}/dctl/devcontainers/base/devcontainer.json" <<'BASEJSON'
-{
-  "remoteUser": "testuser",
-  "init": true,
-  "shutdownAction": "none"
-}
-BASEJSON
-}
-
-create_image_fixture() {
+create_stale_seed_image_fixture() {
   local name="$1"
   mkdir -p "${XDG_DATA_HOME}/dctl/images/${name}"
   touch "${XDG_DATA_HOME}/dctl/images/${name}/Dockerfile"
@@ -116,13 +104,13 @@ create_user_image_dockerfile() {
   printf '%s\n' "$@" >"${XDG_CONFIG_HOME}/dctl/images/${name}/Dockerfile"
 }
 
-# base <- agents <- {mise, nix}, with one external base per managed image and a
+# base <- agents <- {child-a, child-b}, with one external base per managed image and a
 # multi-stage agents Dockerfile.
 create_image_family_fixture() {
   create_user_image_dockerfile base 'FROM opensuse/tumbleweed AS base'
   create_user_image_dockerfile agents 'FROM rust:1-slim AS tools' 'FROM devimg/base:latest'
-  create_user_image_dockerfile mise 'FROM devimg/agents:latest'
-  create_user_image_dockerfile nix 'FROM devimg/agents:latest'
+  create_user_image_dockerfile child-a 'FROM devimg/agents:latest'
+  create_user_image_dockerfile child-b 'FROM devimg/agents:latest'
 }
 
 dry_run_build_order() {
@@ -140,14 +128,9 @@ setup() {
   # $XDG_RUNTIME_DIR/dctl/devcontainer/<manifest>/devcontainer.json.
   export XDG_RUNTIME_DIR="${TEST_TMPDIR}/xdg-runtime"
   export WORKSPACE_FOLDER="${TEST_TMPDIR}/workspace"
-  mkdir -p "${XDG_DATA_HOME}/dctl/images" "${XDG_CONFIG_HOME}/dctl" "${XDG_RUNTIME_DIR}/dctl" "$WORKSPACE_FOLDER"
+  mkdir -p "${XDG_CONFIG_HOME}/dctl" "${XDG_RUNTIME_DIR}/dctl" "$WORKSPACE_FOLDER"
   unset DCTL_CONFIG DCTL_CLI_CONFIG 2>/dev/null || true
   source_dctl_functions
-  create_base_template_fixture
-  create_image_fixture agents
-  create_image_fixture python-dev
-  create_image_fixture rust-dev
-  create_image_fixture zig-dev
   # shellcheck disable=SC2329
   workspace_path() { printf '%s\n' "$WORKSPACE_FOLDER"; }
   # shellcheck disable=SC2329
@@ -594,15 +577,15 @@ YAML
 
   run cmd_image_build --dry-run --all
   [ "$status" -eq 0 ]
-  [ "$(dry_run_build_order "$output")" = "base agents mise nix " ]
+  [ "$(dry_run_build_order "$output")" = "base agents child-a child-b " ]
 }
 
 @test "cmd_image_build on one leaf builds its ancestors first" {
   create_image_family_fixture
 
-  run cmd_image_build --dry-run mise
+  run cmd_image_build --dry-run child-a
   [ "$status" -eq 0 ]
-  [ "$(dry_run_build_order "$output")" = "base agents mise " ]
+  [ "$(dry_run_build_order "$output")" = "base agents child-a " ]
 }
 
 @test "_image_parents reads through a --platform flag and a stage alias" {
@@ -637,13 +620,14 @@ YAML
   [[ $output == *"devimg/base:v2"* ]]
 }
 
-@test "cmd_image_build refuses a parent that is not deployed" {
-  create_user_image_dockerfile mise 'FROM devimg/asdf:latest'
+@test "cmd_image_build refuses a parent that has no Dockerfile" {
+  create_user_image_dockerfile child-a 'FROM devimg/external:latest'
 
-  run cmd_image_build --dry-run mise
+  run cmd_image_build --dry-run child-a
   [ "$status" -ne 0 ]
-  [[ $output == *"is not deployed"* ]]
-  [[ $output == *"dctl deploy image asdf"* ]]
+  [[ $output == *"parent \`external\` of \`child-a\` has no Dockerfile"* ]]
+  [[ $output == *"${XDG_CONFIG_HOME}/dctl/images/external/Dockerfile"* ]]
+  [[ $output != *"dctl deploy"* ]]
 }
 
 @test "cmd_image_build refuses a dependency cycle" {
@@ -664,7 +648,7 @@ YAML
 
   PATH="$sanitized" run cmd_image_build --dry-run --all
   [ "$status" -eq 0 ]
-  [ "$(dry_run_build_order "$output")" = "base agents mise nix " ]
+  [ "$(dry_run_build_order "$output")" = "base agents child-a child-b " ]
 }
 
 @test "cmd_image_build --full-rebuild pulls external bases and not managed parents" {
@@ -717,39 +701,16 @@ EOF
   [[ $output == *"blocked by failed parent base"* ]]
   [[ $output == *"Failed to build: base"* ]]
   assert_mock_not_called "-t devimg/agents:latest"
-  assert_mock_not_called "-t devimg/mise:latest"
-  assert_mock_not_called "-t devimg/nix:latest"
+  assert_mock_not_called "-t devimg/child-a:latest"
+  assert_mock_not_called "-t devimg/child-b:latest"
 }
 
-# bats test_tags=integration
-@test "make install puts Dockerfiles in DATA_DIR/images" {
-  local bin_dir data_home lib_dir
-  bin_dir="${TEST_TMPDIR}/bin"
-  data_home="${TEST_TMPDIR}/data-home"
-  lib_dir="${TEST_TMPDIR}/lib/dctl"
-
-  run make install \
-    BIN_DIR="$bin_dir" \
-    DATA_DIR="${data_home}/dctl" \
-    LIB_DIR="$lib_dir"
-  [ "$status" -eq 0 ]
-
-  [ -f "${lib_dir}/common.sh" ]
-  [ -f "${lib_dir}/deploy.sh" ]
-  [ -f "${data_home}/dctl/images/agents/Dockerfile" ]
-  [ -f "${data_home}/dctl/images/zig-dev/zig-zls-init" ]
-  [ -x "${data_home}/dctl/images/zig-dev/zig-zls-init" ]
-  [ -f "${data_home}/dctl/devcontainers/python/devcontainer.json" ]
-  [ -f "${data_home}/dctl/devcontainers/base/devcontainer.json" ]
-  [ -f "${data_home}/dctl/devcontainers/python.yaml" ]
-  [ -f "${data_home}/dctl/schemas/compose.schema.yaml" ]
-}
-
-@test "cmd_init errors when no devcontainers are deployed" {
+@test "cmd_init errors when the user config has no devcontainer manifest" {
   run cmd_init
   [ "$status" -ne 0 ]
-  [[ $output == *"No devcontainers deployed"* ]]
-  [[ $output == *"dctl deploy"* ]]
+  [[ $output == *"No devcontainer manifests in ${XDG_CONFIG_HOME}/dctl/devcontainer"* ]]
+  [[ $output == *"docs/examples/"* ]]
+  [[ $output != *"dctl deploy"* ]]
 }
 
 @test "cmd_init --help only documents slim flags" {
@@ -763,13 +724,13 @@ EOF
   [[ $output != *"--reset"* ]]
 }
 
-@test "cmd_init rejects unknown deployed devcontainers" {
+@test "cmd_init rejects an unknown devcontainer" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
 
   run cmd_init --devcontainer missing
   [ "$status" -ne 0 ]
-  [[ $output == *"Unknown deployed devcontainer: missing"* ]]
+  [[ $output == *"Unknown devcontainer: missing"* ]]
 }
 
 @test "cmd_test fails with init guidance when config is missing" {
@@ -820,13 +781,69 @@ EOF
 }
 
 # bats test_tags=integration
-@test "root help includes deploy, init, and test commands" {
+@test "root help lists init and test, and no deploy" {
   run env XDG_DATA_HOME="$XDG_DATA_HOME" HOME="${TEST_TMPDIR}/home" \
     bash "${BATS_TEST_DIRNAME}/../bin/dctl" help
   [ "$status" -eq 0 ]
-  [[ $output == *"deploy"* ]]
   [[ $output == *"init"* ]]
   [[ $output == *"test"* ]]
+  [[ $output != *"deploy"* ]]
+}
+
+# bats test_tags=integration
+@test "dctl deploy fails as an unknown command" {
+  run env XDG_DATA_HOME="$XDG_DATA_HOME" HOME="${TEST_TMPDIR}/home" \
+    bash "${BATS_TEST_DIRNAME}/../bin/dctl" deploy --all
+  [ "$status" -ne 0 ]
+  [[ $output == *"Unknown command group: deploy"* ]]
+}
+
+# bats test_tags=integration
+@test "make install installs bin, lib, and schemas, and no seed" {
+  local bin_dir data_dir lib_dir
+  bin_dir="${TEST_TMPDIR}/bin-install"
+  data_dir="${TEST_TMPDIR}/data-home/dctl"
+  lib_dir="${TEST_TMPDIR}/lib/dctl"
+
+  run make -C "${BATS_TEST_DIRNAME}/.." install \
+    BIN_DIR="$bin_dir" DATA_DIR="$data_dir" LIB_DIR="$lib_dir"
+  [ "$status" -eq 0 ]
+
+  [ -x "${bin_dir}/dctl" ]
+  [ -f "${lib_dir}/common.sh" ]
+  [ -f "${lib_dir}/init.sh" ]
+  [ ! -e "${lib_dir}/deploy.sh" ]
+  [ -f "${data_dir}/schemas/compose.schema.yaml" ]
+  [ -f "${data_dir}/schemas/projects.schema.yaml" ]
+  [ ! -e "${data_dir}/images" ]
+  [ ! -e "${data_dir}/devcontainers" ]
+}
+
+# bats test_tags=integration
+@test "make uninstall removes the seed files that an older release installed" {
+  local bin_dir data_dir lib_dir
+  bin_dir="${TEST_TMPDIR}/bin-install"
+  data_dir="${TEST_TMPDIR}/data-home/dctl"
+  lib_dir="${TEST_TMPDIR}/lib/dctl"
+  run make -C "${BATS_TEST_DIRNAME}/.." install \
+    BIN_DIR="$bin_dir" DATA_DIR="$data_dir" LIB_DIR="$lib_dir"
+  [ "$status" -eq 0 ]
+  # What an older release left behind.
+  mkdir -p "${data_dir}/images/agents" "${data_dir}/images/zig-dev" \
+    "${data_dir}/devcontainers/agents" "${data_dir}/devcontainers/general"
+  touch "${data_dir}/images/agents/Dockerfile" "${data_dir}/images/zig-dev/zig-zls-init" \
+    "${data_dir}/devcontainers/agents/devcontainer.json" \
+    "${data_dir}/devcontainers/agents/seccomp-bwrap.json" \
+    "${data_dir}/devcontainers/general/devcontainer.json" \
+    "${data_dir}/devcontainers/general.yaml" "${data_dir}/devcontainers/README.md" \
+    "${lib_dir}/deploy.sh"
+
+  run make -C "${BATS_TEST_DIRNAME}/.." uninstall \
+    BIN_DIR="$bin_dir" DATA_DIR="$data_dir" LIB_DIR="$lib_dir"
+  [ "$status" -eq 0 ]
+  [ ! -e "${bin_dir}/dctl" ]
+  [ ! -e "$lib_dir" ]
+  [ ! -e "$data_dir" ]
 }
 
 # bats test_tags=integration
@@ -1097,262 +1114,8 @@ MOCK
 
 # --- Deploy / init / Dockerfile resolution ---
 
-@test "cmd_deploy --help lists new subcommands and flags" {
-  run cmd_deploy --help
-  [ "$status" -eq 0 ]
-  [[ $output == *"devcontainer <name>"* ]]
-  [[ $output == *"image <name>"* ]]
-  [[ $output == *"--all"* ]]
-  [[ $output == *"--all-devcontainers"* ]]
-  [[ $output == *"--all-images"* ]]
-  [[ $output == *"--dry-run"* ]]
-  [[ $output == *"--reset"* ]]
-}
-
-@test "cmd_deploy --list shows manifest-backed devcontainer statuses" {
-  create_template_fixture python "devimg/python-dev:latest"
-  create_user_devcontainer_fixture python "devimg/python-dev:latest"
-  create_user_devcontainer_fixture custom "devimg/custom:latest"
-  create_user_image_fixture agents
-  create_user_image_fixture custom-img
-
-  run cmd_deploy --list
-  [ "$status" -eq 0 ]
-  [[ $output == *"Devcontainers:"* ]]
-  [[ $output == *"Images:"* ]]
-  [[ $output == *"deployed  python"* ]]
-  [[ $output == *"user-only  custom"* ]]
-  [[ $output == *"deployed  agents"* ]]
-  [[ $output == *"user-only  custom-img"* ]]
-  [[ $output != *$'\n  installed  base'* ]]
-}
-
-@test "cmd_deploy --list-devcontainers only lists devcontainers" {
-  create_template_fixture python "devimg/python-dev:latest"
-
-  run cmd_deploy --list-devcontainers
-  [ "$status" -eq 0 ]
-  [[ $output == *"Devcontainers:"* ]]
-  [[ $output != *"Images:"* ]]
-}
-
-@test "cmd_deploy --list-images only lists images" {
-  run cmd_deploy --list-images
-  [ "$status" -eq 0 ]
-  [[ $output == *"Images:"* ]]
-  [[ $output != *"Devcontainers:"* ]]
-}
-
-@test "cmd_deploy devcontainer copies selected manifest and managed base layer" {
-  create_template_fixture python "devimg/python-dev:latest"
-
-  run cmd_deploy devcontainer python
-  [ "$status" -eq 0 ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json" ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json" ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml" ]
-}
-
-@test "cmd_deploy image copies recursive supporting files and preserves executable bits" {
-  create_image_fixture zig-dev
-  printf 'FROM alpine\n' >"${XDG_DATA_HOME}/dctl/images/zig-dev/Dockerfile"
-  mkdir -p "${XDG_DATA_HOME}/dctl/images/zig-dev/hooks"
-  printf '#!/usr/bin/env bash\nexit 0\n' >"${XDG_DATA_HOME}/dctl/images/zig-dev/hooks/bootstrap.sh"
-  chmod 755 "${XDG_DATA_HOME}/dctl/images/zig-dev/hooks/bootstrap.sh"
-
-  run cmd_deploy image zig-dev
-  [ "$status" -eq 0 ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/images/zig-dev/Dockerfile" ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/images/zig-dev/hooks/bootstrap.sh" ]
-  [ -x "${XDG_CONFIG_HOME}/dctl/images/zig-dev/hooks/bootstrap.sh" ]
-}
-
-@test "cmd_deploy skips existing leaf layer files by default" {
-  create_template_fixture python "devimg/python-dev:latest"
-  mkdir -p "${XDG_CONFIG_HOME}/dctl/devcontainer/python"
-  printf '{"image":"custom"}\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json"
-
-  run cmd_deploy devcontainer python
-  [ "$status" -eq 0 ]
-  [ "$(jq -r '.image' "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json")" = "custom" ]
-  [[ $output == *"skipped devcontainer 'python'"* ]]
-}
-
-@test "cmd_deploy --reset backs up and overwrites shipped files but preserves user-only siblings" {
-  create_image_fixture agents
-  printf 'FROM installed\n' >"${XDG_DATA_HOME}/dctl/images/agents/Dockerfile"
-  mkdir -p "${XDG_CONFIG_HOME}/dctl/images/agents"
-  printf 'FROM custom\n' >"${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile"
-  printf 'notes\n' >"${XDG_CONFIG_HOME}/dctl/images/agents/notes.txt"
-
-  run cmd_deploy image agents --reset
-  [ "$status" -eq 0 ]
-  [ "$(cat "${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile")" = "FROM installed" ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/images/agents/notes.txt" ]
-  [ "$(cat "${XDG_CONFIG_HOME}/dctl/images/agents/notes.txt")" = "notes" ]
-  # Backup must live next to the original (same parent dir), not somewhere else.
-  local backups
-  backups=("${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile.bak."*)
-  [ "${#backups[@]}" -eq 1 ]
-  [ -f "${backups[0]}" ]
-  [ "$(cat "${backups[0]}")" = "FROM custom" ]
-  # Backup timestamp suffix must match `date -u '+%Y-%m-%dT%H-%M-%SZ'` exactly.
-  local suffix="${backups[0]##*Dockerfile.bak.}"
-  [[ $suffix =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z$ ]]
-  # No stray backups in unrelated directories.
-  run ! compgen -G "${XDG_CONFIG_HOME}/dctl/images/agents/notes.txt.bak.*"
-}
-
-@test "cmd_deploy --reset backs up managed shared layers before overwriting" {
-  create_template_fixture python "devimg/python-dev:latest"
-  run cmd_deploy devcontainer python
-  [ "$status" -eq 0 ]
-  printf '{"remoteUser":"drifted"}\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json"
-
-  run cmd_deploy devcontainer python --reset
-  [ "$status" -eq 0 ]
-  [ "$(jq -r '.remoteUser' "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json")" = "testuser" ]
-  local internal_backups
-  internal_backups=("${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json.bak."*)
-  [ "${#internal_backups[@]}" -eq 1 ]
-  [ -f "${internal_backups[0]}" ]
-  [ "$(jq -r '.remoteUser' "${internal_backups[0]}")" = "drifted" ]
-  local suffix="${internal_backups[0]##*devcontainer.json.bak.}"
-  [[ $suffix =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z$ ]]
-}
-
-@test "cmd_deploy reconciles drifted manifest file without reset" {
-  create_template_fixture python "devimg/python-dev:latest"
-
-  run cmd_deploy devcontainer python
-  [ "$status" -eq 0 ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml" ]
-
-  # Drift the deployed manifest
-  printf 'layers:\n  - base\n  - python\n  - extra\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml"
-
-  run cmd_deploy devcontainer python
-  [ "$status" -eq 0 ]
-  # Manifest should be reconciled (overwritten) back to installed version
-  local deployed_layers installed_layers
-  deployed_layers="$(yq eval '.layers | length' "${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml")"
-  installed_layers="$(yq eval '.layers | length' "${XDG_DATA_HOME}/dctl/devcontainers/python.yaml")"
-  [ "$deployed_layers" -eq "$installed_layers" ]
-  [[ $output == *"reconciled"* ]]
-  # No backup created without --reset
-  run bash -lc "compgen -G '${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml.bak.*' >/dev/null"
-  [ "$status" -ne 0 ]
-}
-
-@test "cmd_deploy --reset backs up drifted manifest file" {
-  create_template_fixture python "devimg/python-dev:latest"
-
-  run cmd_deploy devcontainer python
-  [ "$status" -eq 0 ]
-
-  # Drift the deployed manifest
-  printf 'layers:\n  - base\n  - python\n  - extra\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml"
-
-  run cmd_deploy devcontainer python --reset
-  [ "$status" -eq 0 ]
-  # Manifest should be overwritten
-  local deployed_layers installed_layers
-  deployed_layers="$(yq eval '.layers | length' "${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml")"
-  installed_layers="$(yq eval '.layers | length' "${XDG_DATA_HOME}/dctl/devcontainers/python.yaml")"
-  [ "$deployed_layers" -eq "$installed_layers" ]
-  # Backup must exist
-  local backups
-  backups=("${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml.bak."*)
-  [ "${#backups[@]}" -eq 1 ]
-  [ -f "${backups[0]}" ]
-}
-
-@test "cmd_deploy reconciles managed shared layer drift without reset" {
-  create_template_fixture python "devimg/python-dev:latest"
-
-  run cmd_deploy devcontainer python
-  [ "$status" -eq 0 ]
-
-  printf '{"remoteUser":"drifted"}\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json"
-
-  run cmd_deploy devcontainer python
-  [ "$status" -eq 0 ]
-  [ "$(jq -r '.remoteUser' "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json")" = "testuser" ]
-  run bash -lc "compgen -G '${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json.bak.*' >/dev/null"
-  [ "$status" -ne 0 ]
-}
-
-@test "cmd_deploy --dry-run prints actions and changes nothing" {
-  create_template_fixture python "devimg/python-dev:latest"
-
-  run cmd_deploy devcontainer python --dry-run
-  [ "$status" -eq 0 ]
-  [[ $output == *"CREATE"* ]]
-  # Zero filesystem mutations: no target file, no parent dir, no managed shared-layer deploy,
-  # no backups, no temp artifacts anywhere under the user config dir.
-  [ ! -e "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json" ]
-  [ ! -e "${XDG_CONFIG_HOME}/dctl/devcontainer/python" ]
-  [ ! -e "${XDG_CONFIG_HOME}/dctl/devcontainer/base" ]
-  [ ! -e "${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml" ]
-  run ! compgen -G "${XDG_CONFIG_HOME}/dctl/devcontainer/**/*.bak.*"
-  run ! compgen -G "${XDG_CONFIG_HOME}/dctl/**/*.tmp"
-}
-
-@test "cmd_deploy --dry-run on existing deploy creates no backups or temp files" {
-  create_template_fixture python "devimg/python-dev:latest"
-  run cmd_deploy devcontainer python
-  [ "$status" -eq 0 ]
-  printf '{"remoteUser":"drifted"}\n' >"${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json"
-
-  run cmd_deploy devcontainer python --dry-run
-  [ "$status" -eq 0 ]
-  # Drifted managed shared-layer file untouched, no backups created.
-  [ "$(jq -r '.remoteUser' "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json")" = "drifted" ]
-  run ! compgen -G "${XDG_CONFIG_HOME}/dctl/devcontainer/base/*.bak.*"
-  run ! compgen -G "${XDG_CONFIG_HOME}/dctl/devcontainer/python/*.bak.*"
-}
-
-@test "cmd_deploy rejects --dry-run with --reset" {
-  run cmd_deploy image agents --dry-run --reset
-  [ "$status" -ne 0 ]
-  [[ $output == *"Cannot use --dry-run with --reset"* ]]
-}
-
-@test "cmd_deploy --all deploys both categories and managed shared layers" {
-  create_template_fixture python "devimg/python-dev:latest"
-  printf 'FROM alpine\n' >"${XDG_DATA_HOME}/dctl/images/agents/Dockerfile"
-
-  run cmd_deploy --all
-  [ "$status" -eq 0 ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json" ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json" ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml" ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile" ]
-}
-
-@test "cmd_deploy --all-devcontainers deploys selectable manifests and managed shared layers only" {
-  create_template_fixture python "devimg/python-dev:latest"
-  printf 'FROM alpine\n' >"${XDG_DATA_HOME}/dctl/images/agents/Dockerfile"
-
-  run cmd_deploy --all-devcontainers
-  [ "$status" -eq 0 ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json" ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python/devcontainer.json" ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/python.yaml" ]
-  [ ! -e "${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile" ]
-}
-
-@test "cmd_deploy --all-images deploys images only" {
-  printf 'FROM alpine\n' >"${XDG_DATA_HOME}/dctl/images/agents/Dockerfile"
-
-  run cmd_deploy --all-images
-  [ "$status" -eq 0 ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/images/agents/Dockerfile" ]
-  [ ! -e "${XDG_CONFIG_HOME}/dctl/devcontainer/base/devcontainer.json" ]
-}
-
-@test "resolve_dockerfile fails when only installed image exists" {
-  create_image_fixture agents
+@test "resolve_dockerfile fails when only a stale seed image exists" {
+  create_stale_seed_image_fixture agents
 
   run resolve_dockerfile agents
   [ "$status" -ne 0 ]
@@ -1373,7 +1136,7 @@ MOCK
 
 @test "discover_image_targets includes user image targets" {
   create_user_image_fixture custom-img
-  create_image_fixture agents
+  create_stale_seed_image_fixture agents
 
   run discover_image_targets
   [ "$status" -eq 0 ]
@@ -1381,8 +1144,8 @@ MOCK
   [[ $output != *"agents"* ]]
 }
 
-@test "discover_image_targets ignores installed-only targets" {
-  create_image_fixture agents
+@test "discover_image_targets ignores stale seed images" {
+  create_stale_seed_image_fixture agents
 
   run discover_image_targets
   [ "$status" -eq 0 ]
@@ -1445,29 +1208,6 @@ YAML
   run discover_config_layers broken
   [ "$status" -ne 0 ]
   [[ $output == *"Layer 'missing' referenced in manifest 'broken' not found"* ]]
-}
-
-@test "cmd_deploy errors when manifest references layer with missing devcontainer.json" {
-  # Create manifest referencing a layer whose directory exists but has no devcontainer.json
-  create_installed_manifest_fixture broken base empty-layer
-  create_base_template_fixture
-  mkdir -p "${XDG_DATA_HOME}/dctl/devcontainers/empty-layer"
-  # No devcontainer.json in empty-layer
-
-  run cmd_deploy devcontainer broken
-  [ "$status" -ne 0 ]
-  [[ $output == *"devcontainer.json not found"* ]]
-  [[ $output == *"empty-layer"* ]]
-}
-
-@test "cmd_deploy errors when manifest references nonexistent layer directory" {
-  create_installed_manifest_fixture broken base nonexistent
-  create_base_template_fixture
-
-  run cmd_deploy devcontainer broken
-  [ "$status" -ne 0 ]
-  [[ $output == *"installed directory not found"* ]]
-  [[ $output == *"nonexistent"* ]]
 }
 
 @test "discover_config_layers errors when manifest is missing" {
@@ -1543,45 +1283,6 @@ JSON
   [ "$(jq -r '.mounts[1].target' "$deployed")" = "/top" ]
 }
 
-@test "cmd_deploy general deploys agents seccomp asset and merged runArgs reference it" {
-  create_base_template_fixture
-  mkdir -p "${XDG_DATA_HOME}/dctl/devcontainers/agents"
-  cat >"${XDG_DATA_HOME}/dctl/devcontainers/agents/devcontainer.json" <<'JSON'
-{
-  "runArgs": [
-    "--security-opt",
-    "seccomp=${localEnv:HOME}/.config/dctl/devcontainer/agents/seccomp-bwrap.json",
-    "--security-opt",
-    "apparmor=unconfined",
-    "--security-opt",
-    "systempaths=unconfined"
-  ]
-}
-JSON
-  printf '{ "defaultAction": "SCMP_ACT_ALLOW" }\n' >"${XDG_DATA_HOME}/dctl/devcontainers/agents/seccomp-bwrap.json"
-  mkdir -p "${XDG_DATA_HOME}/dctl/devcontainers/general"
-  cat >"${XDG_DATA_HOME}/dctl/devcontainers/general/devcontainer.json" <<'JSON'
-{
-  "image": "devimg/agents:latest"
-}
-JSON
-  create_installed_manifest_fixture general base agents general
-
-  run cmd_deploy devcontainer general
-  [ "$status" -eq 0 ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/agents/devcontainer.json" ]
-  [ -f "${XDG_CONFIG_HOME}/dctl/devcontainer/agents/seccomp-bwrap.json" ]
-
-  run generate_devcontainer general
-  [ "$status" -eq 0 ]
-
-  local deployed
-  deployed="$(devcontainer_generated_path_for_manifest general)"
-  [ -f "$deployed" ]
-  # shellcheck disable=SC2016 # ${localEnv:HOME} is a devcontainer.json variable; must NOT be shell-expanded
-  [ "$(jq -r '.runArgs[1]' "$deployed")" = 'seccomp=${localEnv:HOME}/.config/dctl/devcontainer/agents/seccomp-bwrap.json' ]
-}
-
 @test "generate_devcontainer regenerates a fresh artifact every call" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
@@ -1602,8 +1303,8 @@ JSON
   [ "$(jq -r '.name' "$deployed")" = "edited" ]
 }
 
-@test "cmd_init reads only user config and ignores installed templates" {
-  create_template_fixture python "devimg/rust-dev:latest"
+@test "cmd_init reads only user config and ignores stale seed templates" {
+  create_stale_seed_template_fixture python "devimg/rust-dev:latest"
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
   create_user_image_fixture python-dev
@@ -1617,13 +1318,13 @@ JSON
   [ "$(jq -r '.image' "$(devcontainer_generated_path_for_manifest python)")" = "devimg/python-dev:latest" ]
 }
 
-@test "cmd_init errors when managed image Dockerfile is not deployed" {
+@test "cmd_init errors when a managed image has no Dockerfile" {
   create_user_base_layer_fixture
   create_user_devcontainer_fixture python "devimg/python-dev:latest"
 
   run cmd_init --devcontainer python
   [ "$status" -ne 0 ]
-  [[ $output == *"Image 'python-dev' is not deployed"* ]]
+  [[ $output == *"Image 'python-dev' has no Dockerfile. Add ${XDG_CONFIG_HOME}/dctl/images/python-dev/Dockerfile"* ]]
 }
 
 @test "cmd_init calls cmd_image_build when managed image is missing locally" {

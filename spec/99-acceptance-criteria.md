@@ -5,13 +5,13 @@
 ## Purpose
 
 This document records the cross-cutting scenarios that define the implemented
-config-resolution and template-system behavior.
+config-resolution and layer-system behavior.
 
 The current bats suite covers the main acceptance areas:
 
 - config precedence and error handling
 - registry parsing, validation, and sibling-discovery opt-out
-- template discovery, merge behavior, and fresh regeneration on every command
+- manifest discovery, merge behavior, and fresh regeneration on every command
 - Dockerfile hierarchy behavior
 - install and systemd integration paths
 
@@ -74,7 +74,7 @@ Expected result:
 Scenario:
 
 - `~/.config/dctl/projects.yaml` exists
-- It contains an entry for the canonical project with `devcontainer-manifest: python`
+- It contains an entry for the canonical project with `devcontainer-manifest: example`
 - User runs `dctl ws up` from a matching workspace
 
 Expected result:
@@ -82,30 +82,30 @@ Expected result:
 - The registry entry is used
 - The local workspace file is ignored for this command
 
-### 6. Installed template discovery
+### 6. Manifest discovery
 
 Scenario:
 
-- `~/.local/share/dctl/devcontainers/python/devcontainer.json` exists
-- User runs `dctl deploy --list-devcontainers`
+- `~/.config/dctl/devcontainer/example.yaml` exists
+- User runs `dctl init` in a TTY with `fzf` available
 
 Expected result:
 
-- `python` appears in the deploy list
-- Discovery is based on installed templates only
+- `example` appears in the picker
+- Discovery is based on the manifests in user config only
 
-### 7. Coordinator template
+### 7. Leaf layer mounts
 
 Scenario:
 
-- User runs `dctl init --devcontainer coordinator`
+- The user's `example` leaf layer declares a read-only mount
+- User runs `dctl init --devcontainer example`
 
 Expected result:
 
 - The generated merged config at
-  `$XDG_RUNTIME_DIR/dctl/devcontainer/coordinator/devcontainer.json` contains the
-  parent-area read-only mount from the `coordinator` template and the shared
-  mounts from `base`
+  `$XDG_RUNTIME_DIR/dctl/devcontainer/example/devcontainer.json` contains the
+  read-only mount from the `example` layer and the shared mounts from `base`
 
 ### 8. Resolution logging
 
@@ -147,39 +147,39 @@ Expected result:
 
 Scenario:
 
-- `~/.config/dctl/images/agents/Dockerfile` exists
-- User runs `dctl image build agents`
+- `~/.config/dctl/images/example/Dockerfile` exists
+- User runs `dctl image build example`
 
 Expected result:
 
 - The user Dockerfile is used
-- Installed files are not consulted at runtime
+- No file outside `~/.config/dctl/images/` is consulted
 
 ### 12. Image build target selection
 
 Scenario:
 
-- `~/.config/dctl/images/agents/Dockerfile` exists
-- User runs `dctl image build agents`
+- `~/.config/dctl/images/example/Dockerfile` exists
+- User runs `dctl image build example`
 
 Expected result:
 
-- `devimg/agents:latest` is built from the deployed managed Dockerfile
+- `devimg/example:latest` is built from the user's Dockerfile
 
 Scenario:
 
-- `~/.config/dctl/images/agents/Dockerfile` exists
+- `~/.config/dctl/images/example/Dockerfile` exists
 - User runs `dctl image build` in a TTY with `fzf` available
 
 Expected result:
 
-- `dctl` presents a picker over deployed managed images from
+- `dctl` presents a picker over the managed images in
   `~/.config/dctl/images/`
 - `projects.yaml` is not consulted
 
 Scenario:
 
-- `~/.config/dctl/images/agents/Dockerfile` exists
+- `~/.config/dctl/images/example/Dockerfile` exists
 - User runs `dctl image build` with no args and `fzf` is missing
 
 Expected result:
@@ -188,7 +188,7 @@ Expected result:
 
 Scenario:
 
-- `~/.config/dctl/images/agents/Dockerfile` exists
+- `~/.config/dctl/images/example/Dockerfile` exists
 - User runs `dctl image build` with no args and stdin is not a TTY
 
 Expected result:
@@ -211,30 +211,30 @@ Expected result:
 
 Scenario:
 
-- User runs `dctl init --devcontainer python`
+- User runs `dctl init --devcontainer example`
 
 Expected result:
 
 - The generated merged config contains all shared settings from `base`
-- The generated merged config contains Python-specific settings from the selected leaf layer
+- The generated merged config contains the settings of the selected leaf layer
 
-### 16. General manifest merge
+### 16. Later layer wins for scalar fields
 
 Scenario:
 
-- User runs `dctl init --devcontainer general`
+- `base` and the `example` leaf layer both set `name`
+- User runs `dctl init --devcontainer example`
 
 Expected result:
 
 - The generated merged config contains all shared settings from `base`
-- The generated merged config contains the general leaf layer's `name`, `image`, and
-  pre-commit bootstrap
+- The generated merged config contains the leaf layer's `name` and `image`
 
 ### 17. Config edits apply on the next command
 
 Scenario:
 
-- User runs `dctl init --devcontainer python`
+- User runs `dctl init --devcontainer example`
 - User edits `~/.config/dctl/devcontainer/base/devcontainer.json`
 - User runs `dctl ws reup` (no `dctl init` re-run)
 
@@ -249,7 +249,7 @@ Scenario:
 
 - `~/.config/dctl/projects.yaml` has a legacy `devcontainer:` entry for the
   project
-- User runs `dctl init --devcontainer python`
+- User runs `dctl init --devcontainer example`
 
 Expected result:
 
@@ -261,7 +261,7 @@ Expected result:
 
 Scenario:
 
-- User runs `dctl init --devcontainer python`
+- User runs `dctl init --devcontainer example`
 - User edits `~/.config/dctl/devcontainer/base/devcontainer.json`
 - User runs `dctl ws reup`
 
@@ -270,18 +270,18 @@ Expected result:
 - The user's edit is preserved and merged into the freshly regenerated config
 - No `dctl init` re-run is required to pick up the edit
 
-### 20. User edits a template config
+### 20. User edits a leaf layer
 
 Scenario:
 
-- User runs `dctl init --devcontainer python`
-- User edits `~/.config/dctl/devcontainer/python/devcontainer.json`
+- User runs `dctl init --devcontainer example`
+- User edits `~/.config/dctl/devcontainer/example/devcontainer.json`
 - User runs `dctl init` again
 
 Expected result:
 
-- The user's edited template config is preserved
-- The generated merged config reflects the user's custom template settings merged with
+- The user's edited leaf layer is preserved
+- The generated merged config reflects the user's custom leaf settings merged with
   `base`
 
 ### 21. Generated-output deletion is safe
@@ -289,7 +289,7 @@ Expected result:
 Scenario:
 
 - User deletes `$XDG_RUNTIME_DIR/dctl/` entirely
-- User runs `dctl init --devcontainer python`
+- User runs `dctl init --devcontainer example`
 
 Expected result:
 
@@ -300,19 +300,19 @@ Expected result:
 
 Scenario:
 
-- Docker image is built from `images/agents/Dockerfile`
+- Docker image is built from `~/.config/dctl/images/example/Dockerfile`
 
 Expected result:
 
-- Shared devcontainer config lives in templates, not in the Dockerfile
+- Shared devcontainer config lives in devcontainer layers, not in the Dockerfile
 - The Dockerfile focuses on image construction only
 
 ### 23. Shared layers are excluded from config discovery
 
 Scenario:
 
-- `~/.local/share/dctl/devcontainers/base/devcontainer.json` exists
-- User runs `dctl deploy --list-devcontainers`
+- `~/.config/dctl/devcontainer/base/devcontainer.json` exists
+- User runs `dctl init` in a TTY with `fzf` available
 
 Expected result:
 
@@ -328,86 +328,85 @@ Scenario:
 
 Expected result:
 
-- Files are written only to installed data/bin/lib locations
+- Files are written only to the bin, lib, and schema locations
+- No image, layer, or manifest is installed
 - No files are written to `~/.config/dctl/` or the runtime generated dir
 
-### 25. `deploy --list` shows deployment state for both categories
+### 25. `dctl deploy` is gone
 
 Scenario:
 
-- User runs `dctl deploy --list`
+- User runs `dctl deploy`
 
 Expected result:
 
-- Output is grouped into devcontainers and images
-- Each listed entry is marked as `installed`, `deployed`, or `user-only`
-- Shared layers without manifests are excluded
+- `dctl` fails with `Unknown command group: deploy`
 
-### 26. `deploy devcontainer` seeds user config
+### 26. `make uninstall` removes legacy seed files
 
 Scenario:
 
-- User runs `dctl deploy devcontainer python`
+- An older release left Dockerfiles under `~/.local/share/dctl/images/` and
+  manifests and layers under `~/.local/share/dctl/devcontainers/`
+- User runs `make uninstall`
 
 Expected result:
 
-- `~/.config/dctl/devcontainer/python/` is created
-- `~/.config/dctl/devcontainer/python.yaml` is deployed
-- all non-leaf layers referenced by the installed manifest are also deployed
-- the project registry is unchanged
+- Those files and their empty folders are removed
+- Nothing under `~/.config/dctl/` is touched
 
-### 27. `deploy --reset` backs up and overwrites shipped files
+### 27. Image build with no Dockerfile
 
 Scenario:
 
-- `~/.config/dctl/images/python-dev/Dockerfile` exists and differs from the
-  installed copy
-- User runs `dctl deploy image python-dev --reset`
+- `~/.config/dctl/images/` holds no `<name>/Dockerfile`
+- User runs `dctl image build --all`
 
 Expected result:
 
-- The existing file is backed up to `Dockerfile.bak.<UTC-ISO-DATE>`
-- The shipped Dockerfile is copied into place
-- user-only neighboring files are untouched
+- `dctl` fails with guidance to add one folder per image with a Dockerfile,
+  `~/.config/dctl/images/<name>/Dockerfile`, pointing at `docs/examples/` in
+  the devcontainerctl repository
 
-### 28. `init` registers from deployed config only
+### 28. `init` registers from user config only
 
 Scenario:
 
-- `~/.config/dctl/devcontainer/python/devcontainer.json` exists
-- `~/.config/dctl/images/python-dev/Dockerfile` exists
-- User runs `dctl init --devcontainer python`
+- `~/.config/dctl/devcontainer/example/devcontainer.json` exists
+- `~/.config/dctl/images/example/Dockerfile` exists
+- User runs `dctl init --devcontainer example`
 
 Expected result:
 
 - The merged config is generated from user config
-- The project registry stores the manifest name (`devcontainer-manifest: python`)
-- The merged config is generated fresh under `$XDG_RUNTIME_DIR/dctl/devcontainer/python/devcontainer.json` (never cached)
+- The project registry stores the manifest name (`devcontainer-manifest: example`)
+- The merged config is generated fresh under `$XDG_RUNTIME_DIR/dctl/devcontainer/example/devcontainer.json` (never cached)
 - The registry does not store image-selection duplication from `init`
 - The registry does not store paths
 
-### 29. `init` errors when nothing is deployed
+### 29. `init` errors when there is no manifest
 
 Scenario:
 
-- `~/.config/dctl/devcontainer/` has no selectable deployed devcontainers
+- `~/.config/dctl/devcontainer/` has no manifest
 - User runs `dctl init`
 
 Expected result:
 
-- `dctl` fails with guidance to run `dctl deploy`
+- `dctl` fails with guidance to add `<name>.yaml` and its layer folders there,
+  pointing at `docs/examples/` in the devcontainerctl repository
 
 ### 30. `init` auto-builds missing managed images
 
 Scenario:
 
-- `~/.config/dctl/devcontainer/python/devcontainer.json` references
-  `devimg/python-dev:latest`
-- `~/.config/dctl/images/python-dev/Dockerfile` exists
-- `docker image inspect devimg/python-dev:latest` fails
-- User runs `dctl init --devcontainer python`
+- `~/.config/dctl/devcontainer/example/devcontainer.json` references
+  `devimg/example:latest`
+- `~/.config/dctl/images/example/Dockerfile` exists
+- `docker image inspect devimg/example:latest` fails
+- User runs `dctl init --devcontainer example`
 
 Expected result:
 
-- `dctl` automatically runs `dctl image build python-dev`
+- `dctl` automatically runs `dctl image build example`
 - registry registration and the smoke test proceed after a successful build

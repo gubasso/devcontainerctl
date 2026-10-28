@@ -213,7 +213,7 @@ build_workspace_image_if_managed() {
       (cmd_image_build "$target")
       return $?
     fi
-    warn "Managed image '$image' not deployed. Run: dctl deploy image ${target} or dctl deploy --all-images"
+    warn "Managed image '$image' has no Dockerfile. Add $(config_image_path "$target")"
     return 1
   fi
 

@@ -28,8 +28,8 @@ This section is load-bearing for the rest of the spec. Every later decision must
 ### 1.1 Functional premises (what the sandbox must achieve)
 
 - **Hardware-virtualization boundary against adversarial code.** A serious attempt at host compromise must require a hypervisor-class bug, not a routine syscall trick or a known kernel CVE. Anything weaker than a KVM-class boundary (or platform-equivalent: Apple Virtualization.framework) is unacceptable as the *primary* isolation, regardless of how cleanly it integrates.
-- **Cross-platform.** Linux is the primary target (openSUSE in particular, given the project's image base). macOS is a first-class secondary target. Windows is best-effort via WSL2.
-- **OCI-image-driven authoring surface.** The existing `images/` Dockerfile flow and `devcontainer.json` schema are the user-authoring surface. The runtime swap may convert OCI images into other formats internally (rootfs tarballs, ext4, etc.); the user never authors anything other than OCI/devcontainer artifacts.
+- **Cross-platform.** Linux is the primary target (openSUSE in particular, given the base of the images that the project shipped). macOS is a first-class secondary target. Windows is best-effort via WSL2.
+- **OCI-image-driven authoring surface.** The Dockerfile flow of `dctl image build` (the user's `~/.config/dctl/images/<name>/Dockerfile`) and the `devcontainer.json` schema are the user-authoring surface. The runtime swap may convert OCI images into other formats internally (rootfs tarballs, ext4, etc.); the user never authors anything other than OCI/devcontainer artifacts.
 - **Acceptable cold-start.** A few hundred milliseconds to a few seconds for `dctl ws up`. Sub-second is preferred; multi-second is the upper bound for laptop ergonomics.
 
 ### 1.2 Security goals
@@ -85,21 +85,21 @@ Rootless mode reduces *blast radius* (escape lands as the invoking user instead 
 
 ### 2.2 Configured posture
 
-Reading `devcontainers/base/devcontainer.json:1-33` and `devcontainers/agents/devcontainer.json:106-134`:
+Reading the `base` and `agents` layers and the `agents` image that dctl shipped when this audit ran. dctl now ships no image, no layer, and no manifest: the user writes them in `~/.config/dctl/`, so the posture below is that of a user config built the same way. The `base` and `agents` layers of [docs/examples/](../../examples/README.md) are a starting point:
 
-- **Not privileged.** No `privileged: true`, no extra capabilities. Repository-wide `grep -rn "privileged|cap-add|docker.sock|userns"` returns no `--privileged`, no Docker-socket mount, no `--cap-add`. The "Docker is unsafe because of `--privileged`" critique does not apply to this project as currently shipped.
-- **Runs as a non-root user.** `images/agents/Dockerfile:77-86` creates `$USERNAME` with UID/GID matched to the host at build time; `base/devcontainer.json:2` sets `remoteUser`. The container is non-root from PID 1 onward.
-- **Sudo is narrowed but not eliminated.** `images/agents/Dockerfile:85` allows passwordless `sudo /usr/bin/zypper` only. Defense-in-depth, not a hard boundary: a crafted local RPM with a `%post` script still gains root inside the container (`docs/ARCHITECTURE.md:1087`).
-- **Custom seccomp profile, weaker than Docker's default.** `devcontainers/agents/seccomp-bwrap.json` is **default-allow** with explicit `EPERM` denies on ~20 high-risk syscalls (`bpf`, `userfaultfd`, `perf_event_open`, `keyctl`, `kexec_*`, `init_module`, `iopl/ioperm`, `swapon`, `reboot`, `syslog`, plus legacy syscalls). The profile's `_meta` block is honest about the trade-off: it exists so `bwrap` (Codex CLI's inner sandbox) can `unshare(CLONE_NEWUSER)` without being blocked. This is materially weaker than the upstream moby default-deny baseline.
-- **AppArmor and `/proc` masking are off.** `devcontainers/agents/devcontainer.json:108-110` sets `apparmor=unconfined` and `systempaths=unconfined` for the same `bwrap` reason: `bwrap` probes `/proc/sys/kernel/unprivileged_userns_clone` and bails if masked. This removes a layer that has historically blunted real-world Linux LPEs.
-- **No user-namespace remap.** `updateRemoteUserUID: false` in `base/devcontainer.json:3`; the host UID is mapped 1-to-1 inside the container. There is no `userns=auto`, no rootless Docker, no `userns-remap`.
-- **Bind mounts that matter:** `~/.gitconfig` (RO), the forge-auth seed dir at `/run/forge-auth` (live gh/glab tokens, no refresh material — the host `~/.config/gh`/`~/.config/glab-cli` dirs are no longer mounted), `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.gemini`, **`/tmp` host bind**, plus `coordinator/devcontainer.json:4-10` mounting `~/Projects` read-only. The agent CLI configuration directories contain **OAuth refresh tokens** (Claude session). Anything inside the container that can read files-as-user can exfiltrate them.
+- **Not privileged.** No `privileged: true`, no extra capabilities. Repository-wide `grep -rn "privileged|cap-add|docker.sock|userns"` returns no `--privileged`, no Docker-socket mount, no `--cap-add`. The "Docker is unsafe because of `--privileged`" critique does not apply to this configuration as audited.
+- **Runs as a non-root user.** The audited image creates `$USERNAME` with UID/GID matched to the host at build time; the `base` layer sets `remoteUser`. The container is non-root from PID 1 onward.
+- **Sudo is narrowed but not eliminated.** The audited image allows passwordless `sudo /usr/bin/zypper` only. Defense-in-depth, not a hard boundary: a crafted local RPM with a `%post` script still gains root inside the container (`docs/ARCHITECTURE.md:1087`).
+- **Custom seccomp profile, weaker than Docker's default.** The `seccomp-bwrap.json` profile of the `agents` layer is **default-allow** with explicit `EPERM` denies on ~20 high-risk syscalls (`bpf`, `userfaultfd`, `perf_event_open`, `keyctl`, `kexec_*`, `init_module`, `iopl/ioperm`, `swapon`, `reboot`, `syslog`, plus legacy syscalls). The profile's `_meta` block is honest about the trade-off: it exists so `bwrap` (Codex CLI's inner sandbox) can `unshare(CLONE_NEWUSER)` without being blocked. This is materially weaker than the upstream moby default-deny baseline.
+- **AppArmor and `/proc` masking are off.** The `agents` layer sets `apparmor=unconfined` and `systempaths=unconfined` for the same `bwrap` reason: `bwrap` probes `/proc/sys/kernel/unprivileged_userns_clone` and bails if masked. This removes a layer that has historically blunted real-world Linux LPEs.
+- **No user-namespace remap.** `updateRemoteUserUID: false` in the `base` layer; the host UID is mapped 1-to-1 inside the container. There is no `userns=auto`, no rootless Docker, no `userns-remap`.
+- **Bind mounts that matter:** `~/.gitconfig` (RO), the forge-auth seed dir at `/run/forge-auth` (live gh/glab tokens, no refresh material — the host `~/.config/gh`/`~/.config/glab-cli` dirs are no longer mounted), `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.gemini`, **`/tmp` host bind**, plus a layer of the audited config mounting `~/Projects` read-only. The agent CLI configuration directories contain **OAuth refresh tokens** (Claude session). Anything inside the container that can read files-as-user can exfiltrate them.
 - **Network egress is open by default.** `docs/ARCHITECTURE.md:1119,1138` — bridge/NAT, outbound internet allowed (required for the model APIs). There is no egress allowlist.
-- **`/tmp` is bind-mounted from the host** (`base/devcontainer.json:27-30`). Writable shared surface between host and container; not a privilege boundary, but a covert/IPC channel and a place to drop persistence.
+- **`/tmp` is bind-mounted from the host** (the `base` layer). Writable shared surface between host and container; not a privilege boundary, but a covert/IPC channel and a place to drop persistence.
 
 ### 2.3 Audit conclusion
 
-The shipped profile is approximately the strongest configuration achievable while keeping a single shared kernel **and** keeping `bwrap` (the inner sandbox used by Codex CLI) functional. It is honest about its limits (`docs/ARCHITECTURE.md:1083-1142`) and avoids the worst-class mistakes commonly cited in Docker-security critiques (no `--privileged`, no socket mount, non-root inside).
+The audited profile is approximately the strongest configuration achievable while keeping a single shared kernel **and** keeping `bwrap` (the inner sandbox used by Codex CLI) functional. It is honest about its limits (`docs/ARCHITECTURE.md:1083-1142`) and avoids the worst-class mistakes commonly cited in Docker-security critiques (no `--privileged`, no socket mount, non-root inside).
 
 For the AI-agent threat model, however, several concerns remain:
 
@@ -127,7 +127,7 @@ The agent reads `~/.claude/.credentials.json` and the seeded gh/glab config at `
 
 ### 3.2 Host filesystem reach via configured mounts
 
-`/tmp` host bind, `~/.gitconfig` (RO but reveals identity), the coordinator layer's RO `~/Projects` mount. None of these are escapes — they are configured access surfaces that the threat model must treat as adversarially read.
+`/tmp` host bind, `~/.gitconfig` (RO but reveals identity), a layer's RO `~/Projects` mount, when the user config adds one. None of these are escapes — they are configured access surfaces that the threat model must treat as adversarially read.
 
 ### 3.3 Container → host privilege escalation
 
@@ -142,7 +142,7 @@ This is the class of risk that shared-kernel container runtimes cannot structura
 
 Even without a kernel or runtime bug:
 
-- Write malicious `pre-commit` hooks (the project deliberately runs `pre-commit install` in `postCreateCommand`, which makes this path attractive).
+- Write malicious `pre-commit` hooks (a project whose own setup installs git hooks from `postCreateCommand` makes this path attractive).
 - Modify shell rc files in the persisted `~/.claude` directory.
 - Drop a binary in `/tmp` that survives a container restart via the host bind mount.
 - Poison `.git/config` or `.gitignore` to leak files on next commit.
@@ -214,11 +214,11 @@ The following options were evaluated and rejected. Reasoning is in `RUNTIMES.md`
 
 These are cheap and address the realistic attack tree (§3.1, §3.4) more effectively than any runtime change.
 
-1. **Stop bind-mounting full token directories.** *Done for gh/glab:* the base-layer `~/.config/gh` and `~/.config/glab-cli` mounts are gone; the `forge-seed` host tool (called from `lib/dctl/auth.sh`, specified in `docs/specs/secret-forwarding/SPEC.md`) forwards a scoped, ephemeral config copy at `/run/forge-auth` and the agent never sees the OAuth refresh material or a token env var. A `claude` scope in the same convention is the natural vehicle. *Still open for Claude:* the `~/.claude*` mounts (`devcontainers/agents/devcontainer.json:113-122`) remain and deserve the same treatment.
-2. **Drop the host `/tmp` bind** (`devcontainers/base/devcontainer.json:27-30`). Use a per-container `tmpfs`. There is no good reason an AI agent's `/tmp` should be the host's `/tmp`.
+1. **Stop bind-mounting full token directories.** *Done for gh/glab:* the base-layer `~/.config/gh` and `~/.config/glab-cli` mounts are gone; the `forge-seed` host tool (called from `lib/dctl/auth.sh`, specified in `docs/specs/secret-forwarding/SPEC.md`) forwards a scoped, ephemeral config copy at `/run/forge-auth` and the agent never sees the OAuth refresh material or a token env var. A `claude` scope in the same convention is the natural vehicle. *Still open for Claude:* the `~/.claude*` mounts of the `agents` layer remain and deserve the same treatment.
+2. **Drop the host `/tmp` bind** (the `base` layer). Use a per-container `tmpfs`. There is no good reason an AI agent's `/tmp` should be the host's `/tmp`.
 3. **Egress allowlist by default.** A `dctl`-managed `iptables`/`nftables` rule (or a userspace proxy) restricting outbound to model APIs (`api.anthropic.com`, `api.openai.com`, `*.googleapis.com`), the package mirrors actually used, and the user's git remotes. This single change defangs the most common exfiltration scenario.
 4. **Add `no-new-privileges` and `--cap-drop=ALL`** to `runArgs` in the agents layer. The seccomp profile is permissive on syscalls; cap-drop covers the rest of the historical privilege paths.
-5. **Document the `bwrap`/AppArmor trade-off as a named profile.** Ship `agents-permissive` (current `bwrap`-friendly behavior) alongside `agents-strict` (moby default seccomp + AppArmor enabled) for projects that don't need Codex's `bwrap` inner sandbox. Make the choice explicit and opt-in.
+5. **Document the `bwrap`/AppArmor trade-off as a named profile.** Provide example layers `agents-permissive` (current `bwrap`-friendly behavior) alongside `agents-strict` (moby default seccomp + AppArmor enabled) for projects that don't need Codex's `bwrap` inner sandbox. Make the choice explicit and opt-in.
 
 ### 5.2 Tier 1 — Runtime abstraction; keep Docker as default, add Podman-rootless
 
@@ -230,7 +230,7 @@ This is the cheap correctness win and the engineering precondition for Tier 2.
 
 ### 5.3 Tier 2 — FC-class hardware boundary as the recommended default (Linux + macOS)
 
-This delivers the real hardware boundary without breaking ergonomics. Because all §4.1 candidates consume OCI images, `images/` and the Dockerfile build flow do not change at this tier.
+This delivers the real hardware boundary without breaking ergonomics. Because all §4.1 candidates consume OCI images, the user's Dockerfiles and the `dctl image build` flow do not change at this tier.
 
 1. Add at least one §4.1 candidate as a backend behind the same adapter introduced in Tier 1. The specific candidate (Kata-FC, Kata-CH, libkrun, or bare-FC) is chosen based on Tier 1 prototyping results and the §4.4 criteria.
 2. Add **Apple `container`** as the macOS backend.
@@ -239,7 +239,7 @@ This delivers the real hardware boundary without breaking ergonomics. Because al
 
 ### 5.4 Tier 3 — Relax inner constraints once the outer boundary is a hypervisor
 
-Once an FC-class runtime is the default, the inner-container freedom can be expanded confidently (package installs, Docker-in-Docker, build sandboxes) because the boundary is now a hypervisor rather than a syscall filter. The custom permissive seccomp profile (`devcontainers/agents/seccomp-bwrap.json`) becomes non-load-bearing and `agents-strict` can become the default profile under VM-bounded runtimes.
+Once an FC-class runtime is the default, the inner-container freedom can be expanded confidently (package installs, Docker-in-Docker, build sandboxes) because the boundary is now a hypervisor rather than a syscall filter. The custom permissive seccomp profile (`seccomp-bwrap.json` of the `agents` layer) becomes non-load-bearing and `agents-strict` can become the default profile under VM-bounded runtimes.
 
 ### 5.5 Runtime-abstraction layer (sketch)
 
@@ -265,7 +265,7 @@ Runtime selection mirrors how config already composes:
 2. User global default in `~/.config/dctl/default/devcontainer.json` sets the user's preferred runtime.
 3. `DCTL_RUNTIME` env or `--runtime` flag overrides for one-off cases.
 
-Composable, declarative, runtime-agnostic. The same `python.yaml` manifest produces a Docker container on a CI machine without nested virt and an FC-class microVM on a KVM-equipped laptop.
+Composable, declarative, runtime-agnostic. The same `example.yaml` manifest produces a Docker container on a CI machine without nested virt and an FC-class microVM on a KVM-equipped laptop.
 
 ---
 
@@ -273,11 +273,11 @@ Composable, declarative, runtime-agnostic. The same `python.yaml` manifest produ
 
 | Step | Files touched | Effort | Risk |
 |---|---|---|---|
-| T0.1 — token forwarding instead of mounts | `lib/dctl/auth.sh`, `devcontainers/base/devcontainer.json:17-26`, `devcontainers/agents/devcontainer.json:112-133` | 1–2 d | Low (gh exists; Claude needs session-token forwarding equivalent) |
-| T0.2 — drop host `/tmp` bind, switch to tmpfs | `devcontainers/base/devcontainer.json:27-30` | 1 h | Low |
+| T0.1 — token forwarding instead of mounts | `lib/dctl/auth.sh`, the `base` and `agents` layers | 1–2 d | Low (gh exists; Claude needs session-token forwarding equivalent) |
+| T0.2 — drop host `/tmp` bind, switch to tmpfs | the `base` layer | 1 h | Low |
 | T0.3 — egress allowlist | new `lib/dctl/net.sh` + `nftables` shim or `slirp4netns --enable-sandbox --disable-host-loopback` | 3–5 d | Medium (UX for adding domains) |
-| T0.4 — `no-new-privileges`, `cap-drop=ALL` | `devcontainers/agents/devcontainer.json:107-111` | 30 min | Low (verify Codex `bwrap` still starts) |
-| T0.5 — `agents-strict` profile alongside `agents-permissive` | new `devcontainers/agents-strict/` | 1 d | Low |
+| T0.4 — `no-new-privileges`, `cap-drop=ALL` | the `agents` layer | 30 min | Low (verify Codex `bwrap` still starts) |
+| T0.5 — `agents-strict` profile alongside `agents-permissive` | new `agents-strict` example layer in `docs/examples/` | 1 d | Low |
 | T1.1 — runtime adapter | `bin/dctl`, `lib/dctl/ws.sh`, new `lib/dctl/runtime/*.sh` | 2–3 d | Low; Docker behavior preserved |
 | T1.2 — Podman rootless backend + smoke tests | `lib/dctl/runtime/podman.sh`, `tests/` | 2 d | Medium (slirp4netns/pasta perf) |
 | T2.0 — prototyping milestone (§4.4) | one-off; produce numbers for at least two §4.1 candidates | 1–2 wk | Low (information-gathering) |
@@ -329,7 +329,7 @@ A future revision of this spec is considered to have **reached** each tier when:
 - **Claude session token forwarding.** Is there a documented short-lived token export path for Claude Code, equivalent to `gh auth token`? If not, what is the minimal subset of `~/.claude` that must be projected into the container, and can it be projected as an ephemeral copy rather than a live mount?
 - **Egress allowlist UX.** How should users add domains? Static manifest entries, an interactive `dctl net allow <host>` command, or both? What is the right default set?
 - **CI parity.** Some CI environments lack nested virtualization. The default backend in CI must be either rootless containers + gVisor, or rootless containers with the strict profile. The spec should pick one as the documented CI default.
-- **Image distribution.** Kata consumes OCI images, but rootfs construction has subtle differences (init systems, kernel modules, agent injection). Are upstream `images/agents/Dockerfile` artifacts directly compatible, or is a Kata-specific (or libkrun-specific) build target needed?
+- **Image distribution.** Kata consumes OCI images, but rootfs construction has subtle differences (init systems, kernel modules, agent injection). Are images built from the user's Dockerfiles directly compatible, or is a Kata-specific (or libkrun-specific) build target needed?
 - **Cross-runtime feature parity.** Some `devcontainer.json` features (e.g. `mounts`, `forwardPorts`, lifecycle scripts) may behave differently across backends. The runtime adapter must define which subset is portable; the rest must produce a clear error rather than silently degrade.
 
 ---

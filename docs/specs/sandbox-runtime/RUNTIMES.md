@@ -183,7 +183,7 @@ These options meet SPEC.md §1.2: a hypervisor-class boundary between agent-exec
 ### 5.4 SUSE flake-pilot / firecracker-pilot
 
 - **What it is** — [OSInside/flake-pilot](https://github.com/OSInside/flake-pilot). App launcher: symlink → launcher → podman or Firecracker backend. [SUSE Package Hub](https://packagehub.suse.com/packages/flake-pilot/).
-- **Why considered** — The project ships an openSUSE-based image, so SUSE-aligned tooling is a natural fit candidate.
+- **Why considered** — The images that the project shipped were openSUSE-based, so SUSE-aligned tooling is a natural fit candidate.
 - **Why it doesn't fit** — The Firecracker backend uses **kernel + rootfs tarballs from HTTPS**, not OCI registries. It bypasses the entire Dockerfile / devcontainer build flow `dctl` is built around. Tiny project (~8 stars), DIY networking (manual TAP, kernel msgs leak into stdout). The OCI image flow would have to be re-implemented anyway.
 - **Verdict — `inspirational only`.** A useful example of a thin SUSE-native FC wrapper; not a backend `dctl` should adopt.
 

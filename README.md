@@ -1,55 +1,44 @@
 # devcontainerctl
 
-Pre-built Docker images and a unified `dctl` CLI for devcontainer workspaces — especially useful for running AI coding agents (Claude Code, Codex, OpenCode, Gemini CLI) in safe, isolated sandboxes.
+A unified `dctl` CLI that composes, builds, and runs devcontainer workspaces from your own configuration in `~/.config/dctl/` — especially useful for running AI coding agents (Claude Code, Codex, OpenCode, Gemini CLI) in safe, isolated sandboxes.
 
-- A two-step project setup flow with `dctl deploy` and `dctl init`.
-- Pre-built images with AI agent tooling and language-specific layers ready to go.
+- A one-step project setup flow with `dctl init`, against the manifests that you write.
+- Image builds from your own Dockerfiles, parents first.
 - A composable config system built around manifest-backed layer stacks and user-editable XDG config.
 - Multi-agent workflows with shared containers, token forwarding, and work-clone support.
 
 ## What You Get
 
-### Ready-to-use images
+### Your configuration, your images
 
-| Image | What it includes |
+`dctl` ships no image, no layer, and no manifest. It reads `~/.config/dctl/`,
+and you write it: by hand, with a dotfiles manager, or with home-manager.
+Each image and each layer installs what your projects need; each project owns
+its own dev environment setup.
+
+| Path | What you put there |
 | --- | --- |
-| `devimg/agents:latest` | Shared foundation with dev tools, Bun, Node LTS via mise, Rust tooling, gh, glab, neovim, Claude Code, Codex, OpenCode, and Gemini CLI |
-| `devimg/python-dev:latest` | `agents` plus Poetry-oriented Python project support |
-| `devimg/rust-dev:latest` | `agents` plus rustup with project-pinned toolchain flow |
-| `devimg/zig-dev:latest` | `agents` plus anyzig, minisign, and `zig-zls-init` |
+| `~/.config/dctl/images/<name>/Dockerfile` | One folder per image; `dctl image build` tags it `devimg/<name>:latest` |
+| `~/.config/dctl/devcontainer/<name>.yaml` | One manifest per selectable config, listing its layers in order |
+| `~/.config/dctl/devcontainer/<layer>/devcontainer.json` | One folder per layer |
+| `~/.config/dctl/projects.yaml` | The project registry, written by `dctl init` |
 
-### Ready-to-use templates
+[docs/examples/](docs/examples/README.md) holds a copyable starting point in
+this layout: an `example` image, an `example` manifest, and the `base`,
+`agents`, `dotfiles`, and `example` layers. No command reads it, and
+`make install` does not install it.
 
-`base` is the shared shipped foundation layer. Selectable configs declare their full composition order in YAML manifests.
+### How `dctl init` works
 
-| Template | Image | What it adds |
-| --- | --- | --- |
-| `general` | `devimg/agents:latest` | Minimal general-purpose sandbox with pre-commit bootstrap |
-| `coordinator` | `devimg/agents:latest` | Coordinator workflow with a read-only parent-area mount for sibling repo visibility |
-| `python` | `devimg/python-dev:latest` | Poetry cache volume and pre-commit bootstrap |
-| `rust` | `devimg/rust-dev:latest` | Rust cache volumes and `cargo build` bootstrap |
-| `zig` | `devimg/zig-dev:latest` | Zig/ZLS cache volumes and `zig-zls-init` bootstrap |
-
-### How `dctl deploy` + `dctl init` work
-
-`dctl deploy` copies installed seed assets into user config. `dctl init` then
-selects only from that deployed config, builds any missing managed image, and
-registers the current project:
+`dctl init` selects only from the manifests in your user config, builds any
+missing managed image, and registers the current project:
 
 ```text
-Installed (seed sources only, never used at runtime)
-  ~/.local/share/dctl/devcontainers/python.yaml             ← manifest for the python config
-  ~/.local/share/dctl/devcontainers/base/devcontainer.json  ← shared base layer
-  ~/.local/share/dctl/devcontainers/python/devcontainer.json
-  ~/.local/share/dctl/images/python-dev/Dockerfile
-
-        ──dctl deploy──>
-
-User config (runtime source of truth, user-editable)
-  ~/.config/dctl/devcontainer/python.yaml                  ← deployed manifest
+User config (runtime source of truth, written by you)
+  ~/.config/dctl/devcontainer/example.yaml                 ← manifest
   ~/.config/dctl/devcontainer/base/devcontainer.json       ← shared base layer
-  ~/.config/dctl/devcontainer/python/devcontainer.json     ← leaf layer
-  ~/.config/dctl/images/python-dev/Dockerfile              ← managed Dockerfile
+  ~/.config/dctl/devcontainer/example/devcontainer.json    ← leaf layer
+  ~/.config/dctl/images/example/Dockerfile                 ← managed Dockerfile
 
         ──dctl init──>
 
@@ -59,13 +48,12 @@ Project registry + managed image
         ──regenerated fresh on every command──>
 
 Runtime generated (ephemeral, never cached, regenerated in place)
-  $XDG_RUNTIME_DIR/dctl/devcontainer/python/devcontainer.json  ← merged output used by dctl ws up/reup/test
+  $XDG_RUNTIME_DIR/dctl/devcontainer/example/devcontainer.json  ← merged output used by dctl ws up/reup/test
 ```
 
 All runtime operations (`dctl image build`, `dctl ws up`, `dctl test`) use only
-the user config — never the installed files directly. The merged output is
-regenerated fresh on every command, so config edits apply immediately. You can
-freely edit the user config files to customize your setup.
+the user config. The merged output is regenerated fresh on every command, so
+config edits apply immediately.
 
 ### Composable config
 
@@ -73,18 +61,18 @@ The devcontainer config uses a manifest-driven layered merge system. Each
 selectable config is defined by a YAML manifest:
 
 ```yaml
-# python.yaml — declares which layers compose this config
+# example.yaml — declares which layers compose this config
 layers:
   - base      # shared infrastructure (remote user, auth mounts, terminal env)
   - agents    # shared agents layer (seccomp profile, agent CLI config mounts)
-  - python    # leaf layer (image tag, cache volumes, bootstrap commands)
+  - example   # leaf layer (image tag, cache volumes)
 ```
 
 - `base` owns the shared universal infrastructure (remote user, auth mounts, terminal env)
 - Optional user layers add personal config (dotfiles, editor mounts)
 - The **last layer** in the manifest is the **leaf** — it holds project-specific
-  settings and is protected from overwrites on deploy
-- All preceding layers are **shared** and reconciled automatically
+  settings
+- All preceding layers are **shared**: several manifests can list the same layer
 
 `dctl init` registers the manifest name for the project; the merge itself runs
 on demand. Each command that needs the config reads the selected manifest from
@@ -106,22 +94,21 @@ Prerequisites:
 
 ```bash
 make install
+mkdir -p ~/.config/dctl
+cp -r docs/examples/config/dctl/images docs/examples/config/dctl/devcontainer ~/.config/dctl/
 cd ~/projects/my-api
-dctl deploy devcontainer python
-dctl deploy image python-dev
-dctl init --devcontainer python
+dctl init --devcontainer example
 dctl image build
 dctl ws up
 dctl ws shell
 ```
 
-1. `make install` — installs `dctl` and copies images/templates to `~/.local/share/dctl/` (seed sources only)
-2. `dctl deploy devcontainer python` — deploys the Python manifest plus its managed shared layers into `~/.config/dctl/devcontainer/`
-3. `dctl deploy image python-dev` — deploys the managed Dockerfile into `~/.config/dctl/images/python-dev/`
-4. `dctl init --devcontainer python` — registers the project, auto-builds the managed image if missing, and runs the smoke test (`jq` is required for manifest-backed projects)
-5. `dctl image build` — optional rebuild from deployed managed images via an explicit target, the no-arg picker, or `--all`
-6. `dctl ws up` — starts the devcontainer, regenerating the merged config fresh under `$XDG_RUNTIME_DIR/dctl/devcontainer/`
-7. `dctl ws shell` — drops you into a shell inside the running container
+1. `make install` — installs `dctl`, its shell modules, and the schemas; it writes nothing to `~/.config/dctl/`
+2. Write your user config: here, copy the images and devcontainer layers of [docs/examples/](docs/examples/README.md) into `~/.config/dctl/` and edit them for your projects
+3. `dctl init --devcontainer example` — registers the project, auto-builds the managed image if missing, and runs the smoke test (`jq` is required for manifest-backed projects)
+4. `dctl image build` — optional rebuild of your managed images via an explicit target, the no-arg picker, or `--all`
+5. `dctl ws up` — starts the devcontainer, regenerating the merged config fresh under `$XDG_RUNTIME_DIR/dctl/devcontainer/`
+6. `dctl ws shell` — drops you into a shell inside the running container
 
 ## Workflow Comparison
 
@@ -139,18 +126,16 @@ Every `dctl` command has a Docker and Dev Container CLI equivalent — `dctl` ju
 Leaf layers add the project-specific settings:
 
 - the image tag
-- language-specific cache volumes
-- language-specific `postCreateCommand` entries
+- project-specific cache volumes
+- project-specific `postCreateCommand` entries
 
-`dctl init` reads the selected deployed manifest, resolves each listed layer
+`dctl init` reads the selected manifest, resolves each listed layer
 from `~/.config/dctl/devcontainer/<layer>/devcontainer.json`, and merges them
-in manifest order. Installed manifests and layers under
-`~/.local/share/dctl/devcontainers/` are seed sources only; `dctl deploy`
-copies them into user config.
+in manifest order.
 
 ### Custom layers
 
-Personal configuration is now opt-in. To add dotfiles, editor mounts, or extra terminal integration, copy [examples/dotfiles/devcontainer.json](/workspaces/devcontainerctl/examples/dotfiles/devcontainer.json) into `~/.config/dctl/devcontainer/dotfiles/devcontainer.json`, edit it for your host paths, then add `dotfiles` to your manifest's `layers`.
+Personal configuration is opt-in. To add dotfiles, editor mounts, or extra terminal integration, copy the `dotfiles` layer of [docs/examples/](docs/examples/README.md) into `~/.config/dctl/devcontainer/dotfiles/devcontainer.json`, edit it for your host paths, then add `dotfiles` to your manifest's `layers`.
 
 ### Config resolution
 
@@ -170,8 +155,7 @@ If you work in sibling clones such as `repo/` and `repo.42-add-auth/`, `dctl` ca
 ### Editing config and applying changes
 
 ```bash
-$EDITOR ~/.config/dctl/devcontainer/python/devcontainer.json
-dctl deploy devcontainer python   # optional: resync managed manifest/layers from install
+$EDITOR ~/.config/dctl/devcontainer/example/devcontainer.json
 dctl ws reup
 ```
 
@@ -189,42 +173,19 @@ dctl version
 
 `--config` overrides config resolution for commands that need a `devcontainer.json`.
 
-### `dctl deploy`
-
-```bash
-dctl deploy devcontainer python
-dctl deploy image python-dev
-dctl deploy --all
-dctl deploy --all-devcontainers
-dctl deploy --all-images
-dctl deploy --list
-```
-
-- `devcontainer <name>` deploys one manifest-backed config from `~/.local/share/dctl/devcontainers/` into `~/.config/dctl/devcontainer/`
-- `image <name>` deploys one managed image from `~/.local/share/dctl/images/` into `~/.config/dctl/images/`
-- `--all`, `--all-devcontainers`, `--all-images` deploy bulk selections
-- `--reset` backs up and overwrites shipped files
-- `--dry-run` prints the per-file plan and changes nothing
-- `--list`, `--list-devcontainers`, `--list-images` show `installed`, `deployed`, or `user-only`
-
-Manifest files are always managed on deploy. Non-leaf manifest layers are
-reconciled on every devcontainer deploy, while the leaf layer remains
-user-protected unless `--reset` is used.
-
 ### `dctl init`
 
 ```bash
-dctl init --devcontainer python
-dctl init --devcontainer rust
+dctl init --devcontainer example
 dctl init
 ```
 
-- `--devcontainer <name>` selects a deployed manifest from `~/.config/dctl/devcontainer/<name>.yaml`
+- `--devcontainer <name>` selects a manifest from `~/.config/dctl/devcontainer/<name>.yaml`
 - every `dctl init` re-registers the project and applies the legacy `projects.yaml` `devcontainer:` → `devcontainer-manifest:` migration automatically
 
 If the selected devcontainer references a managed image like
-`devimg/python-dev:latest`, `dctl init` validates that
-`~/.config/dctl/images/python-dev/Dockerfile` exists and automatically builds
+`devimg/example:latest`, `dctl init` validates that
+`~/.config/dctl/images/example/Dockerfile` exists and automatically builds
 the image when it is missing locally.
 
 After registering the project, `dctl init` runs `dctl test` (the workspace
@@ -259,7 +220,7 @@ dctl ws down
 
 ```bash
 dctl image build
-dctl image build agents
+dctl image build example
 dctl image build --all
 dctl image build --full-rebuild
 dctl image build --dry-run
@@ -271,14 +232,14 @@ dctl image list
 - `~/.config/dctl/images/<target>/Dockerfile`
 
 With no positional image name, `dctl image build` opens an `fzf` picker over
-the deployed managed images under `~/.config/dctl/images/` and does not consult
+the managed images under `~/.config/dctl/images/` and does not consult
 the project registry.
 
-Run `dctl deploy image <name>` or `dctl deploy --all-images` to seed image
-configs from installed defaults.
+`dctl` ships no Dockerfile. Add one folder per image with a `Dockerfile` under
+`~/.config/dctl/images/`; [docs/examples/](docs/examples/README.md) shows one.
 
 `dctl image build` reads the dependency graph from the `FROM` lines of the
-deployed Dockerfiles and builds every parent before its child, so a family
+Dockerfiles in your user config and builds every parent before its child, so a family
 needs no build order from the operator. The grammar it reads is literal:
 
 - `FROM devimg/<name>:latest` names `<name>` as a managed parent.
@@ -319,26 +280,27 @@ Runs the workspace smoke test: prerequisite checks, managed image build if neede
 
 ## Image Architecture
 
+Your images form a family through their `FROM` lines. A Dockerfile in
+`~/.config/dctl/images/<name>/` can start `FROM devimg/<parent>:latest`, and
+`dctl image build` builds the parent first:
+
 ```text
-openSUSE Tumbleweed
+external base (for example openSUSE Tumbleweed)
         │
         ▼
-devimg/agents:latest
-  shared tools, agent CLIs, runtime managers, shell/dev tooling
+devimg/base:latest        ← ~/.config/dctl/images/base/Dockerfile
         │
-        ├── devimg/python-dev:latest
-        ├── devimg/rust-dev:latest
-        └── devimg/zig-dev:latest
+        └── devimg/example:latest   ← ~/.config/dctl/images/example/Dockerfile
 ```
 
-`agents` is the shared base. The language-specific images add only the runtime-specific tooling and cache strategy needed for that ecosystem.
+The names are yours. Each image installs what your projects need.
 
 ## XDG Layout
 
 | Directory | Purpose | Used at runtime? |
 | --- | --- | --- |
-| `~/.local/share/dctl/` | Installed assets: Dockerfiles, devcontainer templates, schemas. Seed sources only. | No — only read by `dctl deploy` |
-| `~/.config/dctl/` | User config: deployed devcontainer layers, deployed Dockerfiles, project registry, defaults | Yes — sole runtime source for builds, merges, and container operations |
+| `~/.local/share/dctl/` | Installed schemas (`schemas/`) | Yes — read to validate manifests and the project registry |
+| `~/.config/dctl/` | User config, written by you: devcontainer manifests and layers, Dockerfiles, project registry, defaults | Yes — sole runtime source for builds, merges, and container operations |
 | `$XDG_RUNTIME_DIR/dctl/` | Runtime-generated merged `devcontainer.json` output, regenerated fresh on every command and never cached (fallback `${TMPDIR:-/tmp}/dctl-$(id -u)/dctl/`) | Yes — regenerated and consumed by `dctl ws up`/`reup`/`test` |
 
 The first two honor `XDG_DATA_HOME` and `XDG_CONFIG_HOME`; the generated output
@@ -368,13 +330,12 @@ This installs:
 
 - `dctl` to `~/.local/bin/dctl`
 - shell modules to `~/.local/lib/dctl/`
-- managed Dockerfiles to `~/.local/share/dctl/images/` (seed sources — not used at runtime)
-- devcontainer templates to `~/.local/share/dctl/devcontainers/` (seed sources — not used at runtime)
 - schema files to `~/.local/share/dctl/schemas/`
 
-`make install` does not write to `~/.config/dctl/`. Run
-`dctl deploy ...` after install to copy managed assets into user config, then
-run `dctl init` to register the current project.
+`make install` installs no image, no layer, and no manifest, and does not write
+to `~/.config/dctl/`. Write your user config there (see
+[docs/examples/](docs/examples/README.md) for a starting point), then run
+`dctl init` to register the current project.
 
 ### Install systemd units
 
@@ -391,7 +352,7 @@ make uninstall
 make uninstall-systemd
 ```
 
-Use `make uninstall` to remove the installed binary, shell modules, templates, Dockerfiles, and schemas. Use `make uninstall-systemd` to remove and disable the weekly rebuild timer.
+Use `make uninstall` to remove the installed binary, shell modules, and schemas. For one release it also removes the Dockerfiles, devcontainer manifests, and layers that older releases installed under `~/.local/share/dctl/`. Use `make uninstall-systemd` to remove and disable the weekly rebuild timer.
 
 ## Development
 

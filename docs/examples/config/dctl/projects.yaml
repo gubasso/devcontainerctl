@@ -1,0 +1,6 @@
+# Example project registry. `dctl init` writes ~/.config/dctl/projects.yaml
+# for you; this file shows its shape. Each key is the canonical name of a
+# project, and devcontainer-manifest names a manifest under
+# ~/.config/dctl/devcontainer/ without its .yaml extension.
+example-project:
+  devcontainer-manifest: example

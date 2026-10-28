@@ -20,16 +20,17 @@ set, terminology, and rationale for the current codebase.
   registry lookups
 - **config source**: Any source that can provide a `devcontainer.json`
 - **resolution chain**: The ordered precedence list that `dctl` evaluates
-- **manifest**: A YAML file (e.g. `python.yaml`) declaring an ordered list of
+- **manifest**: A YAML file (e.g. `example.yaml`) declaring an ordered list of
   layers to compose into a single `devcontainer.json`. Validated by
   `schemas/compose.schema.yaml`
 - **layer**: A directory containing a `devcontainer.json` that is referenced by
-  a manifest's `layers` array (e.g. `base/`, `python/`)
+  a manifest's `layers` array (e.g. `base/`, `example/`)
 - **leaf layer**: The last layer in a manifest — holds project-specific settings
-  and is protected from overwrites on deploy (skip-if-exists semantics)
 - **shared layer**: Any non-leaf layer in a manifest — provides common
-  infrastructure and is always reconciled (overwritten) from installed sources
-  on deploy
+  infrastructure and can be listed by several manifests
+- **user config**: `~/.config/dctl/`, which the user writes; `dctl` ships no
+  image, no layer, and no manifest, and
+  [`docs/examples/`](../docs/examples/README.md) shows a starting point
 
 ## Spec Set
 
@@ -38,10 +39,8 @@ set, terminology, and rationale for the current codebase.
 | [`00-resolution-model.md`](./00-resolution-model.md) | Shared precedence model, XDG layout, path normalization, and sibling discovery rules. | Implemented |
 | [`10-project-registry.md`](./10-project-registry.md) | Per-project YAML registry, canonical name derivation, and JSON Schema validation. | Implemented |
 | [`20-devcontainer-resolution.md`](./20-devcontainer-resolution.md) | `devcontainer.json` lookup algorithm and command integration rules. | Implemented |
-| [`30-templates.md`](./30-templates.md) | Template categories, defaults, discovery order, and `dctl init` behavior. | Implemented |
-| [`35-deploy.md`](./35-deploy.md) | `dctl deploy` command surface and managed-asset deployment rules. | Implemented |
 | [`40-dockerfile-hierarchy.md`](./40-dockerfile-hierarchy.md) | User-config-only Dockerfile resolution for managed images. | Implemented |
-| [`45-devcontainer-metadata-extraction.md`](./45-devcontainer-metadata-extraction.md) | Historical record of moving shared config out of the image layer and into templates. | Implemented |
+| [`45-devcontainer-metadata-extraction.md`](./45-devcontainer-metadata-extraction.md) | Historical record of moving shared config out of the image layer and into devcontainer layers. | Implemented |
 | [`90-implementation-impact.md`](./90-implementation-impact.md) | Mapping from approved design work to the landed code changes. | Implemented |
 | [`99-acceptance-criteria.md`](./99-acceptance-criteria.md) | Cross-cutting acceptance scenarios and non-regression expectations. | Implemented |
 
@@ -54,9 +53,7 @@ set, terminology, and rationale for the current codebase.
 1. Read [`00-resolution-model.md`](./00-resolution-model.md) first.
 2. Then read [`10-project-registry.md`](./10-project-registry.md) and
    [`20-devcontainer-resolution.md`](./20-devcontainer-resolution.md).
-3. Then read [`30-templates.md`](./30-templates.md),
-   [`35-deploy.md`](./35-deploy.md),
-   [`40-dockerfile-hierarchy.md`](./40-dockerfile-hierarchy.md), and
+3. Then read [`40-dockerfile-hierarchy.md`](./40-dockerfile-hierarchy.md) and
    [`45-devcontainer-metadata-extraction.md`](./45-devcontainer-metadata-extraction.md).
 4. Finish with [`90-implementation-impact.md`](./90-implementation-impact.md) and
    [`99-acceptance-criteria.md`](./99-acceptance-criteria.md).

@@ -13,8 +13,9 @@ Managed Dockerfiles resolve through a single layer:
 
 1. `~/.config/dctl/images/<name>/Dockerfile`
 
-Installed files under `~/.local/share/dctl/images/` are seed sources only and
-are never used directly at runtime.
+`dctl` ships no Dockerfile and installs none. The user writes one folder per
+image under `~/.config/dctl/images/`; [`docs/examples/`](../docs/examples/README.md)
+shows one.
 
 ## Resolution Algorithm
 
@@ -28,22 +29,30 @@ The relevant runtime XDG root is:
 
 - `${XDG_CONFIG_HOME:-$HOME/.config}/dctl/images/`
 
-Installed Dockerfiles live under `${XDG_DATA_HOME:-$HOME/.local/share}/dctl/images/`
-only so `dctl deploy image ...` can seed them into user config.
+## Parent Chain
+
+A user image can build on another user image. A Dockerfile in
+`~/.config/dctl/images/<name>/` that starts `FROM devimg/<parent>:latest` names
+`<parent>` as a managed parent, and `dctl image build` reads these `FROM` lines
+and builds every parent before its child:
+
+- `FROM devimg/<name>:latest` names `<name>` as a managed parent, which must
+  have its own `~/.config/dctl/images/<name>/Dockerfile`
+- any other `devimg/` spelling, or a reference holding `$`, is refused
+- any other reference is an external base and stays out of the graph
+- a cycle in the graph is an error
 
 ## User Customization Pattern
 
-1. Run `dctl deploy image <name>` to seed the managed Dockerfile into
-   `~/.config/dctl/images/<name>/`
-2. Modify the seeded Dockerfile as needed
-3. Run `dctl image build <name>`
+1. Write `~/.config/dctl/images/<name>/Dockerfile`, by hand, with a dotfiles
+   manager, or with home-manager
+2. Run `dctl image build <name>`
 
-`make install` never overwrites files under `~/.config/`.
+`make install` never writes files under `~/.config/`.
 
 ## Architecture Notes
 
-- devcontainer templates remain config-only artifacts
+- devcontainer layers remain config-only artifacts
 - images remain build-only artifacts
-- installed image files are seed sources only
-- `dctl deploy image ...` seeds the managed Dockerfile into
-  `~/.config/dctl/images/`
+- each image installs what the user's projects need; each project owns its own
+  dev environment setup

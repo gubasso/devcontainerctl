@@ -74,7 +74,7 @@ Networking uses **TSI (Transparent Socket Impersonation)**: in-guest sockets are
 
 **Criterion 3 — clean UX.**
 
-- `podman --runtime krun run <image>` consumes the existing `images/` OCI artifacts directly. **No rootfs builder, no kernel-image lifecycle, no in-guest agent, no containerd shim, no devmapper snapshotter.**
+- `podman --runtime krun run <image>` consumes the OCI images that `dctl image build` builds directly. **No rootfs builder, no kernel-image lifecycle, no in-guest agent, no containerd shim, no devmapper snapshotter.**
 - The runtime adapter sketched in [SPEC.md §5.5](./SPEC.md) (`lib/dctl/runtime/krun.sh`) collapses to ~80–150 lines of Bash that adds `--runtime krun` to existing Podman calls.
 - TSI eliminates the entire host-side networking plumbing class (TAP/bridge/NAT/`slirp4netns`).
 - The authoring surface (`devcontainer.json`, manifest layers, `runtime:` field) does not change. The composition system from `schemas/compose.schema.yaml` keeps working.
@@ -166,7 +166,7 @@ The following questions from [SPEC.md §8](./SPEC.md) are resolved:
 |---|---|
 | Final §4.1 backend choice | **libkrun via `crun --krun`** on Linux. |
 | CI parity default | **gVisor** on no-KVM CI runners; **libkrun** where KVM is available. |
-| Image distribution: Kata-specific or libkrun-specific build target? | **No new build target.** libkrun consumes the existing `images/` OCI artifacts unchanged via `crun --krun`. |
+| Image distribution: Kata-specific or libkrun-specific build target? | **No new build target.** libkrun consumes the OCI images that `dctl image build` builds unchanged via `crun --krun`. |
 | Multi-backend selection at the manifest level | Schema-ready; **not exposed** in this implementation. Only `runtime: krun` (default) and `runtime: gvisor` (documented CI fallback) are surfaced. |
 
 These remain unaffected by this decision and apply runtime-agnostically:

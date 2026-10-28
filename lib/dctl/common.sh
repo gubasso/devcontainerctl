@@ -8,8 +8,6 @@ readonly _DCTL_COMMON_LOADED=1
 : "${DCTL_VERSION:=dev}"
 : "${WORKSPACE_FOLDER:=$PWD}"
 WORKSPACE_FOLDER="$(cd -- "$WORKSPACE_FOLDER" && pwd -P)"
-: "${IMAGES_DIR:=${XDG_DATA_HOME:-$HOME/.local/share}/dctl/images}"
-: "${DEVCONTAINERS_DIR:=${XDG_DATA_HOME:-$HOME/.local/share}/dctl/devcontainers}"
 : "${DCTL_CONFIG_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/dctl}"
 # The merged devcontainer.json is regenerated fresh on every command (never
 # cached), so it lives in a runtime/ephemeral dir — tmpfs-backed and cleared on
@@ -21,8 +19,6 @@ WORKSPACE_FOLDER="$(cd -- "$WORKSPACE_FOLDER" && pwd -P)"
 
 readonly DCTL_VERSION
 readonly WORKSPACE_FOLDER
-readonly IMAGES_DIR
-readonly DEVCONTAINERS_DIR
 readonly DCTL_CONFIG_DIR
 readonly DCTL_DEVCONTAINER_GEN_DIR
 readonly DCTL_DEVCONTAINER_DIR
@@ -94,11 +90,6 @@ config_devcontainer_path() {
   printf '%s/%s/devcontainer.json\n' "$DCTL_DEVCONTAINER_DIR" "$name"
 }
 
-installed_compose_manifest_path() {
-  local name="$1"
-  printf '%s/%s.yaml\n' "$DEVCONTAINERS_DIR" "$name"
-}
-
 config_compose_manifest_path() {
   local name="$1"
   printf '%s/%s.yaml\n' "$DCTL_DEVCONTAINER_DIR" "$name"
@@ -107,11 +98,6 @@ config_compose_manifest_path() {
 config_image_path() {
   local name="$1"
   printf '%s/%s/Dockerfile\n' "$DCTL_IMAGES_DIR" "$name"
-}
-
-installed_image_path() {
-  local name="$1"
-  printf '%s/%s/Dockerfile\n' "$IMAGES_DIR" "$name"
 }
 
 resolve_canonical_project_name() {

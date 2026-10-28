@@ -9,8 +9,8 @@ cd slides
 npm install
 ```
 
-Requires Node LTS (the repo's `mise.toml` pins `node = "latest"`; run
-`mise install` from the repo root if mise is configured).
+Requires Node LTS. The flake dev shell of the repo provides `nodejs`; see
+the Development section of the root `README.md`.
 
 ## Author with hot reload
 

@@ -91,8 +91,9 @@ config lives elsewhere.
 ### `dctl init`
 
 - selects a devcontainer only from `~/.config/dctl/devcontainer/`
-- errors if no deployed devcontainers are available and instructs the user to
-  run `dctl deploy`
+- errors if no manifests are available and tells the user to add
+  `<name>.yaml` and its layer folders there, pointing at `docs/examples/` in
+  the devcontainerctl repository
 - reads the selected devcontainer's `.image` field
 - for managed `devimg/<name>:latest` images, validates that
   `~/.config/dctl/images/<name>/Dockerfile` exists
@@ -106,7 +107,6 @@ config lives elsewhere.
 - does not persist a cached merged config; the merge is regenerated fresh on
   every command that needs it
 - does not write local workspace `.devcontainer/` files
-- does not read from installed templates directly
 - does not override `.image` in the generated config
 
 ### `dctl ws exec`, `dctl ws shell`, `dctl ws run`

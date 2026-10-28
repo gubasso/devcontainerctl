@@ -32,7 +32,7 @@ A practical guide to using Dev Containers as isolated, reproducible development 
 
 - **Reproducible environments**: Define once, use across all projects of the same type
 - **Isolation**: Containers can only access explicitly mounted directories
-- **Project-pinned runtimes**: Python, Rust, and Zig versions declared in project files, resolved at container creation or first tool invocation
+- **Project-owned dev environments**: Each project pins its toolchain and dependencies in its own files, and its own setup installs them in the container
 - **Flexible workspace composition**: Mount multiple directories (repos, docs, libs) into a unified `/workspaces`
 - **Multi-agent support**: Attach unlimited terminals/agents to the same container
 - **YOLO-safe**: Agents have full permissions inside the container, but limited host access
@@ -40,32 +40,25 @@ A practical guide to using Dev Containers as isolated, reproducible development 
 
 ### Reproducibility Philosophy
 
-This guide follows a **project-pinned runtime** approach:
+This guide follows a **project-owned environment** approach:
 
 | Layer | Strategy | Source of Truth |
 | ----- | -------- | --------------- |
-| Container image | Rolling (rebuild weekly) | Dockerfiles |
-| Python version | Pinned per project | `pyproject.toml [tool.mise]` |
-| Rust toolchain | Pinned per project | `rust-toolchain.toml` |
-| Zig version | Pinned per project | `build.zig.zon` |
-| Dependencies | Pinned per project | `poetry.lock` / `Cargo.lock` |
+| Container image | Rolling (rebuild weekly) | The user's Dockerfiles in `~/.config/dctl/images/` |
+| Toolchain versions | Pinned per project | The project's own files |
+| Dependencies | Pinned per project | The project's own lock files |
 
-The `agents` base image includes rolling shared runtimes for container tooling, while project-specific Python, Rust, and Zig versions stay pinned in project config and are resolved at container creation or first tool invocation. Shared volumes cache installed versions across projects, so subsequent containers with the same version start instantly.
+dctl ships no image and installs, activates, or names no dev environment manager. The user's image carries the tools that the user's projects need, and each project owns its own dev environment setup, which runs inside the container. A layer can mount a volume that caches installed toolchains across projects, so later containers with the same version start faster.
 
 ### Host Runtime Mirroring
 
-For LSP accuracy, install runtime version managers on the host:
+For LSP accuracy, give the host the toolchain that the project pins, through the project's own setup.
 
-1. **Install mise on host** - Same version manager as container
-2. **Install rustup on host** - Same toolchain manager as container
-3. **Run `mise install` on host** - Installs Python interpreter for LSP
-
-The Python workflow may create `.venv/` inside the bind-mounted project directory. Since the project directory is shared with the host, the host LSP can discover and use that environment for completions and type-checking.
+A project setup may create an environment such as `.venv/` inside the bind-mounted project directory. Since the project directory is shared with the host, the host LSP can discover and use that environment for completions and type-checking.
 
 ```bash
-# On host (one-time setup per project)
+# On host (one-time setup per project): install the pinned toolchain
 cd ~/projects/my-api
-mise install                        # Installs Python version for LSP
 
 # Start container - project bootstrap can create .venv/ inside the bind mount
 devcontainer up --workspace-folder .
@@ -74,7 +67,7 @@ devcontainer up --workspace-folder .
 nvim .
 ```
 
-**Why not run `poetry install` on host?** The `.venv/` is shared via bind mount. Running project bootstrap in both places writes to the same directory, which is redundant. Let the container own the venv; the host just reads it.
+**Why not install the dependencies on the host too?** The `.venv/` is shared via bind mount. Running project bootstrap in both places writes to the same directory, which is redundant. Let the container own the environment; the host just reads it.
 
 ### Mental Model
 
@@ -82,8 +75,8 @@ nvim .
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ HOST                                  CONTAINER                             │
 │                                                                             │
-│ mise install                          project bootstrap inside container   │
-│   └── Python interpreter for LSP        └── May create .venv/ in project root │
+│ pinned toolchain for LSP              project bootstrap inside container   │
+│   └── from the project's own setup      └── May create .venv/ in project root │
 │                                                                             │
 │ nvim ~/projects/my-app/               ${containerWorkspaceFolder}/ (bind mount) │
 │   └── LSP reads .venv/ ◄───────────────── .venv/ created here               │
@@ -109,12 +102,13 @@ are live in the current codebase:
   `devcontainer-manifest` selection and explicit `sibling_discovery: false`
 - YAML manifest-driven layer composition, regenerated fresh on every command
   (never cached) under `$XDG_RUNTIME_DIR/dctl/devcontainer/`
-- `dctl deploy` as the install-to-config seeding command for managed templates
-  and managed Dockerfiles
+- user config in `~/.config/dctl/` as the only source of manifests, layers,
+  and Dockerfiles; dctl ships none, and [`examples/`](examples/README.md)
+  shows a starting point
 - user-config-only Dockerfile resolution for `dctl image build`, with no
   project-registry coupling
-- metadata extraction from the Dockerfile into the template system
-- slim `dctl init` that reads only deployed user config, auto-builds missing
+- metadata extraction from the Dockerfile into devcontainer layers
+- slim `dctl init` that reads only user config, auto-builds missing
   managed images, registers the project, and runs the smoke test — the merged
   config is regenerated fresh on every command rather than persisted
 
@@ -124,8 +118,6 @@ The spec set remains useful as a design record and glossary:
 - [`../spec/00-resolution-model.md`](../spec/00-resolution-model.md) — shared precedence and discovery model
 - [`../spec/10-project-registry.md`](../spec/10-project-registry.md) — per-project registry design
 - [`../spec/20-devcontainer-resolution.md`](../spec/20-devcontainer-resolution.md) — devcontainer resolution flow
-- [`../spec/30-templates.md`](../spec/30-templates.md) — template system
-- [`../spec/35-deploy.md`](../spec/35-deploy.md) — deploy command semantics
 - [`../spec/40-dockerfile-hierarchy.md`](../spec/40-dockerfile-hierarchy.md) — Dockerfile override hierarchy
 - [`../spec/45-devcontainer-metadata-extraction.md`](../spec/45-devcontainer-metadata-extraction.md) — metadata extraction history
 
@@ -137,29 +129,31 @@ The spec set remains useful as a design record and glossary:
 
 ```text
 ~/
-├── .local/share/dctl/images/      # Base image definitions (build once)
-│   ├── agents/                    # Agent tools layer (shared)
-│   │   └── Dockerfile
-│   ├── python-dev/
-│   │   └── Dockerfile             # FROM devimg/agents
-│   ├── rust-dev/
-│   │   └── Dockerfile             # FROM devimg/agents
-│   └── zig-dev/
-│       └── Dockerfile             # FROM devimg/agents
+├── .config/dctl/                  # User config (the user writes it)
+│   ├── images/
+│   │   └── example/
+│   │       └── Dockerfile         # Built as devimg/example:latest
+│   ├── devcontainer/
+│   │   ├── example.yaml           # Manifest: layer order
+│   │   ├── base/
+│   │   │   └── devcontainer.json  # Shared layer
+│   │   └── example/
+│   │       └── devcontainer.json  # Leaf layer
+│   └── projects.yaml              # Project registry
 │
 ├── projects/
 │   ├── project-a/
 │   │   ├── .devcontainer/
 │   │   │   └── devcontainer.json
-│   │   └── pyproject.toml         # Contains [tool.mise] python = "3.11"
+│   │   └── pyproject.toml         # The project pins its own toolchain
 │   ├── project-b/
 │   │   ├── .devcontainer/
 │   │   │   └── devcontainer.json
-│   │   └── pyproject.toml         # Contains [tool.mise] python = "3.12"
+│   │   └── pyproject.toml
 │   └── project-c/
 │       ├── .devcontainer/
 │       │   └── devcontainer.json
-│       └── rust-toolchain.toml    # Contains channel = "1.75"
+│       └── rust-toolchain.toml
 │
 └── shared-libs/                   # Libraries mounted as context (RO)
     ├── common-utils/
@@ -168,19 +162,16 @@ The spec set remains useful as a design record and glossary:
 
 ### Image Layering Strategy
 
-Separate agent tools from language tooling for better caching:
+A user image can start `FROM` another user image, so shared tools build once and child images add what some projects need. The names below are user-defined examples:
 
 ```text
-devimg/agents:latest    (openSUSE Tumbleweed + bun + node LTS + agent CLIs + mise + build deps)
+devimg/base:latest       (user Dockerfile: distro, user account, agent CLIs)
        │
-       ├── devimg/python-dev:latest   (poetry via mise; inherits base python, overridden by project pin)
-       ├── devimg/rust-dev:latest     (rustup with no default toolchain)
-       └── devimg/zig-dev:latest      (anyzig + minisign + zig-zls-init)
+       ├── devimg/example:latest   (user Dockerfile: FROM devimg/base:latest)
+       └── devimg/other:latest     (user Dockerfile: FROM devimg/base:latest)
 ```
 
-The `agents` base includes a rolling Python runtime for shared tooling. Project-specific Python versions override the base default via mise, while Rust and Zig versions remain unbaked and resolve from `rust-toolchain.toml` and `build.zig.zon`.
-
-`dctl` infers that tree rather than taking it from the operator. `dctl image build` reads the `FROM` lines of every deployed Dockerfile in the requested ancestor closure and builds each parent before its child. The grammar is literal, because an order the engine cannot read is an order it must not guess:
+`dctl` infers that tree rather than taking it from the operator. `dctl image build` reads the `FROM` lines of every Dockerfile in the requested ancestor closure and builds each parent before its child. The grammar is literal, because an order the engine cannot read is an order it must not guess:
 
 | `FROM` reference | Meaning |
 | --- | --- |
@@ -197,23 +188,23 @@ Two build semantics follow from the graph:
 - An ordinary build builds every requested name, and builds an ancestor pulled in by the graph only when `docker image inspect` does not already find its tag. A present ancestor prints `skipping <name>: present, not requested`.
 - `--full-rebuild` builds every name in the closure with `--no-cache`. Before each build it pulls that Dockerfile's literal external bases by name, once per invocation. It does not pass `--pull` to `docker buildx build`: that flag applies to the whole Dockerfile and would try to resolve a local managed parent such as `devimg/base:latest` against a registry.
 
-A failed build blocks its descendants, which are reported as `blocked by failed parent <name>` rather than built on the older parent tag. Independent branches keep going, and the command fails once with the complete set. `--dry-run` computes the whole order with no Docker daemon, and a cycle or an undeployed parent is refused there rather than mid-build.
+A failed build blocks its descendants, which are reported as `blocked by failed parent <name>` rather than built on the older parent tag. Independent branches keep going, and the command fails once with the complete set. `--dry-run` computes the whole order with no Docker daemon, and a cycle or a parent with no Dockerfile is refused there rather than mid-build.
 
-**Note**: This guide covers Python, Rust, and Zig as practical examples. The same pattern extends to polyglot environments (combine layers) or hardened variants (remove sudo, drop capabilities, add `no-new-privileges`). Adapt the Dockerfiles as needed for your use case.
+**Note**: dctl ships no image. The same pattern extends to polyglot environments (combine layers) or hardened variants (remove sudo, drop capabilities, add `no-new-privileges`). Write the Dockerfiles for your use case; [`examples/`](examples/README.md) shows one.
 
 ### Image Reuse
 
 ```text
-devimg/python-dev:latest (base image, rolling base python)
+devimg/example:latest (user image)
        │
-       ├── project-a  ─► container (mise installs python 3.11)
-       ├── project-b  ─► container (mise installs python 3.12)
-       └── project-c  ─► container (installs python 3.11)
+       ├── project-a  ─► container (project-a setup installs its toolchain)
+       ├── project-b  ─► container (project-b setup installs its toolchain)
+       └── project-c  ─► container (project-c setup installs its toolchain)
 ```
 
-Each project gets its own container with its own virtualenv. Python interpreters are installed inside each container when `mise install` runs.
+Each project gets its own container with its own environment. The project's own setup installs its pinned toolchain inside each container.
 
-This keeps the default Python setup simpler, but interpreters become ephemeral: rebuilding a container re-downloads its Python runtime unless you add a custom `mise` volume mount back yourself.
+Toolchains installed this way are ephemeral: rebuilding a container downloads them again unless a layer mounts a cache volume for them.
 
 ---
 
@@ -250,39 +241,18 @@ devcontainer --version
 
 ## Base Images
 
-Dockerfiles are installed by `make install` into `~/.local/share/dctl/images/`,
-then deployed into `~/.config/dctl/images/` by `dctl deploy image ...` for
-runtime use.
-
-**Source files** (single source of truth):
-
-- [`images/agents/Dockerfile`](../images/agents/Dockerfile)
-- [`images/python-dev/Dockerfile`](../images/python-dev/Dockerfile)
-- [`images/rust-dev/Dockerfile`](../images/rust-dev/Dockerfile)
-- [`images/zig-dev/Dockerfile`](../images/zig-dev/Dockerfile)
+dctl ships no image. The user writes one folder per image,
+`~/.config/dctl/images/<name>/Dockerfile`, and `dctl image build` tags it
+`devimg/<name>:latest`. `make install` installs no Dockerfile. For a starting
+point, see [`examples/`](examples/README.md).
 
 ### User Naming Convention
 
-The container user is created with the same name as your host `$USER`, and UID/GID are baked in at build time to match the host. This keeps config files (`.gitconfig`, SSH configs, shell rc files) consistent and avoids bind mount permission issues without runtime UID remapping. The `--build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g)` flags are required when building the agents base image.
+The container user is created with the same name as your host `$USER`, and UID/GID are baked in at build time to match the host. This keeps config files (`.gitconfig`, SSH configs, shell rc files) consistent and avoids bind mount permission issues without runtime UID remapping. `dctl image build` passes `--build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g)` to every build, so a Dockerfile that creates the user reads them as `ARG`s.
 
-### Layer 0: Agent Tools Base (agents/)
+### Agent Tools in an Image
 
-Foundation layer using openSUSE Tumbleweed (rolling release) for current package versions and atomic mirror snapshots.
-
-**Includes**:
-
-- System packages: git, ripgrep, fd, jq, build tools (gcc/g++/make/binutils toolchain, pkg-config)
-- [Bun](https://bun.com/) as JavaScript runtime for agent CLIs (curl install - no distro package)
-- [Node.js](https://nodejs.org/) LTS via mise (required for bun-installed package shebangs)
-- [mise](https://mise.jdx.dev/) for runtime version management
-- [GitHub CLI (gh)](https://github.com/cli/cli) for GitHub workflows
-- [GitLab CLI (glab)](https://gitlab.com/gitlab-org/cli) for GitLab workflows
-- AI agent CLIs:
-  - [Claude Code](https://github.com/anthropics/claude-code) (native installer)
-  - [Codex CLI](https://github.com/openai/codex) (OpenAI)
-  - [OpenCode](https://github.com/opencode-ai/opencode)
-  - [Gemini CLI](https://github.com/google-gemini/gemini-cli) (Google)
-- Non-root user with passwordless sudo
+The user's image installs the agent CLIs and the tools that the user's projects need. dctl requires none of them.
 
 #### AI Agent CLI Installation Methods
 
@@ -299,15 +269,15 @@ Native installers are preferred over Homebrew in containers (Homebrew adds ~500M
 
 | Tool | Method | Command |
 | ---- | ------ | ------- |
-| gh (GitHub CLI) | Official RPM repo | `zypper addrepo` of `https://cli.github.com/packages/rpm/gh-cli.repo` in `images/agents/Dockerfile` |
-| glab (GitLab CLI) | mise (GitLab releases) | `mise use --global gitlab:gitlab-org/cli@latest` |
+| gh (GitHub CLI) | Official RPM repo | `zypper addrepo` of `https://cli.github.com/packages/rpm/gh-cli.repo` (openSUSE-based image) |
+| glab (GitLab CLI) | GitLab releases | Release binary of `https://gitlab.com/gitlab-org/cli` |
 
 **Notes**:
 
 - Claude Code: Native installer recommended (auto-updates); npm still supported
 - Codex CLI: Official install is npm; Bun works via npm compatibility (unofficial)
-- OpenCode: Installed from the npm package via Bun in the current image build
-- Gemini CLI: Installed globally via npm using the Node runtime already present in `devimg/agents`
+- OpenCode: Installed from the npm package via Bun
+- Gemini CLI: Installed globally via npm, so the image needs a Node runtime
 
 **Authentication**:
 
@@ -324,7 +294,7 @@ All listed CLIs authenticate interactively on first run. For `gh` and `glab`, dc
 
 #### GitHub CLI (gh) and GitLab CLI (glab) Setup
 
-Both CLIs are installed in the agents image but require one-time host authentication before they work inside containers. The host config directories (`~/.config/gh`, `~/.config/glab-cli`) are never mounted: they hold long-lived credentials (gh refresh material, keyring markers), so containers only ever see a seeded, ephemeral copy.
+When the user's image installs both CLIs, they require one-time host authentication before they work inside containers. The host config directories (`~/.config/gh`, `~/.config/glab-cli`) are never mounted: they hold long-lived credentials (gh refresh material, keyring markers), so containers only ever see a seeded, ephemeral copy.
 
 **Prerequisites (host)**:
 
@@ -384,31 +354,7 @@ glab api user --jq .username
 
 #### Neovim
 
-The agents image installs `neovim@latest` via mise. Container Neovim runs a minimal config — no plugins, LSP servers, or treesitter parsers are pre-baked. Full editor configuration can be added through an optional user layer such as `dotfiles`.
-
-### Layer 1: Python Development (python-dev/)
-
-Thin layer extending `devimg/agents:latest`:
-
-- [Poetry](https://python-poetry.org/) via mise (`pipx:poetry`) with `virtualenvs.in-project = true`
-- Inherits rolling Python from `devimg/agents`; project-pinned versions from `pyproject.toml` override via mise
-
-### Layer 1: Rust Development (rust-dev/)
-
-Thin layer extending `devimg/agents:latest`:
-
-- rustup with `--default-toolchain none`
-- Toolchain auto-installed from `rust-toolchain.toml` on first `cargo` invocation
-
-### Layer 1: Zig Development (zig-dev/)
-
-Thin layer extending `devimg/agents:latest`:
-
-- [anyzig](https://github.com/marler8997/anyzig) multi-version Zig launcher
-- [minisign](https://jedisct1.github.io/minisign/) for zls signature verification
-- `zig-zls-init` for per-project zls setup (shipped directly in the image context)
-- Zig version pinned per project via `build.zig.zon` (`minimum_zig_version` or `mach_zig_version`)
-- zls not globally installed — downloaded per-project by `zig-zls-init`, cached at `~/.local/share/zls/<version>/`
+dctl adds no editor configuration. When the image installs Neovim, its full configuration can come through an optional user layer such as `dotfiles`.
 
 ### Build Base Images
 
@@ -419,7 +365,7 @@ Use the provided `dctl image` commands:
 dctl image build
 
 # Build a specific image
-dctl image build agents
+dctl image build example
 
 # Build all images (non-interactive)
 dctl image build --all
@@ -435,10 +381,7 @@ Or build manually:
 
 ```bash
 cd ~/.config/dctl/images
-docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ./agents/
-docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/python-dev:latest ./python-dev/
-docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/rust-dev:latest ./rust-dev/
-docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/zig-dev:latest ./zig-dev/
+docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/example:latest ./example/
 ```
 
 ---
@@ -447,151 +390,19 @@ docker buildx build --load --build-arg USERNAME=$USER --build-arg USER_UID=$(id 
 
 ### Philosophy
 
-The `agents` base includes a rolling Python runtime for shared tooling such as neovim providers, pre-commit, and general CLI usage. Project-specific versions override these defaults where applicable:
+dctl installs, activates, and names no runtime or dev environment manager. Each project owns its own dev environment setup: it pins its toolchain and dependencies in its own files, and its own setup installs them inside the container, for example from a `postCreateCommand` in the leaf layer. The user makes sure that the image carries what that setup needs.
 
-- **Python**: Declared in `pyproject.toml` via `[tool.mise]`, overriding the base Python via mise during project bootstrap
-- **Rust**: Declared in `rust-toolchain.toml`, auto-installed by rustup on first `cargo` invocation
-- **Zig**: Declared in `build.zig.zon`, resolved by anyzig on command execution
-
-This keeps the shared image layer reusable while giving each project exact version control. The same config files work for CI and other developers without containers.
+This keeps the shared image layer reusable while giving each project exact version control. The same project files work for CI and other developers without containers.
 
 ### What's Shared vs Isolated
 
 | Component | Scope | Storage |
 | --------- | ----- | ------- |
-| Python interpreters | Per-container | Installed by `mise install` during container creation |
-| Rust toolchains | User-scoped volume | `rustup-toolchains-<user>` volume |
-| Cargo registry/git | User-scoped volume | `cargo-registry-<user>`, `cargo-git-<user>` volumes |
-| Poetry cache | Per-container (ephemeral) | `~/.cache/pypoetry` (no volume) |
-| Zig/zls cache | Per-container (ephemeral) | `~/.cache/zig`, `~/.local/share/zls` (no volume) |
-| Python virtualenvs | Per-project | `.venv/` in project dir (created by container, read by host LSP) |
-| Rust target dirs | Per-project | `target/` in project dir |
-
-### Python Version Management (mise)
-
-#### Project Configuration
-
-Add `[tool.mise]` to your `pyproject.toml`:
-
-```toml
-# pyproject.toml
-
-[project]
-name = "my-api"
-version = "0.1.0"
-requires-python = ">=3.11"
-
-[tool.mise]
-python = "3.11"
-
-[tool.poetry]
-# ... existing poetry config
-```
-
-No separate `.python-version` or `.mise.toml` needed—`pyproject.toml` is the single source of truth.
-
-#### Container Configuration
-
-Use `devimg/python-dev:latest` with mise and Poetry cache volumes. See [Standard Python Configuration](#standard-python-configuration) for a complete `devcontainer.json` template.
-
-**Dockerfile**: [`images/python-dev/Dockerfile`](../images/python-dev/Dockerfile)
-
-#### Cold Start Behavior
-
-| Scenario | Time |
-| -------- | ---- |
-| First container with Python 3.11 | ~30-60s (downloads + builds) |
-| Second container with Python 3.11 | Instant (cached in volume) |
-| First container with Python 3.12 | ~30-60s (new version) |
-
-### Rust Toolchain Management (rustup)
-
-#### Project Configuration
-
-Create `rust-toolchain.toml` in project root:
-
-```toml
-# rust-toolchain.toml
-
-[toolchain]
-channel = "1.75"
-components = ["rustfmt", "clippy", "rust-analyzer"]
-```
-
-Rustup reads this file automatically—no extra commands needed.
-
-#### Container Configuration
-
-Use `devimg/rust-dev:latest` with rustup and cargo cache volumes. See [Standard Rust Configuration](#standard-rust-configuration) for a complete `devcontainer.json` template.
-
-**Dockerfile**: [`images/rust-dev/Dockerfile`](../images/rust-dev/Dockerfile)
-
-#### Cold Start Behavior
-
-| Scenario | Time |
-| -------- | ---- |
-| First container with Rust 1.75 | ~60-90s (downloads toolchain + components) |
-| Second container with Rust 1.75 | Instant (cached in volume) |
-| First `cargo build` | Depends on deps (registry cached) |
-
-### Zig Version Management (anyzig)
-
-#### Project Configuration
-
-Pin Zig in `build.zig.zon`:
-
-```zig
-.{
-  .name = "my-zig-app",
-  .version = "0.0.1",
-  .minimum_zig_version = "0.15.1",
-}
-```
-
-Mach projects can use `.mach_zig_version = "<version>-mach"`; when present, it takes priority.
-
-#### Container Configuration
-
-Use `devimg/zig-dev:latest` with Zig and zls cache volumes. `zig-zls-init` sets up project-local zls wiring (`.nvim.lua`) and caches zls per Zig version.
-
-**Dockerfile**: [`images/zig-dev/Dockerfile`](../images/zig-dev/Dockerfile)
-
-#### Typical Flow
-
-```bash
-# Bootstrap project with explicit Zig version
-zig 0.15.1 init
-
-# Create/update per-project zls setup
-zig-zls-init --allow-unsigned --force
-```
-
-### Version Management Commands
-
-```bash
-# Inside container
-
-# Check active Python version
-mise current python
-python --version
-
-# Check active Rust version
-rustup show
-cargo --version
-
-# Check anyzig launcher + resolved Zig
-zig any version
-zig version
-
-# Manually install a different Python (temporary)
-mise install python@3.13
-mise use python@3.13  # for current shell
-
-# List installed toolchains
-mise list
-rustup toolchain list
-zig any list-installed
-```
+| Project toolchains | Per-container | Installed by the project's own setup |
+| Toolchain caches | User-scoped volume, when a layer mounts one | For example `cargo-registry-<user>` (see [Pattern 1](#pattern-1-user-scoped-cache-volumes-rust)) |
+| Package manager caches | Per-container (ephemeral) | `~/.cache/` (no volume) |
+| Project environments | Per-project | For example `.venv/` in project dir (created by container, read by host LSP) |
+| Build output | Per-project | For example `target/` in project dir |
 
 ---
 
@@ -766,38 +577,40 @@ layer, merged by `dctl init` via the YAML manifest. Each selectable config is
 defined by a manifest that declares its layer composition:
 
 ```yaml
-# python.yaml — shipped manifest
+# ~/.config/dctl/devcontainer/example.yaml — user manifest
 layers:
   - base      # shared layer: remote user, auth mounts, terminal env
   - agents    # shared layer: bubblewrap-friendly seccomp profile, agent CLI mounts
-  - python    # leaf layer: image tag, cache volumes, bootstrap commands
+  - example   # leaf layer: image tag, cache volumes, bootstrap commands
 ```
 
-The last layer is the **leaf** (user-protected on deploy); preceding layers are
-**shared** (reconciled from installed sources on every deploy). Manifests are
-validated against `schemas/compose.schema.yaml`.
+The last layer is the **leaf**, the layer of this one devcontainer; preceding
+layers are **shared** with other manifests. The user writes every manifest and
+layer; [`examples/`](examples/README.md) shows a set. Manifests are validated
+against `schemas/compose.schema.yaml`.
 
 The examples below show only project-local deltas (the leaf layer content).
 
-### Standard Python Configuration
+### Standard Leaf Configuration
 
 ```jsonc
 // project-a/.devcontainer/devcontainer.json
 {
   "name": "${localWorkspaceFolderBasename}-sandbox",
-  "image": "devimg/python-dev:latest",
+  "image": "devimg/example:latest",
   "postCreateCommand": {
-    "pre-commit": "pre-commit install"
+    // the project's own setup command
+    "setup": "make setup"
   }
 }
 ```
 
-### Standard Rust Configuration
+### With Cache Volumes
 
 ```jsonc
 {
   "name": "${localWorkspaceFolderBasename}-sandbox",
-  "image": "devimg/rust-dev:latest",
+  "image": "devimg/example:latest",
   "mounts": [
     // rust toolchain + registry (user-scoped volumes to avoid ownership conflicts)
     {
@@ -817,21 +630,7 @@ The examples below show only project-local deltas (the leaf layer content).
     }
   ],
   "postCreateCommand": {
-    "rust": "cargo build",
-    "pre-commit": "pre-commit install"
-  }
-}
-```
-
-### Standard Zig Configuration
-
-```jsonc
-{
-  "name": "${localWorkspaceFolderBasename}-sandbox",
-  "image": "devimg/zig-dev:latest",
-  "postCreateCommand": {
-    "zig-zls": "zig-zls-init --allow-unsigned || true",
-    "pre-commit": "pre-commit install"
+    "rust": "cargo build"
   }
 }
 ```
@@ -841,15 +640,11 @@ The examples below show only project-local deltas (the leaf layer content).
 ```jsonc
 {
   "name": "project-a",
-  "image": "devimg/python-dev:latest",
+  "image": "devimg/example:latest",
 
   "mounts": [
     "source=${localEnv:HOME}/.ssh/known_hosts,target=/home/${localEnv:USER}/.ssh/known_hosts,type=bind,readonly"
-  ],
-
-  "postCreateCommand": {
-    "pre-commit": "pre-commit install"
-  }
+  ]
 }
 ```
 
@@ -862,23 +657,19 @@ alongside it.
 ```jsonc
 {
   "name": "project-a",
-  "image": "devimg/python-dev:latest",
+  "image": "devimg/example:latest",
 
   "mounts": [
     "source=${localEnv:HOME}/projects/shared-lib,target=/workspaces/shared-lib,type=bind,readonly"
-  ],
-
-  "postCreateCommand": {
-    "pre-commit": "pre-commit install"
-  }
+  ]
 }
 ```
 
 ### Base Configuration Reuse via the `base` Layer
 
-Shared devcontainer defaults live in the `base` layer at `devcontainers/base/devcontainer.json` (installed to `~/.local/share/dctl/devcontainers/base/`). When you run `dctl deploy devcontainer ...`, non-leaf layers referenced by the manifest are always copied (reconciled) into `~/.config/dctl/devcontainer/`, while the leaf layer (last in the manifest) is only created if absent and skipped if it already exists (use `--reset` to overwrite). The layers declared in the YAML manifest are merged in the declared order on demand — regenerated fresh on every `dctl ws up`/`reup`/`test` (and by `dctl init`'s smoke test), never cached — so edits to any layer apply immediately.
+Shared devcontainer defaults live in a `base` layer that the user writes at `~/.config/dctl/devcontainer/base/devcontainer.json`; [`examples/`](examples/README.md) shows one. dctl reads every layer from `~/.config/dctl/devcontainer/` and never copies or overwrites one. The layers declared in the YAML manifest are merged in the declared order on demand — regenerated fresh on every `dctl ws up`/`reup`/`test` (and by `dctl init`'s smoke test), never cached — so edits to any layer apply immediately.
 
-**Defaults provided by `base`:**
+**Defaults that a `base` layer typically sets:**
 
 | Property | Value | Notes |
 | -------- | ----- | ----- |
@@ -892,8 +683,8 @@ Shared devcontainer defaults live in the `base` layer at `devcontainers/base/dev
 **Merge rules** (applied by `dctl init`):
 
 - `mounts` arrays are concatenated in layer order
-- `postCreateCommand`, `containerEnv`, and `remoteEnv` objects are merged by key (template wins)
-- scalar fields use last-wins (later layers and templates override earlier ones)
+- `postCreateCommand`, `containerEnv`, and `remoteEnv` objects are merged by key (later layer wins)
+- scalar fields use last-wins (later layers override earlier ones)
 
 ### Creating a Custom Manifest
 
@@ -905,12 +696,12 @@ manifest in user config:
 name: myproject
 layers:
   - base
-  - agents      # include if you want the bundled seccomp profile + agent mounts
-  - dotfiles    # personal layer (see examples/dotfiles/)
-  - python      # leaf — last layer, user-protected on deploy
+  - agents      # include if you want your seccomp profile + agent mounts
+  - dotfiles    # personal layer
+  - myproject   # leaf — last layer
 ```
 
-Add your layer directory with a `devcontainer.json` at
+Add each layer directory with a `devcontainer.json`, for example
 `~/.config/dctl/devcontainer/dotfiles/devcontainer.json`, then run
 `dctl init --devcontainer myproject`.
 
@@ -957,7 +748,7 @@ ownership conflicts when multiple users share the same Docker daemon:
 
 #### Pattern 2: Ephemeral Caches (Python, Zig)
 
-Package manager caches that are small and fast to rebuild (Poetry, pip, Zig)
+Package manager caches that are small and fast to rebuild (for example pip or Zig)
 should **not** use volumes. Let each container manage its own ephemeral cache
 under `~/.cache/`. This avoids permission mismatches, concurrent-write
 corruption, and debugging overhead that outweighs the download-time savings.
@@ -1101,13 +892,14 @@ docker compose -f .devcontainer/docker-compose.yml down
 
 ### Default Security Profile
 
-- Passwordless sudo is restricted to `/usr/bin/zypper` only (agents image); the common `sudo <arbitrary command>` path is gone, but `sudo zypper install /local.rpm` will still run that RPM's `%post` script as root, so this is a defense-in-depth narrowing rather than a hard root-execution boundary
-- Agents devcontainer layer ships a hand-written seccomp profile that blocks bpf, userfaultfd, perf_event_open, keyctl, kexec_*, and other historically dangerous syscalls (default-allow + targeted denies; see devcontainers/agents/seccomp-bwrap.json)
+- dctl ships no image and no layer, so the sudo policy and any seccomp profile come from the user's image and layers
+- A sudo rule narrowed to one command, such as `/usr/bin/zypper`, removes the common `sudo <arbitrary command>` path, but `sudo zypper install /local.rpm` will still run that RPM's `%post` script as root, so it is a defense-in-depth narrowing rather than a hard root-execution boundary
+- A layer can pass a seccomp profile through `runArgs`; the `agents` layer of [`examples/`](examples/README.md) carries `seccomp-bwrap.json`
 - Safety comes from **mount hygiene**
 
 ```jsonc
 {
-  "image": "devimg/python-dev:latest",
+  "image": "devimg/example:latest",
 
   "privileged": false,
 
@@ -1125,7 +917,7 @@ docker compose -f .devcontainer/docker-compose.yml down
 - Exfiltration of any readable mounted secret over the network
 - Root inside the container reading all mounted secrets
 
-**Hardening already shipped**: the agents image restricts sudo to /usr/bin/zypper, and the agents devcontainer layer ships a hand-written seccomp profile that blocks the highest-risk container-escape / kernel-LPE syscalls. For higher security, swap the bundled profile for moby's default-deny baseline (see https://github.com/moby/profiles), drop all capabilities via --cap-drop=ALL, and add no-new-privileges in your leaf layer.
+**Hardening**: restrict sudo in your image, and pass a seccomp profile that blocks the highest-risk container-escape / kernel-LPE syscalls from a layer. For higher security, use moby's default-deny baseline as the profile for moby's default-deny baseline (see https://github.com/moby/profiles), drop all capabilities via --cap-drop=ALL, and add no-new-privileges in your leaf layer.
 
 ### What's Isolated
 
@@ -1166,9 +958,9 @@ See [README.md](../README.md) and [QUICKSTART.md](QUICKSTART.md) for the
 baseline install/init/up/shell flow. The key `dctl`-specific workflow behavior
 to keep in mind is:
 
-- `dctl deploy devcontainer ...` and `dctl deploy image ...` copy installed
-  managed assets into `~/.config/dctl/`
-- `dctl init` selects a deployed manifest from `~/.config/dctl/devcontainer/`,
+- the user writes manifests, layers, and Dockerfiles into `~/.config/dctl/`;
+  dctl ships none, and [`examples/`](examples/README.md) shows a starting point
+- `dctl init` selects a manifest from `~/.config/dctl/devcontainer/`,
   registers the project, auto-builds the managed image, and runs the smoke test
 - `dctl ws up` and `dctl ws reup` resolve config through the six-level
   precedence chain — for a registered project this regenerates the merged config
@@ -1205,7 +997,7 @@ dctl ws down
 dctl image build --all
 ```
 
-`dctl image build --all` pulls base updates for the `agents` layer and rebuilds all child images.
+`dctl image build --all` builds every image under `~/.config/dctl/images/`, parents first. `dctl image build --full-rebuild` also pulls the external bases and builds with no cache.
 
 ### Update Running Projects
 
@@ -1239,7 +1031,7 @@ systemctl --user enable --now dctl-image-build.timer
 ```
 
 ```dockerfile
-FROM devimg/python-dev:latest
+FROM devimg/example:latest
 
 USER root
 RUN zypper --non-interactive install --no-recommends \
@@ -1273,7 +1065,7 @@ compose-based config.
 # .devcontainer/docker-compose.yml
 services:
   app:
-    image: devimg/python-dev:latest
+    image: devimg/example:latest
     volumes:
       - ..:/workspaces/<project-name>
       - ~/.gitconfig:/home/${USER}/.gitconfig:ro
@@ -1303,7 +1095,7 @@ volumes:
 ```jsonc
 {
   "name": "project",
-  "image": "devimg/python-dev:latest",
+  "image": "devimg/example:latest",
 
   "features": {
     "ghcr.io/devcontainers/features/github-cli:1": {},
@@ -1319,7 +1111,7 @@ See available features: <https://containers.dev/features>
 ```jsonc
 {
   "name": "gpu-project",
-  "image": "devimg/python-dev:latest",
+  "image": "devimg/example:latest",
 
   "runArgs": ["--gpus=all"],
   "containerEnv": {
@@ -1357,7 +1149,7 @@ id
 devcontainer exec --workspace-folder . id
 ```
 
-UID/GID should match if the image was built with the correct `USER_UID`/`USER_GID` build args. Rebuild with `dctl image build agents` (and child images as needed) if they don't match.
+UID/GID should match if the image was built with the correct `USER_UID`/`USER_GID` build args. Rebuild with `dctl image build --all` if they don't match.
 
 ### Cache Volume Permission Issues
 
@@ -1367,24 +1159,12 @@ If caches were created with a different UID/GID:
 docker volume rm rustup-toolchains-${USER} cargo-registry-${USER} cargo-git-${USER} 2>/dev/null || true
 ```
 
-### mise Install Fails
+### Project Setup Fails
+
+The project's own setup runs inside the container. Run it by hand to see the error, and check that the image carries the tools that it needs:
 
 ```bash
-# Inside container
-devcontainer exec --workspace-folder . bash -lc "mise doctor"
-
-# Check pyproject.toml has valid [tool.mise] section
-cat pyproject.toml | grep -A2 '\[tool.mise\]'
-```
-
-### Rust Toolchain Not Installing
-
-```bash
-# Inside container
-devcontainer exec --workspace-folder . bash -lc "rustup show"
-
-# Check rust-toolchain.toml exists and is valid
-cat rust-toolchain.toml
+dctl ws run -- make setup
 ```
 
 ### SSH Key Permission Denied
@@ -1460,12 +1240,8 @@ docker volume rm rustup-toolchains-${USER} cargo-registry-${USER} cargo-git-${US
 # Prune dangling volumes
 docker volume prune
 
-# Rebuild from scratch
-docker pull opensuse/tumbleweed
-docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/agents:latest ~/.config/dctl/images/agents/
-docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/python-dev:latest ~/.config/dctl/images/python-dev/
-docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/rust-dev:latest ~/.config/dctl/images/rust-dev/
-docker buildx build --load --no-cache --build-arg USERNAME=$USER --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t devimg/zig-dev:latest ~/.config/dctl/images/zig-dev/
+# Rebuild from scratch (pulls the external bases, builds with no cache)
+dctl image build --full-rebuild
 ```
 
 ---
@@ -1502,11 +1278,9 @@ dctl image build --all
 
 | File | Purpose |
 | ---- | ------- |
-| `~/.config/dctl/images/*/Dockerfile` | Runtime-managed Dockerfile definitions |
+| `~/.config/dctl/images/*/Dockerfile` | User-written Dockerfile definitions |
+| `~/.config/dctl/devcontainer/*.yaml` | User-written manifests |
 | `project/.devcontainer/devcontainer.json` | Per-project container config |
-| `project/pyproject.toml` | Python version (`[tool.mise]`) + deps |
-| `project/rust-toolchain.toml` | Rust toolchain version |
-| `project/build.zig.zon` | Zig version for anyzig resolution |
 
 ### Key devcontainer.json Fields
 
@@ -1524,13 +1298,15 @@ dctl image build --all
 
 ### Volume Reference
 
+These volumes exist only when a layer mounts them:
+
 | Volume | Contents | Scope |
 | ------ | -------- | ----- |
 | `rustup-toolchains-<user>` | Rust toolchains | User-scoped |
 | `cargo-registry-<user>` | Crates.io index + crates | User-scoped |
 | `cargo-git-<user>` | Git-based dependencies | User-scoped |
 
-Poetry, pip, Zig, and zls caches are ephemeral (no volume). Each container
+Other package manager caches are ephemeral (no volume). Each container
 creates its own cache under `~/.cache/` on first use.
 
 ### Mount Types
@@ -1542,31 +1318,14 @@ creates its own cache under `~/.cache/` on first use.
 | Rsync | `postCreateCommand: rsync -aL ...` | Symlink-heavy sources |
 | Volume | `source=name,target=...,type=volume` | Caches, toolchains |
 
-### Project Config Files
-
-**Python** (`pyproject.toml`):
-
-```toml
-[tool.mise]
-python = "3.11"
-```
-
-**Rust** (`rust-toolchain.toml`):
-
-```toml
-[toolchain]
-channel = "1.75"
-components = ["rustfmt", "clippy", "rust-analyzer"]
-```
-
 ---
 
 ## Full Configuration Examples
 
 Complete `devcontainer.json` examples demonstrating multi-directory workspaces.
 Each project uses the default automatic workspace mount for the main repository.
-These rely on the shared defaults from the `base` layer. For base image
-Dockerfiles, see [`images/`](../images/).
+These rely on the shared defaults from the `base` layer. For an example image
+and layers, see [`examples/`](examples/README.md).
 
 ### Example 1: API Project with Docs and SDK
 
@@ -1575,7 +1334,7 @@ Open from the `my-api` project directory.
 ```jsonc
 {
   "name": "my-api-workspace",
-  "image": "devimg/python-dev:latest",
+  "image": "devimg/example:latest",
 
   "mounts": [
     // Documentation (read-only context)
@@ -1584,11 +1343,7 @@ Open from the `my-api` project directory.
     // Internal SDK (read-only context)
     "source=${localEnv:HOME}/libs/internal-sdk,target=/workspaces/internal-sdk,type=bind,readonly",
 
-  ],
-
-  "postCreateCommand": {
-    "pre-commit": "pre-commit install"
-  }
+  ]
 }
 ```
 
@@ -1600,17 +1355,16 @@ symlink-heavy SDK into a flat directory at container creation time.
 ```jsonc
 {
   "name": "my-api-workspace",
-  "image": "devimg/python-dev:latest",
+  "image": "devimg/example:latest",
 
   "mounts": [
     // Source for rsync (temporary mount point)
     "source=${localEnv:HOME}/libs/legacy-sdk,target=/mnt/src-legacy-sdk,type=bind,readonly"
   ],
 
-  // Snapshot legacy-sdk into /workspaces (resolves symlinks), then setup project
+  // Snapshot legacy-sdk into /workspaces (resolves symlinks)
   "postCreateCommand": {
-    "rsync-sdk": "rsync -aL --delete /mnt/src-legacy-sdk/ /workspaces/legacy-sdk/",
-    "pre-commit": "pre-commit install"
+    "rsync-sdk": "rsync -aL --delete /mnt/src-legacy-sdk/ /workspaces/legacy-sdk/"
   }
 }
 ```
@@ -1625,7 +1379,7 @@ monorepo packages alongside it.
 ```jsonc
 {
   "name": "feature-workspace",
-  "image": "devimg/python-dev:latest",
+  "image": "devimg/example:latest",
 
   "mounts": [
     // Only the packages you're working on (read/write)
@@ -1636,8 +1390,7 @@ monorepo packages alongside it.
     "source=${localEnv:HOME}/monorepo/packages/types,target=/workspaces/types,type=bind,readonly",
 
     // Root configs for tooling (read-only)
-    "source=${localEnv:HOME}/monorepo/pyproject.toml,target=/workspaces/pyproject.toml,type=bind,readonly",
-    "source=${localEnv:HOME}/monorepo/poetry.lock,target=/workspaces/poetry.lock,type=bind,readonly"
+    "source=${localEnv:HOME}/monorepo/pyproject.toml,target=/workspaces/pyproject.toml,type=bind,readonly"
   ]
 }
 ```
@@ -1651,5 +1404,3 @@ monorepo packages alongside it.
 - Devcontainer CLI: <https://github.com/devcontainers/cli>
 - Features Registry: <https://containers.dev/features>
 - openSUSE Packages: <https://software.opensuse.org/>
-- mise Documentation: <https://mise.jdx.dev/>
-- rustup Documentation: <https://rust-lang.github.io/rustup/>

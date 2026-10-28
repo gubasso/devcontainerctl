@@ -5,10 +5,17 @@ SYSTEMD_DIR ?= $(HOME)/.local/share/systemd/user
 
 INSTALL := install
 
-IMAGE_NAMES := agents python-dev rust-dev zig-dev
-DEVCONTAINER_DIRS := agents python rust zig general coordinator base
-DEVCONTAINER_MANIFESTS := general coordinator python rust zig
-LIB_FILES := common.sh ws.sh image.sh deploy.sh init.sh test.sh auth.sh config.sh providers.sh
+LIB_FILES := common.sh ws.sh image.sh init.sh test.sh auth.sh config.sh providers.sh
+
+# The seed files that releases before the removal of `dctl deploy` installed
+# under $(DATA_DIR) and $(LIB_DIR). `make uninstall` still removes them, so an
+# upgrade leaves no stale copy. Drop these lists one release later.
+LEGACY_SEED_IMAGES := agents python-dev rust-dev zig-dev
+LEGACY_SEED_IMAGE_FILES := Dockerfile zig-zls-init
+LEGACY_SEED_LAYERS := agents python rust zig general coordinator base
+LEGACY_SEED_LAYER_FILES := devcontainer.json seccomp-bwrap.json
+LEGACY_SEED_MANIFESTS := general coordinator python rust zig
+LEGACY_LIB_FILES := deploy.sh
 
 .PHONY: install uninstall install-systemd uninstall-systemd test test-unit test-integration lint check gate-no-eval gate-no-raw-ansi gate-one-public-fn-per-file
 
@@ -19,26 +26,6 @@ install:
 	for lib in $(LIB_FILES); do \
 		$(INSTALL) -m 644 "lib/dctl/$$lib" "$(LIB_DIR)/$$lib"; \
 	done
-	for image in $(IMAGE_NAMES); do \
-		$(INSTALL) -d "$(DATA_DIR)/images/$$image"; \
-		for file in images/$$image/*; do \
-			if [ -x "$$file" ]; then mode=755; else mode=644; fi; \
-			$(INSTALL) -m "$$mode" "$$file" "$(DATA_DIR)/images/$$image/$$(basename $$file)"; \
-		done; \
-	done
-	$(INSTALL) -d "$(DATA_DIR)/devcontainers"
-	for template in $(DEVCONTAINER_DIRS); do \
-		$(INSTALL) -d "$(DATA_DIR)/devcontainers/$$template"; \
-		for file in devcontainers/$$template/*; do \
-			[ -f "$$file" ] || continue; \
-			if [ -x "$$file" ]; then mode=755; else mode=644; fi; \
-			$(INSTALL) -m "$$mode" "$$file" "$(DATA_DIR)/devcontainers/$$template/$$(basename $$file)"; \
-		done; \
-	done
-	for manifest in $(DEVCONTAINER_MANIFESTS); do \
-		$(INSTALL) -m 644 "devcontainers/$${manifest}.yaml" "$(DATA_DIR)/devcontainers/$${manifest}.yaml"; \
-	done
-	$(INSTALL) -m 644 devcontainers/README.md "$(DATA_DIR)/devcontainers/README.md"
 	$(INSTALL) -d "$(DATA_DIR)/schemas"
 	$(INSTALL) -m 644 schemas/compose.schema.yaml "$(DATA_DIR)/schemas/compose.schema.yaml"
 	$(INSTALL) -m 644 schemas/projects.schema.yaml "$(DATA_DIR)/schemas/projects.schema.yaml"
@@ -50,24 +37,24 @@ install:
 
 uninstall:
 	rm -f "$(BIN_DIR)/dctl"
-	for lib in $(LIB_FILES); do \
+	for lib in $(LIB_FILES) $(LEGACY_LIB_FILES); do \
 		rm -f "$(LIB_DIR)/$$lib"; \
 	done
 	rmdir "$(LIB_DIR)" 2>/dev/null || true
-	for image in $(IMAGE_NAMES); do \
-		for file in images/$$image/*; do \
-			rm -f "$(DATA_DIR)/images/$$image/$$(basename $$file)"; \
+	for image in $(LEGACY_SEED_IMAGES); do \
+		for file in $(LEGACY_SEED_IMAGE_FILES); do \
+			rm -f "$(DATA_DIR)/images/$$image/$$file"; \
 		done; \
 		rmdir "$(DATA_DIR)/images/$$image" 2>/dev/null || true; \
 	done
 	rmdir "$(DATA_DIR)/images" 2>/dev/null || true
-	for template in $(DEVCONTAINER_DIRS); do \
-		for file in devcontainers/$$template/*; do \
-			rm -f "$(DATA_DIR)/devcontainers/$$template/$$(basename $$file)"; \
+	for layer in $(LEGACY_SEED_LAYERS); do \
+		for file in $(LEGACY_SEED_LAYER_FILES); do \
+			rm -f "$(DATA_DIR)/devcontainers/$$layer/$$file"; \
 		done; \
-		rmdir "$(DATA_DIR)/devcontainers/$$template" 2>/dev/null || true; \
+		rmdir "$(DATA_DIR)/devcontainers/$$layer" 2>/dev/null || true; \
 	done
-	for manifest in $(DEVCONTAINER_MANIFESTS); do \
+	for manifest in $(LEGACY_SEED_MANIFESTS); do \
 		rm -f "$(DATA_DIR)/devcontainers/$${manifest}.yaml"; \
 	done
 	rm -f "$(DATA_DIR)/devcontainers/README.md"

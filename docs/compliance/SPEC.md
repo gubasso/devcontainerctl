@@ -264,7 +264,7 @@ All top-level invocations follow `dctl <group> <verb>`:
 ```
 dctl ws      up|reup|down|exec|shell|run|status|list
 dctl image   build|list|rm
-dctl project init|deploy|list|rm
+dctl project init|list|rm
 dctl config  get|set|list|path
 dctl auth    login|logout|status
 dctl doctor
@@ -275,7 +275,7 @@ dctl help
 dctl version
 ```
 
-Legacy top-level verbs (`dctl init`, `dctl deploy`, `dctl test`) remain
+Legacy top-level verbs (`dctl init`, `dctl test`) remain
 as deprecated aliases that print a `[warn]` and forward to the new
 paths. Removal target: one release after the rename.
 

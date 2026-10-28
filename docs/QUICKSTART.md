@@ -7,12 +7,16 @@
 
 ## Setup
 
+dctl ships no image, no layer, and no manifest. It reads `~/.config/dctl/`, and
+you write it: by hand, with a dotfiles manager, or with home-manager.
+[examples/](examples/README.md) holds a copyable starting point in that layout.
+
 ```bash
 make install
+mkdir -p ~/.config/dctl
+cp -r docs/examples/config/dctl/images docs/examples/config/dctl/devcontainer ~/.config/dctl/
 cd ~/projects/my-api
-dctl deploy devcontainer python
-dctl deploy image python-dev
-dctl init --devcontainer python
+dctl init --devcontainer example
 dctl ws up
 dctl ws shell
 ```
@@ -20,13 +24,13 @@ dctl ws shell
 ## How Composition Works
 
 Each selectable config is defined by a YAML **manifest** that declares an
-ordered list of layers to compose. For example, `python.yaml`:
+ordered list of layers to compose. For example, `example.yaml`:
 
 ```yaml
 layers:
   - base      # shared infrastructure (auth mounts, terminal env, remote user)
   - agents    # shared agents layer (bubblewrap-friendly seccomp profile, agent CLI mounts)
-  - python    # leaf layer (image tag, cache volumes, bootstrap commands)
+  - example   # leaf layer (image tag, cache volumes, bootstrap commands)
 ```
 
 Each layer name maps to a directory containing a `devcontainer.json`.
@@ -38,8 +42,8 @@ order into a single `devcontainer.json` regenerated fresh under
 `dctl ws up`/`reup`/`test`. Manifest-backed commands require `jq`.
 
 The **last layer** in the manifest is the **leaf** — it holds your
-project-specific settings and is protected from overwrites on deploy. All
-preceding layers are **shared** and reconciled automatically.
+project-specific settings. All preceding layers are **shared**: several
+manifests can list the same layer.
 
 Manifests are validated against `schemas/compose.schema.yaml` (JSON Schema
 Draft 2020-12). The only field is `layers` (non-empty array of strings);
@@ -47,13 +51,15 @@ the filename stem is the manifest name.
 
 ## Available Configs
 
+The configs are the manifests in `~/.config/dctl/devcontainer/`, and the names
+are yours. The examples define one:
+
 | Config | Layers | Image |
 | --- | --- | --- |
-| `general` | base, agents, general | `devimg/agents:latest` |
-| `coordinator` | base, agents, coordinator | `devimg/agents:latest` |
-| `python` | base, agents, python | `devimg/python-dev:latest` |
-| `rust` | base, agents, rust | `devimg/rust-dev:latest` |
-| `zig` | base, agents, zig | `devimg/zig-dev:latest` |
+| `example` | base, agents, example | `devimg/example:latest` |
+
+Each image installs what your projects need; each project owns its own dev
+environment setup.
 
 ## Creating a Custom Manifest
 
@@ -61,12 +67,11 @@ To compose a custom layer stack, create a manifest in user config:
 
 ```yaml
 # ~/.config/dctl/devcontainer/myproject.yaml
-name: myproject
 layers:
   - base
-  - agents      # include if you want the bundled seccomp profile + agent mounts
-  - dotfiles    # optional personal layer (see examples/dotfiles/)
-  - python      # leaf — last layer wins for scalar fields
+  - agents      # include if you want the seccomp profile + agent mounts of the examples
+  - dotfiles    # optional personal layer (see examples/)
+  - myproject   # leaf — last layer wins for scalar fields
 ```
 
 Then add your layer directories under `~/.config/dctl/devcontainer/` and run
@@ -75,8 +80,7 @@ Then add your layer directories under `~/.config/dctl/devcontainer/` and run
 ## Common Commands
 
 ```bash
-dctl deploy --list
-dctl init --devcontainer python
+dctl init --devcontainer example
 dctl ws up
 dctl ws reup
 dctl ws shell

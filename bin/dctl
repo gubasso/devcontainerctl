@@ -15,7 +15,6 @@ source "${DCTL_LIB_DIR}/common.sh"
 source "${DCTL_LIB_DIR}/providers.sh"
 source "${DCTL_LIB_DIR}/ws.sh"
 source "${DCTL_LIB_DIR}/image.sh"
-source "${DCTL_LIB_DIR}/deploy.sh"
 source "${DCTL_LIB_DIR}/init.sh"
 source "${DCTL_LIB_DIR}/test.sh"
 source "${DCTL_LIB_DIR}/config.sh"
@@ -28,8 +27,7 @@ Global options:
   --config <path>  Use a specific devcontainer.json
 
 Commands:
-  init         Register the current project using a deployed devcontainer
-  deploy       Copy installed templates/images into user config
+  init         Register the current project against a devcontainer of the user config
   test         Validate the current workspace setup
   ws           Manage the current workspace's devcontainer lifecycle
   image        Build and inspect devcontainer base images
@@ -38,9 +36,7 @@ Commands:
   version      Show dctl version
 
 Examples:
-  dctl deploy --all
-  dctl deploy devcontainer python
-  dctl init --devcontainer python
+  dctl init --devcontainer example
   dctl test
   dctl ws up
   dctl ws shell
@@ -77,10 +73,6 @@ main() {
     init)
       shift
       main_init "$@"
-      ;;
-    deploy)
-      shift
-      main_deploy "$@"
       ;;
     test)
       shift

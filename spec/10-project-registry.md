@@ -26,7 +26,7 @@ Example:
 
 ```yaml
 org-repo:
-  devcontainer-manifest: python
+  devcontainer-manifest: example
 
 acme-docs:
   devcontainer-manifest: docs

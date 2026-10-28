@@ -60,7 +60,7 @@ If none of these sound like you, this project probably isn't for you.
 
 - <mdi-robot-outline class="inline text-brand-deep" /> &nbsp; **You use AI agents** (Claude Code, Codex, Gemini) and want them isolated, with credentials forwarded automatically.
 
-- <mdi-toolbox-outline class="inline text-brand-accent" /> &nbsp; **Your agents need your tooling.** Pre-commit hooks, language servers, formatters, build/test tools (mise, poetry, cargo) — that's how Claude Code and Codex CLI close their feedback loop. The container should mirror the host dev environment, not approximate it.
+- <mdi-toolbox-outline class="inline text-brand-accent" /> &nbsp; **Your agents need your tooling.** Pre-commit hooks, language servers, formatters, build/test tools (pytest, cargo) — that's how Claude Code and Codex CLI close their feedback loop. The container should mirror the host dev environment, not approximate it.
 
 - <mdi-account-group-outline class="inline text-brand-warn" /> &nbsp; **You work on a team.** Onboarding should be one command, not a wiki page.
 
@@ -658,7 +658,7 @@ layoutClass: gap-10 act-dctl
 
 # Shared Dockerfiles
 
-One folder hosts every managed image. The directory name **is** the image name.
+One folder hosts every managed image, and you write each Dockerfile. The directory name **is** the image name.
 
 <div class="mt-6 space-y-4">
 
@@ -673,7 +673,7 @@ One folder hosts every managed image. The directory name **is** the image name.
 <div class="flex items-center gap-4">
   <mdi-source-merge class="text-4xl text-brand" />
   <div>
-    <div class="font-mono text-sm">FROM devimg/agents:latest</div>
+    <div class="font-mono text-sm">FROM devimg/team-base:latest</div>
     <div class="text-sm opacity-70">Language images compose on top of the shared base — native Docker, no magic</div>
   </div>
 </div>
@@ -689,7 +689,7 @@ One folder hosts every managed image. The directory name **is** the image name.
 <div class="flex items-center gap-4">
   <mdi-pencil-outline class="text-4xl text-brand-warn" />
   <div>
-    <div class="font-mono text-sm">$EDITOR ~/.config/dctl/images/python-dev/Dockerfile</div>
+    <div class="font-mono text-sm">$EDITOR ~/.config/dctl/images/team-python/Dockerfile</div>
     <div class="text-sm opacity-70">Open and edit any time — it's your file</div>
   </div>
 </div>
@@ -706,23 +706,21 @@ One folder hosts every managed image. The directory name **is** the image name.
 openSUSE Tumbleweed
         │
         ▼
-devimg/agents:latest
+devimg/team-base:latest
   shared tools, AI agent CLIs,
-  runtime managers, dev tooling
+  dev tooling
         │
-        ├── devimg/python-dev:latest
-        ├── devimg/rust-dev:latest
-        └── devimg/zig-dev:latest
+        ├── devimg/team-python:latest
+        └── devimg/team-rust:latest
 ```
 
 <div class="mt-6 text-sm opacity-70 mb-2">~/.config/dctl/images/</div>
 
 ```text
 images/
-├── agents/Dockerfile        # shared base
-├── python-dev/Dockerfile    # FROM devimg/agents
-├── rust-dev/Dockerfile      # FROM devimg/agents
-└── zig-dev/Dockerfile       # FROM devimg/agents
+├── team-base/Dockerfile     # shared base
+├── team-python/Dockerfile   # FROM devimg/team-base
+└── team-rust/Dockerfile     # FROM devimg/team-base
 ```
 
 </div>
@@ -730,7 +728,7 @@ images/
 <!--
 Two layers of sharing: directory layout makes images discoverable by name,
 and FROM lets language images inherit from the shared base. One tool added
-to agents lights up every downstream image on the next build.
+to team-base lights up every downstream image on the next build.
 -->
 
 ---
@@ -879,7 +877,7 @@ Three projects. Two manifests. <strong>Zero per-project files.</strong>
 </div>
 
 <div class="mt-8 text-xs opacity-60">
-The merged config names the image (e.g. <code>devimg/python-dev:latest</code>). If it's not built locally, <code>dctl init</code> builds it for you.
+The merged config names the image (e.g. <code>devimg/team-python:latest</code>). If it's not built locally, <code>dctl init</code> builds it for you.
 </div>
 
 </div>
@@ -956,16 +954,14 @@ The CLI maps 1-to-1 onto the workflow — no `--workspace-folder` ceremony, no `
 
 <div class="mt-4 text-xs">
 
-<div class="opacity-70 mb-1"><strong>A.</strong> Shipped templates (sane defaults)</div>
+<div class="opacity-70 mb-1"><strong>A.</strong> Start from the examples</div>
 
 ```bash
-make install && dctl deploy --all
+make install && mkdir -p ~/.config/dctl
+cp -r docs/examples/config/dctl/{images,devcontainer} ~/.config/dctl/
 
 cd ~/projects/snackbar-api
-dctl init --devcontainer python && dctl ws up
-
-cd ~/projects/order-engine
-dctl init --devcontainer rust && dctl ws up
+dctl init --devcontainer example && dctl ws up
 ```
 
 <div class="mt-3 opacity-70 mb-1"><strong>B.</strong> Shared/team config</div>
@@ -982,14 +978,14 @@ dctl init --devcontainer team-rust && dctl ws up
 ```
 
 <div class="mt-3 opacity-80">
-Same CLI. <code>dctl deploy</code> seeds the shipped defaults; <code>~/.config/dctl/</code> is just files — fork, symlink, or share it.
+Same CLI. <code>dctl</code> ships no config; <code>~/.config/dctl/</code> is just files — write it, copy the examples, or share it.
 </div>
 
 </div>
 
 <!--
-A: shipped templates path — make install + dctl deploy gives sane defaults.
-B: shared config path — ~/.config/dctl/ is the team's repo, no deploy needed.
+A: example path — copy docs/examples/ into ~/.config/dctl/ and adapt it.
+B: shared config path — ~/.config/dctl/ is the team's repo.
 Same CLI in both; the difference is where the config comes from.
 -->
 
@@ -1010,7 +1006,7 @@ class: act-dctl
 
 - <mdi-clock-outline class="inline text-brand-accent" /> &nbsp; **Weekly image refresh, opt-in.** A user-systemd timer runs `dctl image build --all` so the fleet stays current.
 
-- <mdi-folder-multiple-outline class="inline text-brand-warn" /> &nbsp; **XDG-clean.** Seed ready-to-use templates in `~/.local/share/dctl/`, runtime config in `~/.config/dctl/`, the merged output regenerated fresh (never cached) in `$XDG_RUNTIME_DIR/dctl/`. Honors `XDG_*_HOME`. Nothing in the project repo.
+- <mdi-folder-multiple-outline class="inline text-brand-warn" /> &nbsp; **XDG-clean.** Schemas in `~/.local/share/dctl/`, your config in `~/.config/dctl/`, the merged output regenerated fresh (never cached) in `$XDG_RUNTIME_DIR/dctl/`. Honors `XDG_*_HOME`. Nothing in the project repo.
 
 <!--
 The non-obvious wins. Each of these would be a custom shell snippet or wiki

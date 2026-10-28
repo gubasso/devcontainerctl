@@ -1,0 +1,82 @@
+// =============================================================================
+// EXAMPLE AGENTS LAYER — configuration for AI coding agents
+// =============================================================================
+//
+// Copy this folder, with seccomp-bwrap.json, to
+// ~/.config/dctl/devcontainer/agents/. It adds what agent CLIs (Claude Code,
+// Codex CLI, Gemini CLI) need inside a dctl container:
+//
+//   1. Mounts for each agent's config directory, so auth and history persist
+//      across container recreations.
+//   2. `runArgs` that let agents use bubblewrap (`bwrap`) for an internal
+//      sandbox, primarily OpenAI Codex CLI, while a syscall filter still
+//      applies to the container.
+//
+// The image of the user installs the agent CLIs. This layer installs nothing.
+//
+// WHAT EACH runArg DOES
+// ---------------------
+//   --security-opt seccomp=<path>/seccomp-bwrap.json
+//       A default-allow syscall filter with explicit EPERM denies on the
+//       syscalls most often used in container escape and kernel privilege
+//       escalation (bpf, userfaultfd, perf_event_open, keyctl, kexec_*,
+//       init_module, and others). Stronger than seccomp=unconfined, and
+//       looser than moby's default profile, so bubblewrap, build tools,
+//       `strace`, and `gdb` keep working. The `_meta` block of the file
+//       holds its design notes and references.
+//
+//   --security-opt apparmor=unconfined
+//       Loads no AppArmor profile for this container. Ubuntu 23.10 and later
+//       deny `unshare` of user namespaces through AppArmor.
+//
+//   --security-opt systempaths=unconfined
+//       Does not mask /proc/sys and similar paths. bwrap reads some of them
+//       to probe kernel support for user namespaces.
+//
+// These flags grant no extra capability: no `--privileged`, no CAP_SYS_ADMIN,
+// and the same non-root user.
+//
+// SECCOMP PROFILE PATH
+// --------------------
+// The devcontainer CLI resolves the path under runArgs on the host. The
+// literal path assumes that XDG_CONFIG_HOME is ~/.config. With another value,
+// override `runArgs` in your leaf layer. If the file is missing, the container
+// fails to start: there is no fallback to seccomp=unconfined.
+//
+// REFERENCES
+// ----------
+//   https://docs.docker.com/engine/security/seccomp/
+//   https://github.com/moby/profiles/blob/main/seccomp/default.json
+//   https://developers.openai.com/codex/concepts/sandboxing
+//   https://github.com/containers/bubblewrap
+//
+// =============================================================================
+{
+  "runArgs": [
+    "--security-opt", "seccomp=${localEnv:HOME}/.config/dctl/devcontainer/agents/seccomp-bwrap.json",
+    "--security-opt", "apparmor=unconfined",
+    "--security-opt", "systempaths=unconfined"
+  ],
+  "mounts": [
+    {
+      "source": "${localEnv:HOME}/.claude",
+      "target": "${localEnv:HOME}/.claude",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}/.claude.json",
+      "target": "${localEnv:HOME}/.claude.json",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}/.codex",
+      "target": "${localEnv:HOME}/.codex",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}/.gemini",
+      "target": "${localEnv:HOME}/.gemini",
+      "type": "bind"
+    }
+  ]
+}

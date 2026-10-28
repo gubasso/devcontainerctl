@@ -1,7 +1,0 @@
-{
-  "name": "${localWorkspaceFolderBasename}-sandbox",
-  "image": "devimg/agents:latest",
-  "postCreateCommand": {
-    "pre-commit": "pre-commit install"
-  }
-}

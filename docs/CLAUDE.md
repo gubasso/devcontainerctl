@@ -1,13 +1,13 @@
 # CLAUDE.md — devcontainerctl
 
-Pre-built Docker images and the unified `dctl` CLI for AI-agent devcontainer sandboxes.
+The unified `dctl` CLI for AI-agent devcontainer sandboxes, built and run from the user's own configuration in `~/.config/dctl/`.
 
 ## Quick Orientation
 
 - `bin/dctl` — thin CLI entrypoint (bootstrap, source modules, dispatch)
 - `lib/dctl/` — shell library modules (`common`, `ws`, `image`, `init`, `test`, `auth`, `config`)
-- `images/` — managed Dockerfiles, one subdir per image
-- `devcontainers/` — layer directories plus YAML composition manifests (validated by `schemas/compose.schema.yaml`)
+- `schemas/` — JSON Schemas for composition manifests and the project registry
+- `docs/examples/` — copyable examples in the layout of `~/.config/dctl/` (an image, a manifest, layers); no command reads them and `make install` does not install them
 - `systemd/` — weekly image rebuild timer + service
 - `tests/` — bats-based unit and integration coverage
 
@@ -30,12 +30,12 @@ Tests are written with `bats`.
 ## Key Invariants
 
 - `dctl init` registers the project in XDG config under `~/.config/dctl/`, not in a local workspace `.devcontainer/`; the merged `devcontainer.json` is regenerated fresh on every command under `$XDG_RUNTIME_DIR/dctl/devcontainer/<name>/` (never cached)
-- Selectable devcontainers are defined by YAML manifests (`*.yaml`) with a `layers` array declaring composition order; the last layer is the leaf (user-protected on deploy), preceding layers are shared (reconciled on deploy); layer directories without manifests are not listed or selectable
+- Selectable devcontainers are defined by YAML manifests (`*.yaml`) with a `layers` array declaring composition order; the last layer is the leaf, preceding layers are shared; layer directories without manifests are not listed or selectable
 - `dctl` resolves `devcontainer.json` through a six-level precedence chain: CLI flag, env var, registry, local file, sibling discovery, user default
 - `dctl ws` commands match containers by workspace label, so work-clones keep separate container identity
-- Installed files (`~/.local/share/dctl/`) are seed sources only — `dctl` never builds, merges, or runs containers from installed files directly; all runtime operations use user config (`~/.config/dctl/`) exclusively
-- Installed templates seed user config, but composed devcontainer output is built only from `~/.config/dctl/devcontainer/`
-- Dotfiles are optional and belong in a user layer such as `dotfiles`, not in shipped defaults or image build inputs
+- `dctl` ships no image, no layer, and no manifest; `make install` installs only `bin/dctl`, `lib/dctl/*.sh`, and the schemas (`~/.local/share/dctl/schemas/`); all runtime operations use user config (`~/.config/dctl/`) exclusively, which the user writes
+- `dctl` installs, activates, and names no dev environment manager; each project owns its own dev environment setup, and the user's image carries what the projects need
+- Dotfiles are optional and belong in a user layer such as `dotfiles`, not in image build inputs
 
 ## Mermaid Diagrams
 

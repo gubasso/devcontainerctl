@@ -150,7 +150,7 @@ _validate_deployed_devcontainer() {
   local template="$1"
   local manifest
   manifest="$(config_compose_manifest_path "$template")"
-  [[ -f $manifest ]] || err "Unknown deployed devcontainer: $template (no manifest at $manifest)"
+  [[ -f $manifest ]] || err "Unknown devcontainer: $template (no manifest at $manifest)"
 }
 
 discover_config_layers() {
@@ -174,7 +174,7 @@ discover_config_layers() {
   printf '%s\n' "${layers[@]}"
 }
 
-# Merge a deployed devcontainer's manifest layers into a single config and
+# Merge the layers of a devcontainer manifest into a single config and
 # write it to the runtime generated path, freshly, every call — there is no
 # cache and no freshness check. Echoes the generated path.
 generate_devcontainer() {
@@ -189,7 +189,7 @@ generate_devcontainer() {
   local -a config_layers=()
   mapfile -t config_layers < <(discover_config_layers "$template")
   if [[ ${#config_layers[@]} -eq 0 ]]; then
-    err "No composable config layers found for ${template}. Run: dctl deploy devcontainer ${template}"
+    err "No composable config layers found for ${template} in ${DCTL_DEVCONTAINER_DIR}"
   fi
 
   mkdir -p "$(dirname "$gen_path")"

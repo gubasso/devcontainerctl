@@ -1,4 +1,10 @@
 {
+  // Example shared layer: the remote user, the terminal variables, and the
+  // auth mounts that every devcontainer of the user shares. Copy this folder
+  // to ~/.config/dctl/devcontainer/base/.
+  //
+  // It activates no dev environment and runs no lifecycle command. A project
+  // runs its own tools with the native command that the project documents.
   "remoteUser": "${localEnv:USER}",
   "updateRemoteUserUID": false,
   "init": true,
@@ -6,6 +12,8 @@
   "containerEnv": {
     "TERM": "${localEnv:TERM}",
     "COLORTERM": "truecolor",
+    // dctl bind-mounts the forge credential directory at /run/forge-auth
+    // (docs/specs/secret-forwarding/SPEC.md).
     "GH_CONFIG_DIR": "/run/forge-auth/gh",
     "GLAB_CONFIG_DIR": "/run/forge-auth/glab-cli",
     "GIT_SSH_COMMAND": "ssh -o StrictHostKeyChecking=accept-new"
