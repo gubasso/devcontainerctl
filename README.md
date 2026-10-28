@@ -395,20 +395,20 @@ Use `make uninstall` to remove the installed binary, shell modules, templates, D
 
 ## Development
 
-The flake dev shell is the one source of the tools that `make check`, `make test`, and the git hooks call. Enter it through `.dev/exec`, which runs `nix develop` and works from any folder of the repository and from any linked worktree:
+The flake dev shell is the one source of the tools that `make check`, `make test`, and the git hooks call. `.envrc` loads it with direnv. Run a command in it with the native command of either tool:
 
 ```bash
-.dev/exec make check          # run one command inside the dev shell
-.dev/exec                     # open a shell inside it
+direnv exec . make check      # or: nix develop --command make check
+nix develop                   # open a shell inside it
 ```
 
-The git hooks are tracked in `.githooks/`, one script for each stage of `default_install_hook_types` in `.pre-commit-config.yaml`. Each script runs pre-commit for its stage through `.dev/exec`, so a commit runs every hook with the dev shell's tools from any shell. Point git at them once per clone:
+Install the git hooks once per clone, from the dev shell. `pre-commit install` installs every stage of `default_install_hook_types` in `.pre-commit-config.yaml` into the shared git folder, so every linked worktree runs them:
 
 ```bash
-git config core.hooksPath .githooks
+nix develop --command pre-commit install
 ```
 
-`pre-commit install` refuses to run once `core.hooksPath` is set, so this repository does not use it. The hook scripts call `pre-commit hook-impl`, which is internal to pre-commit, so check that a commit still runs its hooks after each pre-commit update.
+The hooks take their tools from `PATH`, so commit from the dev shell, or with `direnv exec . git commit`. A commit from a shell outside it fails at the first hook whose tool is missing.
 
 ## Further Reading
 
