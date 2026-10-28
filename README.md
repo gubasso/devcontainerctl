@@ -96,6 +96,7 @@ Prerequisites:
 make install
 mkdir -p ~/.config/dctl
 cp -r docs/examples/config/dctl/images docs/examples/config/dctl/devcontainer ~/.config/dctl/
+$EDITOR ~/.config/dctl/devcontainer/agents/devcontainer.json   # keep only the mounts whose host paths exist
 cd ~/projects/my-api
 dctl init --devcontainer example
 dctl image build
@@ -104,7 +105,7 @@ dctl ws shell
 ```
 
 1. `make install` — installs `dctl`, its shell modules, and the schemas; it writes nothing to `~/.config/dctl/`
-2. Write your user config: here, copy the images and devcontainer layers of [docs/examples/](docs/examples/README.md) into `~/.config/dctl/` and edit them for your projects
+2. Write your user config: here, copy the images and devcontainer layers of [docs/examples/](docs/examples/README.md) into `~/.config/dctl/`, and edit them before `dctl init`. Every bind source of a layer must exist on the host, so remove the agent mounts that you do not use ([docs/examples/](docs/examples/README.md#copy-them))
 3. `dctl init --devcontainer example` — registers the project, auto-builds the managed image if missing, and runs the smoke test (`jq` is required for manifest-backed projects)
 4. `dctl image build` — optional rebuild of your managed images via an explicit target, the no-arg picker, or `--all`
 5. `dctl ws up` — starts the devcontainer, regenerating the merged config fresh under `$XDG_RUNTIME_DIR/dctl/devcontainer/`

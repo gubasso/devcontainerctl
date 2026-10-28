@@ -14,20 +14,27 @@ This folder holds a small, working configuration to copy from, for a person or a
 | `devcontainer/example.yaml` | A manifest: the layers in composition order. The last layer is the leaf. |
 | `devcontainer/base/devcontainer.json` | A shared layer: the remote user, the terminal variables, and the auth mounts. |
 | `devcontainer/agents/` | A shared layer for AI coding agents: the config mounts of the agent CLIs, and the seccomp profile `seccomp-bwrap.json` that lets bubblewrap run. |
-| `devcontainer/dotfiles/devcontainer.json` | An optional layer that binds a dotfiles checkout from `$DOTFILES`. |
+| `devcontainer/dotfiles/devcontainer.json` | An optional layer that binds a dotfiles checkout from `$DOTFILES`. `example.yaml` does not list it: add it after you set `DOTFILES`. |
 | `devcontainer/example/devcontainer.json` | The leaf: it names the image and runs no lifecycle command. |
 | `projects.yaml` | The shape of the project registry that `dctl init` writes. |
 
 ## Copy them
 
-```bash
-mkdir -p ~/.config/dctl
-cp -r docs/examples/config/dctl/images docs/examples/config/dctl/devcontainer ~/.config/dctl/
-dctl image build example
-cd ~/Projects/your-project && dctl init --devcontainer example
-```
+1. Copy the examples:
 
-Then edit the copies. Rename `example` to a name that fits, add a layer for each stack, and install in the image what your projects need.
+   ```bash
+   mkdir -p ~/.config/dctl
+   cp -r docs/examples/config/dctl/images docs/examples/config/dctl/devcontainer ~/.config/dctl/
+   ```
+
+2. Edit the copies before the first build. Every bind source of a layer must exist on the host, or `dctl init` and `dctl ws up` stop with a missing path. The `base` layer binds `~/.gitconfig`, and the `agents` layer binds `~/.claude`, `~/.claude.json`, `~/.codex`, and `~/.gemini`: remove the mounts of the agents that you do not use. To use the `dotfiles` layer, set `DOTFILES` to your checkout and add `dotfiles` to `example.yaml` before `example`. Install in the image what your projects need, and rename `example` to a name that fits.
+
+3. Build the image and register a project:
+
+   ```bash
+   dctl image build example
+   cd ~/Projects/your-project && dctl init --devcontainer example
+   ```
 
 ## Your image carries your tools
 
@@ -61,4 +68,4 @@ Tools that set up a project environment:
 | Hermit | <https://cashapp.github.io/hermit> | `./bin/CMD` from the project root |
 | pkgx | <https://pkgx.sh> | `pkgx +PKG -- CMD` |
 
-The upstream pages were checked on 2026-10-28. zsh-autoenv (<https://github.com/Tarrasch/zsh-autoenv>) and lorri (<https://github.com/nix-community/lorri>) also exist, with little activity since 2024.
+The upstream pages were checked on 2026-10-28. Two more tools exist: zsh-autoenv (<https://github.com/Tarrasch/zsh-autoenv>), whose last commit is of 2024-06-04, and lorri (<https://github.com/nix-community/lorri>), whose 2.0.0 rewrite of 2026-04-28 adds a shell hook and has no command that runs one command in the environment.

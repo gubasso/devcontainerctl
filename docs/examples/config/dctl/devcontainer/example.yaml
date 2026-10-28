@@ -1,9 +1,9 @@
 # Example manifest. Copy it to ~/.config/dctl/devcontainer/example.yaml.
 # dctl merges the layers in this order; a later layer wins for a scalar, and
 # the last layer is the leaf. Each name is a folder beside this file that
-# holds a devcontainer.json.
+# holds a devcontainer.json. To add the optional dotfiles layer, set
+# DOTFILES on the host and list `dotfiles` before `example`.
 layers:
   - base
   - agents
-  - dotfiles
   - example

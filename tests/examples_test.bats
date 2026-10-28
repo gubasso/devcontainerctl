@@ -69,7 +69,10 @@ teardown() {
   [ "$(jq -r '.remoteUser' "$generated")" = '${localEnv:USER}' ]
   # shellcheck disable=SC2016 # as above
   [ "$(jq -r '.runArgs[1]' "$generated")" = 'seccomp=${localEnv:HOME}/.config/dctl/devcontainer/agents/seccomp-bwrap.json' ]
-  [ "$(jq -r '.postCreateCommand | keys | join(",")' "$generated")" = "dotfiles" ]
+  # The leaf runs no lifecycle command, and the optional dotfiles layer is not
+  # in the manifest, so nothing needs DOTFILES.
+  [ "$(jq -c '.postCreateCommand // {}' "$generated")" = "{}" ]
+  [ "$(jq '[.mounts[].source | select(test("DOTFILES"))] | length' "$generated")" = "0" ]
 }
 
 @test "the example seccomp profile is valid JSON and default-allow" {

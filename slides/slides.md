@@ -959,6 +959,7 @@ The CLI maps 1-to-1 onto the workflow — no `--workspace-folder` ceremony, no `
 ```bash
 make install && mkdir -p ~/.config/dctl
 cp -r docs/examples/config/dctl/{images,devcontainer} ~/.config/dctl/
+# edit the copies: every bind source must exist
 
 cd ~/projects/snackbar-api
 dctl init --devcontainer example && dctl ws up

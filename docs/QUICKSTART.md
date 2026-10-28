@@ -10,11 +10,14 @@
 dctl ships no image, no layer, and no manifest. It reads `~/.config/dctl/`, and
 you write it: by hand, with a dotfiles manager, or with home-manager.
 [examples/](examples/README.md) holds a copyable starting point in that layout.
+Edit the copies before `dctl init`: every bind source of a layer must exist on
+the host ([examples/](examples/README.md#copy-them)).
 
 ```bash
 make install
 mkdir -p ~/.config/dctl
 cp -r docs/examples/config/dctl/images docs/examples/config/dctl/devcontainer ~/.config/dctl/
+$EDITOR ~/.config/dctl/devcontainer/agents/devcontainer.json   # keep only the mounts whose host paths exist
 cd ~/projects/my-api
 dctl init --devcontainer example
 dctl ws up
@@ -30,7 +33,7 @@ ordered list of layers to compose. For example, `example.yaml`:
 layers:
   - base      # shared infrastructure (auth mounts, terminal env, remote user)
   - agents    # shared agents layer (bubblewrap-friendly seccomp profile, agent CLI mounts)
-  - example   # leaf layer (image tag, cache volumes, bootstrap commands)
+  - example   # leaf layer (image tag, cache volumes)
 ```
 
 Each layer name maps to a directory containing a `devcontainer.json`.
