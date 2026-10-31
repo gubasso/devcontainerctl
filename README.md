@@ -82,8 +82,11 @@ under `$XDG_RUNTIME_DIR/dctl/devcontainer/<name>/devcontainer.json` — never
 cached, so layer edits are picked up immediately.
 
 Manifests are validated against `schemas/compose.schema.yaml` (JSON Schema
-Draft 2020-12). The only field is `layers` (non-empty array of strings);
-the filename stem is the manifest name.
+Draft 2020-12). It has two fields: `layers`, required, a non-empty array of
+layer names, and `providers`, optional, the host providers that run around
+the workspace lifecycle, as the
+[host providers spec](docs/specs/host-providers/SPEC.md) defines. The filename stem is
+the manifest name.
 
 ## Quick Start
 

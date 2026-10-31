@@ -74,12 +74,15 @@ and the workspace folder itself.
 
 ## Resolution Logging
 
-`dctl` logs the winning source only. Typical messages include:
+`dctl` logs the winning source only. It prints one of these messages, in the
+order of resolution:
 
 - `Using devcontainer config from CLI flag: ...`
+- `Using devcontainer config from environment variable DCTL_CONFIG: ...`
 - `Using devcontainer config from project registry: <project> (manifest: <name>) -> ...`
+- `Using devcontainer config from local workspace file: ...`
 - `Using devcontainer config from sibling repo: ...`
-- `Using Dockerfile override from ...`
+- `Using devcontainer config from user global default: ...`
 
 ## Dev Container CLI Integration
 
