@@ -506,9 +506,16 @@ YAML
   enable_mocks
   create_mock fzf 0 "python-dev"
 
-  run script -qec "env PATH='${PATH}' XDG_DATA_HOME='${XDG_DATA_HOME}' XDG_CONFIG_HOME='${XDG_CONFIG_HOME}' XDG_CACHE_HOME='${XDG_CACHE_HOME}' WORKSPACE_FOLDER='${WORKSPACE_FOLDER}' DCTL_LIB_DIR='${DCTL_LIB_DIR}' bash -lc 'set -euo pipefail; source \"${DCTL_LIB_DIR}/common.sh\"; source \"${DCTL_LIB_DIR}/auth.sh\"; source \"${DCTL_LIB_DIR}/image.sh\"; cmd_image_build --dry-run'" /dev/null
+  # `script` gives the picker a terminal. The inner shell is `bash -c`, not a
+  # login shell: a login shell reads the host profile, and the openSUSE
+  # /etc/profile resets PATH when PROFILEREAD is unset. The mock fzf then drops
+  # off PATH, and the real fzf waits on the terminal for a key forever.
+  # `timeout` ends the test if the picker waits anyway, so the test fails in
+  # seconds instead of blocking the suite.
+  run timeout 20 script -qec "env PATH='${PATH}' XDG_DATA_HOME='${XDG_DATA_HOME}' XDG_CONFIG_HOME='${XDG_CONFIG_HOME}' XDG_CACHE_HOME='${XDG_CACHE_HOME}' WORKSPACE_FOLDER='${WORKSPACE_FOLDER}' DCTL_LIB_DIR='${DCTL_LIB_DIR}' bash -c 'set -euo pipefail; source \"${DCTL_LIB_DIR}/common.sh\"; source \"${DCTL_LIB_DIR}/auth.sh\"; source \"${DCTL_LIB_DIR}/image.sh\"; cmd_image_build --dry-run'" /dev/null
   [ "$status" -eq 0 ]
   [[ $output == *"[dry-run] Would build: devimg/python-dev:latest"* ]]
+  assert_mock_called "fzf "
 }
 
 @test "cmd_image_build with no args errors when fzf missing" {

@@ -117,9 +117,17 @@ repos:
       - id: bats-unit
         name: bats unit tests
         language: system
-        entry: bats --filter-tags 'unit,!integration' tests
+        # The suite takes about 2.5 minutes. `timeout` fails the commit if a
+        # test hangs, instead of blocking it. BATS_TEST_TIMEOUT is not used:
+        # bats 1.12 does not kill a process tree deeper than one level, and
+        # bats 1.13 and 1.14 hold the run for the whole limit after every
+        # failing test (bats-core#1206).
+        entry: timeout 600 bats --filter-tags 'unit,!integration' tests
         pass_filenames: false
         always_run: true
+        # Without a stage list the hook runs at every installed hook type, so
+        # one commit ran the unit suite twice: at pre-commit and at commit-msg.
+        stages: [pre-commit]
       - id: bats-integration
         name: bats integration tests
         language: system
