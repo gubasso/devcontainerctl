@@ -82,8 +82,11 @@ under `$XDG_RUNTIME_DIR/dctl/devcontainer/<name>/devcontainer.json` — never
 cached, so layer edits are picked up immediately.
 
 Manifests are validated against `schemas/compose.schema.yaml` (JSON Schema
-Draft 2020-12). The only field is `layers` (non-empty array of strings);
-the filename stem is the manifest name.
+Draft 2020-12). It has two fields: `layers`, required, a non-empty array of
+layer names, and `providers`, optional, the host providers that run around
+the workspace lifecycle, as the
+[host providers spec](docs/specs/host-providers/SPEC.md) defines. The filename stem is
+the manifest name.
 
 ## Quick Start
 
@@ -212,7 +215,7 @@ dctl ws down
 
 `dctl ws` adds a few important host-side conveniences:
 
-- **Forge auth forwarding (GitHub and GitLab):** on every `up`, `reup`, `exec`, `shell`, or `run`, `dctl` invokes the host tool `forge-seed` (owned by the user's nix config; see [docs/specs/secret-forwarding/SPEC.md](docs/specs/secret-forwarding/SPEC.md)) to materialize an ephemeral per-project copy of the host `gh`/`glab` config — tokens read via the keyring-aware host CLIs — under `$XDG_RUNTIME_DIR/forge-auth/<project>`, then bind-mounts it into the container at `/run/forge-auth`. The container receives `GH_CONFIG_DIR`/`GLAB_CONFIG_DIR` paths, never a secret: no `GH_TOKEN`/`GITLAB_TOKEN` enters the container environment. The seed dir is a live bind, so a rotated host token reaches an already-running container on the next `exec` with no reup. If `forge-seed` is absent, or a CLI is not installed or not authenticated, that seed is silently skipped — `dctl` never errors on missing credentials.
+- **Forge auth forwarding (GitHub and GitLab):** on every `up`, `reup`, `exec`, `shell`, or `run`, `dctl` invokes the host tool `forge-seed` (owned by the user's nix config; see [docs/specs/secret-forwarding/SPEC.md](docs/specs/secret-forwarding/SPEC.md)) to materialize an ephemeral per-project copy of the host `gh`/`glab` config — tokens read via the keyring-aware host CLIs — under `$XDG_RUNTIME_DIR/forge-auth/<project>`, then bind-mounts it into the container at `/run/forge-auth`. The container receives `GH_CONFIG_DIR`/`GLAB_CONFIG_DIR` paths, never a secret: no `GH_TOKEN`/`GITLAB_TOKEN` enters the container environment. The seed dir is a live bind, so a rotated host token reaches an already-running container on the next `exec` with no reup. If `forge-seed` is absent, or a CLI is not installed or not authenticated, that seed is skipped with a warning, and `dctl` never errors on missing credentials.
 - **SSH agent forwarding:** when the host exposes a live `SSH_AUTH_SOCK`, `dctl` mounts the socket (never key material) at `/run/dctl/ssh-agent.sock` and points the container's `SSH_AUTH_SOCK` at it, so `git@...` remotes authenticate without any token. A host agent restart replaces the socket inode; running containers hold the dead socket until `dctl ws reup`.
 - forwards terminal-related env vars such as `TERM`, `COLORTERM`, `TERM_PROGRAM`, and Kitty-specific vars
 - bind-mounts the shared git common dir automatically for linked worktrees

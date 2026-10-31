@@ -997,7 +997,7 @@ class: act-dctl
 
 # What `dctl` quietly handles
 
-- <mdi-key-variant class="inline text-brand" /> &nbsp; **Automatic credential forwarding.** `GH_TOKEN` and `GITLAB_TOKEN` extracted from `gh` / `glab` on every `exec`, `shell`, `run`. No `${localEnv:...}` boilerplate. Missing CLI? Silently skipped.
+- <mdi-key-variant class="inline text-brand" /> &nbsp; **Automatic forge auth.** Host `gh` / `glab` config seeded and mounted at `/run/forge-auth` on `up`, `reup`, `exec`, `shell`, `run`. No token in the container env. Missing `forge-seed` or CLI? Skipped with a warning.
 
 - <mdi-monitor-dashboard class="inline text-brand" /> &nbsp; **Terminal env forwarding.** `TERM`, `COLORTERM`, `TERM_PROGRAM`, Kitty vars — forwarded so colors and terminal-aware tools just work.
 

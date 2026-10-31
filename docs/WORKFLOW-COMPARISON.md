@@ -287,7 +287,7 @@ Ana wrote this once, in Step 1, not per project, and she can change any of it by
 | Runtime config location | CLI flags (re-typed every run) | `devcontainer.json` (declared once) | User config (written once in Step 1) |
 | Commands to start | 2 (volume create + 15-line `docker run`) + manual setup commands | 1 (`devcontainer up`) | 1 (`dctl ws up`) |
 | Post-create hooks | None — manual `docker exec` after every creation | `postCreateCommand` in JSON | `postCreateCommand` in a shared layer |
-| Credential forwarding | Manual `$(gh auth token)` extraction | Manual `${localEnv:GH_TOKEN}` + host export | Automatic — seeded gh/glab config dirs mounted at up/exec time; no token in the container env; silently skipped if unavailable |
+| Credential forwarding | Manual `$(gh auth token)` extraction | Manual `${localEnv:GH_TOKEN}` + host export | Automatic — seeded gh/glab config dirs mounted at up/exec time; no token in the container env; skipped with a warning if unavailable |
 | Config reuse across projects | None | None — per-project JSON | Shared across all workspaces |
 
 ## Step 3: Scale to multiple projects
@@ -542,7 +542,7 @@ Benefits:
 
 - `dctl` finds the container by workspace label.
 - It forwards `TERM`, `COLORTERM`, `TERM_PROGRAM`, `TERM_PROGRAM_VERSION`, and Kitty-specific vars automatically.
-- It also forwards forge auth automatically — an ephemeral copy of the host `gh`/`glab` config, seeded by the `forge-seed` host tool with tokens read from the keyring, is bind-mounted at `/run/forge-auth` and reached through `GH_CONFIG_DIR`/`GLAB_CONFIG_DIR`. No token enters the container environment. If either CLI is missing or not authenticated, that seed is silently skipped (no errors, no prompts).
+- It also forwards forge auth automatically — an ephemeral copy of the host `gh`/`glab` config, seeded by the `forge-seed` host tool with tokens read from the keyring, is bind-mounted at `/run/forge-auth` and reached through `GH_CONFIG_DIR`/`GLAB_CONFIG_DIR`. No token enters the container environment. If either CLI is missing or not authenticated, that seed is skipped with a warning (no errors, no prompts).
 
 | | Docker | Dev Container CLI | dctl |
 |---|---|---|---|
