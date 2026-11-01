@@ -6,7 +6,7 @@ Cheatsheet for authoring and building the presentation locally.
 
 ```bash
 cd slides
-npm install
+npm ci
 ```
 
 Requires Node LTS. The flake dev shell of the repo provides `nodejs`; see

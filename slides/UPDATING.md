@@ -6,7 +6,7 @@ Cheatsheet for editing and publishing the presentation.
 
 ```bash
 cd slides
-npm install              # first time only
+npm ci                   # first time only
 npm run dev              # opens http://localhost:3030
 ```
 

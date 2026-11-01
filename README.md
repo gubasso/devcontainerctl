@@ -402,4 +402,4 @@ nix develop --command pre-commit run --all-files --hook-stage pre-push
 - [QUICKSTART.md](docs/QUICKSTART.md) for a short setup path
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) for deeper technical rationale and troubleshooting
 - [spec/README.md](spec/README.md) for the implemented design/spec set
-- [slides/](slides/) for the Slidev presentation (`cd slides && npm install && npm run dev`); auto-deployed to GitHub Pages
+- [slides/](slides/) for the Slidev presentation (`cd slides && npm ci && npm run dev`); auto-deployed to GitHub Pages
