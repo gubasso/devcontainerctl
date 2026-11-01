@@ -408,6 +408,25 @@ EOF
   assert_mock_called "devcontainer up --workspace-folder ${WORKSPACE_FOLDER} --config $(workspace_devcontainer_file) --build-no-cache"
 }
 
+@test "sanitized_bin_excluding links the first program on PATH and drops excluded names" {
+  local first="${TEST_TMPDIR}/path-first" second="${TEST_TMPDIR}/path-second"
+  mkdir -p "$first" "$second"
+  printf '#!/bin/sh\n' | tee "${first}/tool" "${second}/tool" \
+    "${second}/second-only" "${first}/excluded" >/dev/null
+  chmod +x "${first}/tool" "${second}/tool" "${second}/second-only" "${first}/excluded"
+  enable_mocks
+  create_mock mocked 0 ""
+
+  # The real PATH stays at the end, because the helper itself runs mkdir and ln.
+  local sanitized
+  sanitized="$(PATH="${first}:${TEST_TMPDIR}/bin:${second}:${PATH}" sanitized_bin_excluding excluded)"
+
+  [ "$(readlink "${sanitized}/tool")" = "${first}/tool" ]
+  [ "$(readlink "${sanitized}/second-only")" = "${second}/second-only" ]
+  [ ! -e "${sanitized}/excluded" ]
+  [ ! -e "${sanitized}/mocked" ]
+}
+
 @test "cmd_ws_reup adds remove-existing-container" {
   mkdir -p "$(workspace_devcontainer_dir)"
   printf '{"image": "devimg/agents:latest"}\n' >"$(workspace_devcontainer_file)"
