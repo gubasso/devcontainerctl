@@ -12,9 +12,10 @@ on:
 jobs:
   pre-commit:
     runs-on: ubuntu-latest
-    # About three times a usual run. A hung test then fails the job instead
-    # of holding the runner for hours.
-    timeout-minutes: 20
+    # About three times a usual run: each job took under 2 minutes on cold
+    # caches. A hung test then fails the job instead of holding the runner
+    # for hours.
+    timeout-minutes: 6
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -39,7 +40,7 @@ jobs:
 
   pre-push:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 6
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
