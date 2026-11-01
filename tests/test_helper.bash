@@ -62,18 +62,22 @@ sanitized_bin_excluding() {
   # paths, so a hardcoded list produces a bin/ without realpath or grep and the
   # command under test fails for the wrong reason. Skip the mock directory so
   # that a mock never leaks into the sanitized set.
-  local dir src dst
+  #
+  # A devshell PATH holds thousands of programs, and bats traps every shell
+  # command of a test, so the helper runs no command for each file. For each
+  # directory, one `find` lists the entries that are not hidden and that are
+  # not broken links, and one `ln` links them. `ln` without -f refuses a name that the
+  # folder already holds, so the first directory on PATH wins for a name.
+  local dir name
+  local -a srcs
   while IFS= read -r dir; do
     [[ -n $dir && -d $dir ]] || continue
     [[ $dir == "${TEST_TMPDIR}/bin" ]] && continue
-    for src in "$dir"/*; do
-      [[ -e $src ]] || continue
-      dst="${sanitized}/$(basename "$src")"
-      [[ -e $dst ]] && continue
-      ln -s "$src" "$dst" 2>/dev/null || true
-    done
+    mapfile -d '' srcs < <(find -H "$dir" -mindepth 1 -maxdepth 1 \
+      ! -name '.*' ! -xtype l -print0 2>/dev/null)
+    ((${#srcs[@]})) || continue
+    ln -s -t "$sanitized" -- "${srcs[@]}" 2>/dev/null || true
   done < <(printf '%s\n' "${PATH//:/$'\n'}")
-  local name
   for name in "$@"; do
     rm -f "${sanitized}/${name}"
   done
