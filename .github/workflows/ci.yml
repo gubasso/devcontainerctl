@@ -1,66 +1,64 @@
 name: CI
 
-# Temporarily disabled: auto-triggers removed while CI is hanging.
-# Implementation is preserved; re-enable by restoring `push:` and `pull_request:` below.
+# CI runs the two stages of the git hooks in the devshell of flake.nix, so a
+# push that passed the local hooks passes CI, with the same tools. A check
+# that only CI can run gets its own step, with a comment that says why. See
+# "CI and the git hooks" in README.md.
 on:
+  push:
+  pull_request:
   workflow_dispatch:
 
 jobs:
-  lint:
+  pre-commit:
     runs-on: ubuntu-latest
+    # About three times a usual run. A hung test then fails the job instead
+    # of holding the runner for hours.
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v22
+
+      - name: Nix cache
+        uses: DeterminateSystems/flakehub-cache-action@v3.21.5
+
+      # The environments that pre-commit builds for the hooks that declare a
+      # language. A Python environment holds the store path of the devshell
+      # python, so the key follows flake.lock too.
+      - name: pre-commit cache
+        uses: actions/cache@v4
         with:
-          python-version: "3.x"
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml', 'flake.lock') }}
 
-      - name: Install apt dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y bats shellcheck shfmt
+      - name: Run the pre-commit stage
+        run: nix develop --command pre-commit run --all-files --show-diff-on-failure
 
-      - name: Install pipx and bashate
-        run: |
-          python -m pip install --user pipx
-          python -m pipx ensurepath
-          ~/.local/bin/pipx install bashate
-
-      - name: Install cargo tools
-        run: |
-          cargo install --locked shellharden
-          cargo install --locked typos-cli
-
-      - name: Install pre-commit
-        run: python -m pip install --user pre-commit
-
-      - name: Run shellcheck
-        run: bash -O globstar -c 'shellcheck -x bin/* lib/**/*.sh'
-
-      - name: Run shfmt
-        run: shfmt -d -i 2 -ci -bn -s bin/ lib/ hooks/ tests/
-
-      - name: Run pre-commit
-        run: ~/.local/bin/pre-commit run --all-files
-
-      - name: Run deferred/active safety gates
-        run: |
-          make gate-no-eval
-          make gate-no-raw-ansi
-          make gate-one-public-fn-per-file
-
-  test:
+  pre-push:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Install bats
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y bats
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v22
 
-      - name: Run bats suite
-        run: bats -r tests/
+      - name: Nix cache
+        uses: DeterminateSystems/flakehub-cache-action@v3.21.5
+
+      - name: pre-commit cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml', 'flake.lock') }}
+
+      # The slidev-build hook needs slides/node_modules, as a local clone does.
+      - name: Install the slides dependencies
+        run: nix develop --command npm ci --prefix slides --no-audit --no-fund
+
+      - name: Run the pre-push stage
+        run: nix develop --command pre-commit run --all-files --hook-stage pre-push

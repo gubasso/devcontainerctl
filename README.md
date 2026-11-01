@@ -375,6 +375,28 @@ nix develop --command pre-commit install
 
 The hooks take their tools from `PATH`, so commit from the dev shell, or with `direnv exec . git commit`. A commit from a shell outside it fails at the first hook whose tool is missing.
 
+## CI and the git hooks
+
+A push that passed the local git hooks passes CI. CI, `.github/workflows/ci.yml`, runs the same hook stages in the dev shell, on every push and pull request, one job for each stage:
+
+| Hook stage | What it runs | CI job |
+| --- | --- | --- |
+| `pre-commit` | the format, lint, and secret checks, the three safety gates, and the bats unit suite | `pre-commit` |
+| `pre-push` | the bats integration suite and the slides build | `pre-push` |
+| `commit-msg` | `gitlint` and `commitizen` | none, the hooks run more than CI |
+
+A hook runs at `pre-commit` unless it names its stage, and the `pre-push` stage runs only the costly checks, because a pushed commit already passed `pre-commit`. The safety gates call their `make gate-*` targets. `gate-no-raw-ansi` and `gate-one-public-fn-per-file` stay deferred until `DCTL_ENFORCE_ANSI_GATE` or `DCTL_ENFORCE_ONEFN_GATE` is set.
+
+CI exceptions, the checks that only CI runs: none. Such a check gets its own step in `ci.yml`, with a comment that says why only CI can run it, and a line in this list.
+
+Run the two stages as CI does. The `slidev-build` hook needs `slides/node_modules`:
+
+```bash
+nix develop --command pre-commit run --all-files
+nix develop --command npm ci --prefix slides
+nix develop --command pre-commit run --all-files --hook-stage pre-push
+```
+
 ## Further Reading
 
 - [QUICKSTART.md](docs/QUICKSTART.md) for a short setup path

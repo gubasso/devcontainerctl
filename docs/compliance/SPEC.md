@@ -80,7 +80,7 @@ Symlink resolution is portable (a `while [[ -L ]]` loop). Do not use
   - `NO_COLOR` is unset/empty,
   - `--no-color` was not passed,
   - `DCTL_LOG_LEVEL` is not `json`.
-- Raw `printf '\033[…'` is forbidden outside `common.sh`. The CI gate
+- Raw `printf '\033[…'` is forbidden outside `common.sh`. The gate
   `gate-no-raw-ansi` enforces this once enabled.
 
 ## 5. Exit codes and errors
@@ -228,18 +228,21 @@ user could set.
 - `shfmt` canonical args are `-i 2 -ci -bn -s`.
 - `.editorconfig` enforces 2-space indent for `.sh`, `.bats`, `.yaml`,
   `.json`.
-- CI (`.github/workflows/ci.yml`) runs:
-  - `shellcheck -x bin/* lib/dctl/**/*.sh`
-  - `shfmt -d -i 2 -ci -bn -s bin/ lib/ hooks/ test/`
-  - `bats -r test/` (unit; integration behind an env gate)
-  - `pre-commit run --all-files`
-  - the safety gates listed in §12.
+- The git hooks of `.pre-commit-config.yaml` run every check. The
+  `pre-commit` stage runs `shellcheck`, `shfmt`, `shellharden`, `bashate`,
+  the other lint and secret checks, the safety gates listed in §12, and
+  the bats unit suite. The `pre-push` stage runs the bats integration
+  suite and the slides build.
+- CI (`.github/workflows/ci.yml`) runs the two stages in the dev shell
+  of `flake.nix`, so a push that passed the hooks passes CI. README.md,
+  "CI and the git hooks", lists the checks that only CI runs.
 - Target a bash matrix of 4.4 / 5.0 / 5.2 (per-job containers).
-- `make check` is the local superset of the CI lint/test pipeline.
+- `make check` runs the `pre-commit` stage, the direct `shellcheck` and
+  `shfmt` steps, and the whole bats suite.
 
 ## 12. Safety bans
 
-These are enforced by grep-based CI gates:
+These are enforced by grep-based gates, which run as `pre-commit` hooks:
 
 - No `eval` in `bin/`, `lib/`, or `hooks/`. Lines tagged
   `# allow-eval` are exempt.
@@ -249,7 +252,7 @@ These are enforced by grep-based CI gates:
 - No `find | while read`. Use `find -print0` plus `read -r -d ''`.
 - No `exit` inside library functions — `dctl::die` or `return N` only.
 
-Additional rules not gated by CI but reviewed in PR:
+Additional rules not gated by a hook but reviewed in PR:
 
 - User-controlled strings never enter `yq`/`jq` expressions without
   validation. Project names match `^[A-Za-z0-9._-]+$`.
