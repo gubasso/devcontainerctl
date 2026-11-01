@@ -18,23 +18,27 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: slides
+    # About three times a usual run. The steps match the pre-push job of
+    # ci.yml, which took under 2 minutes on cold caches.
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 'lts/*'
-          cache: npm
-          cache-dependency-path: slides/package-lock.json
+      # The deck builds with the nodejs of the devshell in flake.nix, the
+      # same node that the slidev-build hook and CI use.
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v22
+
+      - name: Nix cache
+        uses: DeterminateSystems/flakehub-cache-action@v3.21.5
 
       - name: Install dependencies
-        run: npm ci
+        run: nix develop --command npm ci --prefix slides --no-audit --no-fund
 
       - name: Build
-        run: npm run build -- --base /${{ github.event.repository.name }}/
+        run: |
+          nix develop --command node --version
+          nix develop --command npm --prefix slides run build -- --base /${{ github.event.repository.name }}/
 
       - name: Setup Pages
         uses: actions/configure-pages@v6
