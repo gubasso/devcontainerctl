@@ -1,4 +1,10 @@
 default_install_hook_types: [pre-commit, commit-msg, pre-push]
+# A hook runs at pre-commit unless it names its stage. The pre-push stage
+# runs only the costly checks, because a pushed commit already passed the
+# pre-commit stage. CI runs both stages; see "CI and the git hooks" in
+# README.md. The hooks below that set `stages: [pre-commit]` need it,
+# because their upstream manifests also list pre-push.
+default_stages: [pre-commit]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -6,15 +12,20 @@ repos:
     hooks:
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
+        stages: [pre-commit]
       - id: end-of-file-fixer
+        stages: [pre-commit]
       # pretty-format-json omitted intentionally: the only plain .json file (devcontainers/agents/seccomp-bwrap.json) is hand-written and reads better with the structure it has; check-json5 already validates syntax
       - id: check-added-large-files
         args: ["--maxkb=2048"]
+        stages: [pre-commit]
       - id: detect-private-key
       - id: check-executables-have-shebangs
+        stages: [pre-commit]
       - id: check-merge-conflict
       - id: check-case-conflict
       - id: check-shebang-scripts-are-executable
+        stages: [pre-commit]
       - id: no-commit-to-branch
         # master is this repository's trunk and the branch you work on, so it
         # is not in the ban list. staging and main are kept as guards against a
@@ -37,6 +48,7 @@ repos:
       - id: shfmt
         args: ["-w", "-i", "2", "-ci", "-bn", "-s"]
         files: '\.(sh|bash|bats)$|^bin/dctl$|^hooks/post-stow$'
+        stages: [pre-commit]
 
   # shellharden – auto-quote variables and command substitutions
   - repo: local
@@ -106,6 +118,31 @@ repos:
             slides\.md|
             pages/.*\.md
           )
+
+  # Safety gates of docs/compliance/SPEC.md, section 12. Each hook calls its
+  # Makefile target, so a gate has one definition. gate-no-raw-ansi and
+  # gate-one-public-fn-per-file stay deferred until DCTL_ENFORCE_ANSI_GATE or
+  # DCTL_ENFORCE_ONEFN_GATE is set. make comes from stdenv in the devShell.
+  - repo: local
+    hooks:
+      - id: gate-no-eval
+        name: gate no eval
+        language: system
+        entry: make --no-print-directory gate-no-eval
+        files: ^(bin|lib|hooks)/.*\.sh$
+        pass_filenames: false
+      - id: gate-no-raw-ansi
+        name: gate no raw ansi
+        language: system
+        entry: make --no-print-directory gate-no-raw-ansi
+        files: ^(bin|lib)/.*\.sh$
+        pass_filenames: false
+      - id: gate-one-public-fn-per-file
+        name: gate one public fn per file
+        language: system
+        entry: make --no-print-directory gate-one-public-fn-per-file
+        files: ^lib/.*\.sh$
+        pass_filenames: false
 
   - repo: meta
     hooks:
