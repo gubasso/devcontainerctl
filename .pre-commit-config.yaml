@@ -10,10 +10,16 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      # The two fixers skip the lock files that nix and npm write. A generated
+      # file follows its generator, so no hook rewrites it: the dev environment
+      # rule of nix-secrets, home/apps/claude-session/rules/dev-environment.md.
+      # The reading hooks, such as check-json5 and gitleaks, keep them.
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
+        exclude: ^flake\.lock$|(?:^|/)package-lock\.json$
         stages: [pre-commit]
       - id: end-of-file-fixer
+        exclude: ^flake\.lock$|(?:^|/)package-lock\.json$
         stages: [pre-commit]
       # pretty-format-json omitted intentionally: the only plain .json file (devcontainers/agents/seccomp-bwrap.json) is hand-written and reads better with the structure it has; check-json5 already validates syntax
       - id: check-added-large-files
