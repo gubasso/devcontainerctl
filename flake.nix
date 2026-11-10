@@ -36,11 +36,10 @@
         # devShell (see nix-secrets images/agents/flake.nix, SCOPE).
         devShells.default = pkgs.mkShell {
           packages = [
-            # bash lint/format — mirrors the pre-commit hookset (CLAUDE.md)
-            pkgs.shellcheck
-            pkgs.shfmt
+            # The shellharden hook keeps language: system: shellharden
+            # publishes no pre-commit hook. pre-commit builds shellcheck,
+            # shfmt, bashate, and commitizen from their upstream hooks.
             pkgs.shellharden
-            pkgs.bashate
 
             # test runner; GNU parallel is what `bats --jobs` requires
             batsWithLibs
@@ -53,12 +52,9 @@
             # slides/ (Slidev) build, run by the slidev-build pre-push hook
             pkgs.nodejs
 
-            # per-project git hooks. commitizen and prettier are here because
-            # their pre-commit hooks run as `language: system`: the upstream
-            # hook repos build an environment around a prebuilt binary that
-            # needs /lib64/ld-linux-x86-64.so.2, which NixOS does not have.
+            # per-project git hooks, and prettier for the prettier hook, which
+            # keeps language: system: prettier publishes no pre-commit hook.
             pkgs.pre-commit
-            pkgs.commitizen
             pkgs.prettier
           ];
           # stderr, not stdout: `nix develop --command CMD` runs this hook

@@ -94,8 +94,6 @@ lint:
 
 check:
 	pre-commit run --all-files
-	bash -O globstar -c 'shellcheck -x bin/* lib/**/*.sh'
-	shfmt -d -i 2 -ci -bn -s bin/ lib/ hooks/ tests/
 	bats -r tests/
 
 gate-no-eval:
