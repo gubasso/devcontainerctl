@@ -44,6 +44,9 @@
             # test runner; GNU parallel is what `bats --jobs` requires
             batsWithLibs
             pkgs.parallel
+            # script, which gives the picker test of tests/dctl_test.bats a
+            # terminal. It is not a base tool of the host.
+            pkgs.util-linux
 
             # YAML/JSON tooling for the devcontainer manifests and schemas/
             pkgs.yq-go
