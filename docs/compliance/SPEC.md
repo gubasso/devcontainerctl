@@ -237,8 +237,9 @@ user could set.
   of `flake.nix`, so a push that passed the hooks passes CI. README.md,
   "CI and the git hooks", lists the checks that only CI runs.
 - Target a bash matrix of 4.4 / 5.0 / 5.2 (per-job containers).
-- `make check` runs the `pre-commit` stage, the direct `shellcheck` and
-  `shfmt` steps, and the whole bats suite.
+- `make check` runs the `pre-commit` stage and the whole bats suite. The
+  `pre-commit` stage already runs `shellcheck` and `shfmt` from their
+  hooks.
 
 ## 12. Safety bans
 

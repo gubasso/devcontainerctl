@@ -360,7 +360,7 @@ Use `make uninstall` to remove the installed binary, shell modules, and schemas.
 
 ## Development
 
-The flake dev shell is the one source of the tools that `make check`, `make test`, and the git hooks call. `.envrc` loads it with direnv. Run a command in it with the native command of either tool:
+Each tool has one owner. `.pre-commit-config.yaml` pins each hook tool for which pre-commit builds an environment, such as shellcheck, shfmt, bashate, gitleaks, and commitizen. The flake dev shell holds `pre-commit`, the tools that `make check`, `make test`, and the `language: system` hooks call, such as bats, shellharden, and prettier, and the node of the slides build. Each `language: system` hook carries an `# owner:` comment with its reason. `.envrc` loads the dev shell with direnv. Run a command in it with the native command of either tool:
 
 ```bash
 direnv exec . make check      # or: nix develop --command make check
