@@ -59,6 +59,7 @@ repos:
   # shellharden – auto-quote variables and command substitutions
   - repo: local
     hooks:
+      # owner: devshell (no-hook-language) shellharden publishes no pre-commit hook.
       - id: shellharden
         name: shellharden
         language: system
@@ -86,24 +87,19 @@ repos:
         stages: [commit-msg]
         types_or: [text]
 
-  # commitizen / prettier run as system hooks (nix devShell), not from their
-  # upstream pre-commit repos. Both upstreams install a prebuilt binary from
-  # PyPI/nodeenv that is linked against /lib64/ld-linux-x86-64.so.2, which does
-  # not exist on NixOS, so the hook environment fails to build. The devShell
-  # already pins both tools. See flake.nix.
-  - repo: local
+  # commitizen builds from its upstream hook. It ran from the devShell when its
+  # hook needed /lib64/ld-linux-x86-64.so.2; the host supplies that loader.
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.19.3
     hooks:
       - id: commitizen
-        name: commitizen check
-        language: system
-        entry: cz check --allow-abort --commit-msg-file
         stages: [commit-msg]
 
   # Slides sub-project (Slidev) ----------------------------------------------
   # Prettier formats Markdown, Vue, TS, JSON inside slides/ only.
-  # Prettier comes from the nix devShell (see the note above the commitizen hook).
   - repo: local
     hooks:
+      # owner: devshell (no-hook-language) prettier publishes no pre-commit hook, and pre-commit/mirrors-prettier is archived since 2024-04.
       - id: prettier
         name: prettier
         language: system
@@ -131,18 +127,21 @@ repos:
   # DCTL_ENFORCE_ONEFN_GATE is set. make comes from stdenv in the devShell.
   - repo: local
     hooks:
+      # owner: devshell (no-hook-language) the gate is a make target, and make has no hook in a language that pre-commit builds.
       - id: gate-no-eval
         name: gate no eval
         language: system
         entry: make --no-print-directory gate-no-eval
         files: ^(bin|lib|hooks)/.*\.sh$
         pass_filenames: false
+      # owner: devshell (no-hook-language) the gate is a make target, and make has no hook in a language that pre-commit builds.
       - id: gate-no-raw-ansi
         name: gate no raw ansi
         language: system
         entry: make --no-print-directory gate-no-raw-ansi
         files: ^(bin|lib)/.*\.sh$
         pass_filenames: false
+      # owner: devshell (no-hook-language) the gate is a make target, and make has no hook in a language that pre-commit builds.
       - id: gate-one-public-fn-per-file
         name: gate one public fn per file
         language: system
@@ -157,6 +156,7 @@ repos:
 
   - repo: local
     hooks:
+      # owner: devshell (no-hook-language) bats has no hook in a language that pre-commit builds.
       - id: bats-unit
         name: bats unit tests
         language: system
@@ -171,6 +171,7 @@ repos:
         # Without a stage list the hook runs at every installed hook type, so
         # one commit ran the unit suite twice: at pre-commit and at commit-msg.
         stages: [pre-commit]
+      # owner: devshell (no-hook-language) bats has no hook in a language that pre-commit builds.
       - id: bats-integration
         name: bats integration tests
         language: system
@@ -180,7 +181,8 @@ repos:
         stages: [pre-push]
       # slidev build – catches deck breakages before pushing to GitHub Pages.
       # Requires slides/node_modules (run `npm ci` in slides/ first). node comes
-      # from the devShell, like every other tool this hookset calls.
+      # from the devShell.
+      # owner: devshell (no-hook-language) the Slidev build runs the npm of the devshell on slides/package.json, and has no hook in a language that pre-commit builds.
       - id: slidev-build
         name: slidev build
         language: system
@@ -188,3 +190,11 @@ repos:
         files: ^slides/
         pass_filenames: false
         stages: [pre-push]
+
+  - repo: local
+    hooks:
+      - id: no-language-library-in-flake
+        name: a flake holds no language library
+        language: pygrep
+        entry: '^(?!\s*#).*(withPackages|python3[0-9]*Packages\.|pythonPackages\.|nodePackages\.|perlPackages\.)'
+        files: '(^|/)flake\.nix$|(^|/)nix/.*\.nix$'
