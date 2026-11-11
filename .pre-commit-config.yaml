@@ -198,3 +198,10 @@ repos:
         language: pygrep
         entry: '^(?!\s*#).*(withPackages|python3[0-9]*Packages\.|pythonPackages\.|nodePackages\.|perlPackages\.)'
         files: '(^|/)flake\.nix$|(^|/)nix/.*\.nix$'
+
+  # A flake reference reads the git tree of a checkout, never a path copy of
+  # the whole folder into the Nix store. The hook is published by exobrain-tech.
+  - repo: https://github.com/gubasso/exobrain-tech
+    rev: v1.0.0
+    hooks:
+      - id: no-path-flake-reference
