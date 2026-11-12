@@ -39,10 +39,11 @@
         # The test runners, the tools that the Makefile targets and the
         # `language: system` hooks call, and the node of the slides build.
         # The host supplies the hook runner prek, which builds every other
-        # hook tool from its upstream hook. Without this shell, `make check` and `make test` cannot run
-        # inside a dctl agents container: these tools are not in the
-        # container's global toolset, and by design they should not be
-        # (see nix-secrets images/agents/flake.nix, SCOPE).
+        # hook tool from its upstream hook. Without this shell, `make check`
+        # and `make test` cannot run inside a dctl agents container: these
+        # tools are not in the container's global toolset, and by design
+        # they should not be (see nix-secrets images/agents/flake.nix,
+        # SCOPE).
         devShells.default = pkgs.mkShell {
           packages = [
             # The shellharden hook keeps language: system: shellharden
