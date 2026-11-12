@@ -360,17 +360,17 @@ Use `make uninstall` to remove the installed binary, shell modules, and schemas.
 
 ## Development
 
-Each tool has one owner. `.pre-commit-config.yaml` pins each hook tool for which pre-commit builds an environment, such as shellcheck, shfmt, bashate, gitleaks, and commitizen. The flake dev shell holds `pre-commit`, the tools that `make check`, `make test`, and the `language: system` hooks call, such as bats, shellharden, and prettier, and the node of the slides build. Each `language: system` hook carries an `# owner:` comment with its reason. `.envrc` loads the dev shell with direnv. Run a command in it with the native command of either tool:
+Each tool has one owner. `.pre-commit-config.yaml` pins each hook tool for which the hook runner builds an environment, such as shellcheck, shfmt, bashate, gitleaks, and commitizen. [`host-requirements.toml`](./host-requirements.toml) lists the tools that the host supplies, and the dev targets of the Makefile check them. The flake dev shell holds the tools that `make check`, `make test`, and the `language: system` hooks call, such as bats, shellharden, and prettier, and the node of the slides build. Each `language: system` hook carries an `# owner:` comment with its reason. `.envrc` loads the dev shell with direnv. Run a command in it with the native command of either tool:
 
 ```bash
 direnv exec . make check      # or: nix develop --command make check
 nix develop                   # open a shell inside it
 ```
 
-Install the git hooks once per clone, from the dev shell. `pre-commit install` installs every stage of `default_install_hook_types` in `.pre-commit-config.yaml` into the shared git folder, so every linked worktree runs them:
+Install the git hooks once per clone, from the dev shell. `prek install` installs every stage of `default_install_hook_types` in `.pre-commit-config.yaml` into the shared git folder, so every linked worktree runs them:
 
 ```bash
-nix develop --command pre-commit install
+nix develop --command prek install
 ```
 
 The hooks take their tools from `PATH`, so commit from the dev shell, or with `direnv exec . git commit`. A commit from a shell outside it fails at the first hook whose tool is missing.
@@ -392,9 +392,9 @@ CI exceptions, the checks that only CI runs: none. Such a check gets its own ste
 Run the two stages as CI does. The `slidev-build` hook needs `slides/node_modules`:
 
 ```bash
-nix develop --command pre-commit run --all-files
+nix develop --command prek run --all-files
 nix develop --command npm ci --prefix slides
-nix develop --command pre-commit run --all-files --hook-stage pre-push
+nix develop --command prek run --all-files --hook-stage pre-push
 ```
 
 ## Further Reading

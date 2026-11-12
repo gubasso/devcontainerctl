@@ -16,15 +16,15 @@ The unified `dctl` CLI for AI-agent devcontainer sandboxes, built and run from t
 - `make test-unit` — run unit tests
 - `make test-integration` — run integration tests
 - `make test` — run both unit and integration suites
-- `make lint` — run pre-commit lint hooks individually
-- `make check` — run the full pre-commit suite
+- `make lint` — run the lint hooks individually through prek
+- `make check` — run every hook of the pre-commit stage through prek
 
 Tests are written with `bats`.
 
 ## Shell Conventions
 
 - Shell scripts use `bash`
-- Formatting and linting run through pre-commit
+- Formatting and linting run through the hook runner prek
 - Hook set: `shellcheck`, `shfmt`, `shellharden`, `bashate`
 
 ## Key Invariants

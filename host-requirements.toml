@@ -1,0 +1,21 @@
+# The host tools of dctl's dev environment
+# (project-platform:host-requirements-list-the-host-tools). The dev targets
+# of the Makefile check the ones they run with `exobrain host-check`, and the
+# install targets check nothing. prek owns its version through
+# minimum_prek_version in .pre-commit-config.yaml.
+schema = 1
+
+[tools.git]
+
+[tools.prek]
+version = "*"
+
+[tools.nix]
+
+[tools.direnv]
+
+[tools.bash]
+
+[tools.grep]
+
+[tools.find]

@@ -79,28 +79,34 @@ uninstall-systemd:
 	systemctl --user daemon-reload >/dev/null 2>&1 || true
 
 test-unit:
+	exobrain host-check git bash
 	bats --filter-tags 'unit,!integration' tests
 
 test-integration:
+	exobrain host-check git bash
 	bats --filter-tags integration tests
 
 test: test-unit test-integration
 
 lint:
-	pre-commit run shellcheck --all-files
-	pre-commit run shfmt --all-files
-	pre-commit run shellharden --all-files
-	pre-commit run bashate --all-files
+	exobrain host-check prek
+	prek run shellcheck --all-files
+	prek run shfmt --all-files
+	prek run shellharden --all-files
+	prek run bashate --all-files
 
 check:
-	pre-commit run --all-files
+	exobrain host-check git bash prek
+	prek run --all-files
 	bats -r tests/
 
 gate-no-eval:
+	@exobrain host-check grep
 	! grep -rn --include='*.sh' -E '^[[:space:]]*eval\b' bin lib hooks | grep -v '# allow-eval'
 
 gate-no-raw-ansi:
 ifdef DCTL_ENFORCE_ANSI_GATE
+	@exobrain host-check grep
 	! grep -rn --include='*.sh' -F "\\033[" bin lib | grep -v 'lib/dctl/common.sh'
 else
 	@printf '%s\n' "gate-no-raw-ansi deferred until Phase 2 (set DCTL_ENFORCE_ANSI_GATE=1 to enable)"
@@ -108,6 +114,7 @@ endif
 
 gate-one-public-fn-per-file:
 ifdef DCTL_ENFORCE_ONEFN_GATE
+	@exobrain host-check find grep
 	@find lib/dctl/commands lib/dctl/functions -type f -name '*.sh' 2>/dev/null | while read -r file; do \
 		count=$$(grep -E -c '^dctl::(cmd|fn)::[A-Za-z0-9_]+[[:space:]]*\(\)' "$$file"); \
 		if [ "$$count" -gt 1 ]; then \

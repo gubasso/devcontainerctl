@@ -26,17 +26,28 @@ jobs:
       - name: Nix cache
         uses: DeterminateSystems/flakehub-cache-action@v3.21.5
 
-      # The environments that pre-commit builds for the hooks that declare a
-      # language. A Python environment holds the store path of the devshell
-      # python, so the key follows flake.lock too.
-      - name: pre-commit cache
+      # The hook runner is a host tool, so the job installs it outside the
+      # devshell, at the version the hosts run, and `nix develop` keeps it
+      # on PATH. The action is pinned by commit SHA
+      # (https://prek.j178.dev/ci/). The cache step below owns the cache.
+      - name: Install prek
+        uses: j178/prek-action@44924fe9ef4a6f88253c4b6b1bf11c689d3ce53d # v3.1.0
+        with:
+          install-only: true
+          prek-version: 0.5.10
+          cache: false
+
+      # The environments that prek builds for the hooks that declare a
+      # language, in its default home ~/.cache/prek. A hook environment can
+      # hold a store path of the devshell, so the key follows flake.lock too.
+      - name: prek cache
         uses: actions/cache@v4
         with:
-          path: ~/.cache/pre-commit
-          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml', 'flake.lock') }}
+          path: ~/.cache/prek
+          key: prek-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml', 'flake.lock') }}
 
       - name: Run the pre-commit stage
-        run: nix develop --command pre-commit run --all-files --show-diff-on-failure
+        run: nix develop --command prek run --all-files --show-diff-on-failure
 
   pre-push:
     runs-on: ubuntu-latest
@@ -51,15 +62,22 @@ jobs:
       - name: Nix cache
         uses: DeterminateSystems/flakehub-cache-action@v3.21.5
 
-      - name: pre-commit cache
+      - name: Install prek
+        uses: j178/prek-action@44924fe9ef4a6f88253c4b6b1bf11c689d3ce53d # v3.1.0
+        with:
+          install-only: true
+          prek-version: 0.5.10
+          cache: false
+
+      - name: prek cache
         uses: actions/cache@v4
         with:
-          path: ~/.cache/pre-commit
-          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml', 'flake.lock') }}
+          path: ~/.cache/prek
+          key: prek-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml', 'flake.lock') }}
 
       # The slidev-build hook needs slides/node_modules, as a local clone does.
       - name: Install the slides dependencies
         run: nix develop --command npm ci --prefix slides --no-audit --no-fund
 
       - name: Run the pre-push stage
-        run: nix develop --command pre-commit run --all-files --hook-stage pre-push
+        run: nix develop --command prek run --all-files --hook-stage pre-push
