@@ -1,3 +1,7 @@
+# The host supplies the hook runner prek, and this is the oldest prek the
+# configuration accepts
+# (https://prek.j178.dev/reference/configuration/#minimum_prek_version).
+minimum_prek_version: "0.5.7"
 default_install_hook_types: [pre-commit, commit-msg, pre-push]
 # A hook runs at pre-commit unless it names its stage. The pre-push stage
 # runs only the costly checks, because a pushed commit already passed the
@@ -127,21 +131,21 @@ repos:
   # DCTL_ENFORCE_ONEFN_GATE is set. make comes from stdenv in the devShell.
   - repo: local
     hooks:
-      # owner: devshell (no-hook-language) the gate is a make target, and make has no hook in a language that pre-commit builds.
+      # owner: devshell (no-hook-language) the gate is a make target, and make has no hook in a language that the hook runner builds.
       - id: gate-no-eval
         name: gate no eval
         language: system
         entry: make --no-print-directory gate-no-eval
         files: ^(bin|lib|hooks)/.*\.sh$
         pass_filenames: false
-      # owner: devshell (no-hook-language) the gate is a make target, and make has no hook in a language that pre-commit builds.
+      # owner: devshell (no-hook-language) the gate is a make target, and make has no hook in a language that the hook runner builds.
       - id: gate-no-raw-ansi
         name: gate no raw ansi
         language: system
         entry: make --no-print-directory gate-no-raw-ansi
         files: ^(bin|lib)/.*\.sh$
         pass_filenames: false
-      # owner: devshell (no-hook-language) the gate is a make target, and make has no hook in a language that pre-commit builds.
+      # owner: devshell (no-hook-language) the gate is a make target, and make has no hook in a language that the hook runner builds.
       - id: gate-one-public-fn-per-file
         name: gate one public fn per file
         language: system
@@ -156,7 +160,7 @@ repos:
 
   - repo: local
     hooks:
-      # owner: devshell (no-hook-language) bats has no hook in a language that pre-commit builds.
+      # owner: devshell (no-hook-language) bats has no hook in a language that the hook runner builds.
       - id: bats-unit
         name: bats unit tests
         language: system
@@ -171,7 +175,7 @@ repos:
         # Without a stage list the hook runs at every installed hook type, so
         # one commit ran the unit suite twice: at pre-commit and at commit-msg.
         stages: [pre-commit]
-      # owner: devshell (no-hook-language) bats has no hook in a language that pre-commit builds.
+      # owner: devshell (no-hook-language) bats has no hook in a language that the hook runner builds.
       - id: bats-integration
         name: bats integration tests
         language: system
@@ -182,7 +186,7 @@ repos:
       # slidev build – catches deck breakages before pushing to GitHub Pages.
       # Requires slides/node_modules (run `npm ci` in slides/ first). node comes
       # from the devShell.
-      # owner: devshell (no-hook-language) the Slidev build runs the npm of the devshell on slides/package.json, and has no hook in a language that pre-commit builds.
+      # owner: devshell (no-hook-language) the Slidev build runs the npm of the devshell on slides/package.json, and has no hook in a language that the hook runner builds.
       - id: slidev-build
         name: slidev build
         language: system
@@ -199,9 +203,14 @@ repos:
         entry: '^(?!\s*#).*(withPackages|python3[0-9]*Packages\.|pythonPackages\.|nodePackages\.|perlPackages\.)'
         files: '(^|/)flake\.nix$|(^|/)nix/.*\.nix$'
 
-  # A flake reference reads the git tree of a checkout, never a path copy of
-  # the whole folder into the Nix store. The hook is published by exobrain-tech.
+  # The hooks that exobrain-tech publishes. A flake reference reads the git
+  # tree of a checkout, never a path copy of the whole folder into the Nix
+  # store. A flake holds no git hook runner, because the host supplies prek.
+  # host-requirements.toml parses each time it changes; the hook runs the
+  # exobrain of the devshell.
   - repo: https://github.com/gubasso/exobrain-tech
-    rev: v1.0.0
+    rev: v1.1.0
     hooks:
       - id: no-path-flake-reference
+      - id: no-hook-runner-in-flake
+      - id: host-requirements
