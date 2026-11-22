@@ -11,8 +11,11 @@ default_install_hook_types: [pre-commit, commit-msg, pre-push]
 default_stages: [pre-commit]
 
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+  # prek runs its built-in hooks in its own binary: no clone, no environment,
+  # and no `rev`. They take the place of pre-commit/pre-commit-hooks and
+  # maresb/check-json5, as in the common reference set of exobrain-tech
+  # (https://prek.j178.dev/0.5.7/reference/built-in-hooks/).
+  - repo: builtin
     hooks:
       # The two fixers skip the lock files that nix and npm write. A generated
       # file follows its generator, so no hook rewrites it: the dev environment
@@ -41,11 +44,12 @@ repos:
         # is not in the ban list. staging and main are kept as guards against a
         # commit landing on a branch this project does not use.
         args: [--branch, staging, --branch, main]
-
-  - repo: https://github.com/maresb/check-json5
-    rev: v1.0.1
-    hooks:
+      # The built-in selects only .json5 files, and the upstream hook selected
+      # json and json5. `types` resets the filter to every file, and
+      # `types_or` restores json and json5 and adds jsonc.
       - id: check-json5
+        types: [file]
+        types_or: [json, json5, jsonc]
 
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1
