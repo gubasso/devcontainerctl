@@ -21,6 +21,7 @@ version = "*"
 [tools.find]
 
 # The dev targets of the Makefile and the hooks host-requirements and
-# hook-revisions call it. 1.2.0 is the first release with `hooks check`.
+# hook-revisions call it, and .envrc runs `exobrain outdated`. 2.0.0 is the
+# first release with `exobrain outdated`.
 [tools.exobrain]
-version = ">=1.2.0"
+version = ">=2.0.0"
