@@ -52,12 +52,12 @@ repos:
         types_or: [json, json5, jsonc]
 
   - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.11.0.1
+    rev: v0.11.0.1-1
     hooks:
       - id: shellcheck
 
   - repo: https://github.com/scop/pre-commit-shfmt
-    rev: v3.12.0-2
+    rev: v3.14.1-1
     hooks:
       - id: shfmt
         args: ["-w", "-i", "2", "-ci", "-bn", "-s"]
@@ -82,7 +82,7 @@ repos:
         exclude: ^tests/(.*\.bats|test_helper\.bash)$
 
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.30.0
+    rev: v8.30.1
     hooks:
       - id: gitleaks
         pass_filenames: false
@@ -210,11 +210,15 @@ repos:
   # The hooks that exobrain-tech publishes. A flake reference reads the git
   # tree of a checkout, never a path copy of the whole folder into the Nix
   # store. A flake holds no git hook runner, because the host supplies prek.
-  # host-requirements.toml parses each time it changes; the hook runs the
-  # exobrain of the devshell.
+  # host-requirements.toml parses each time it changes. hook-revisions holds
+  # the `rev` of each repository of the common, bash, and nix reference sets
+  # to this tag, and reads no other field. Both hooks run the exobrain CLI of
+  # the host, and `exobrain hooks sync --to <tag>` moves every such `rev`.
   - repo: https://github.com/gubasso/exobrain-tech
-    rev: v1.1.0
+    rev: v1.2.0
     hooks:
       - id: no-path-flake-reference
       - id: no-hook-runner-in-flake
       - id: host-requirements
+      - id: hook-revisions
+        args: [--set, common, --set, bash, --set, nix]
