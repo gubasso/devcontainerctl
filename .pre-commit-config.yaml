@@ -215,7 +215,7 @@ repos:
   # to this tag, and reads no other field. Both hooks run the exobrain CLI of
   # the host, and `exobrain hooks sync --to <tag>` moves every such `rev`.
   - repo: https://github.com/gubasso/exobrain-tech
-    rev: v1.2.0
+    rev: v2.0.0
     hooks:
       - id: no-path-flake-reference
       - id: no-hook-runner-in-flake
