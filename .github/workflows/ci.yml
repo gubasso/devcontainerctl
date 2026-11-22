@@ -2,8 +2,9 @@ name: CI
 
 # CI runs the two stages of the git hooks in the devshell of flake.nix, so a
 # push that passed the local hooks passes CI, with the same tools. A check
-# that only CI can run gets its own step, with a comment that says why. See
-# "CI and the git hooks" in README.md.
+# that only CI can run gets its own step, with a comment that says why. Each
+# step names its stage, so that a group filter never also runs the hooks of
+# the `manual` stage. See "CI and the git hooks" in README.md.
 on:
   push:
   pull_request:
@@ -46,8 +47,24 @@ jobs:
           path: ~/.cache/prek
           key: prek-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml', 'flake.lock') }}
 
+      # hook-revisions and host-requirements call the exobrain CLI, a host
+      # tool that the devshell does not hold. The step installs the release
+      # that the exobrain-tech entry of .pre-commit-config.yaml pins, and
+      # checks its artifact attestation. yq and gh come with the runner.
+      - name: Install the exobrain CLI of the pinned exobrain-tech tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(yq '.repos[] | select(.repo | test("/exobrain-tech(\.git)?/?$")) | .rev' .pre-commit-config.yaml)
+          asset=exobrain-x86_64-unknown-linux-gnu.tar.xz
+          gh release download "$tag" --repo gubasso/exobrain-tech --pattern "$asset" --dir "$RUNNER_TEMP"
+          gh attestation verify "$RUNNER_TEMP/$asset" --repo gubasso/exobrain-tech
+          mkdir -p "$RUNNER_TEMP/exobrain"
+          tar -xJf "$RUNNER_TEMP/$asset" -C "$RUNNER_TEMP/exobrain" --strip-components=1
+          echo "$RUNNER_TEMP/exobrain" >> "$GITHUB_PATH"
+
       - name: Run the pre-commit stage
-        run: nix develop --command prek run --all-files --show-diff-on-failure
+        run: nix develop --command prek run --all-files --stage pre-commit --show-diff-on-failure
 
   pre-push:
     runs-on: ubuntu-latest
@@ -79,5 +96,21 @@ jobs:
       - name: Install the slides dependencies
         run: nix develop --command npm ci --prefix slides --no-audit --no-fund
 
+      # hook-revisions and host-requirements call the exobrain CLI, a host
+      # tool that the devshell does not hold. The step installs the release
+      # that the exobrain-tech entry of .pre-commit-config.yaml pins, and
+      # checks its artifact attestation. yq and gh come with the runner.
+      - name: Install the exobrain CLI of the pinned exobrain-tech tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(yq '.repos[] | select(.repo | test("/exobrain-tech(\.git)?/?$")) | .rev' .pre-commit-config.yaml)
+          asset=exobrain-x86_64-unknown-linux-gnu.tar.xz
+          gh release download "$tag" --repo gubasso/exobrain-tech --pattern "$asset" --dir "$RUNNER_TEMP"
+          gh attestation verify "$RUNNER_TEMP/$asset" --repo gubasso/exobrain-tech
+          mkdir -p "$RUNNER_TEMP/exobrain"
+          tar -xJf "$RUNNER_TEMP/$asset" -C "$RUNNER_TEMP/exobrain" --strip-components=1
+          echo "$RUNNER_TEMP/exobrain" >> "$GITHUB_PATH"
+
       - name: Run the pre-push stage
-        run: nix develop --command prek run --all-files --hook-stage pre-push
+        run: nix develop --command prek run --all-files --stage pre-push

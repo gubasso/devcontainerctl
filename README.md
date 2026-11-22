@@ -377,7 +377,7 @@ The hooks take their tools from `PATH`, so commit from the dev shell, or with `d
 
 ## CI and the git hooks
 
-A push that passed the local git hooks passes CI. CI, `.github/workflows/ci.yml`, runs the same hook stages in the dev shell, on every push and pull request, one job for each stage:
+A push that passed the local git hooks passes CI. CI, `.github/workflows/ci.yml`, runs the same hook stages in the dev shell, on every push and pull request, one job for each stage. Each job installs prek and the `exobrain` CLI as host tools, because `hook-revisions` and `host-requirements` call the CLI. The CLI is the release of the `rev` of the exobrain-tech entry in `.pre-commit-config.yaml`:
 
 | Hook stage | What it runs | CI job |
 | --- | --- | --- |
@@ -387,14 +387,19 @@ A push that passed the local git hooks passes CI. CI, `.github/workflows/ci.yml`
 
 A hook runs at `pre-commit` unless it names its stage, and the `pre-push` stage runs only the costly checks, because a pushed commit already passed `pre-commit`. The safety gates call their `make gate-*` targets. `gate-no-raw-ansi` and `gate-one-public-fn-per-file` stay deferred until `DCTL_ENFORCE_ANSI_GATE` or `DCTL_ENFORCE_ONEFN_GATE` is set.
 
-CI exceptions, the checks that only CI runs: none. Such a check gets its own step in `ci.yml`, with a comment that says why only CI can run it, and a line in this list.
+`hook-revisions` holds the `rev` of each repository of the common, bash, and nix reference sets of exobrain-tech to the tag of the exobrain-tech entry, and reads no other field. `exobrain hooks sync --to <tag>` moves every such `rev` and the tag together.
+
+The hook configuration declares the scope of each hook that one runtime cannot run, as a prek group. A hook that CI cannot run takes `groups: [local-only]`. A check that only CI can run takes `stages: [manual]` and `groups: [ci-only]`, so that no git hook fires it. A comment above each grouped hook says why. Each CI step names its stage, because a group filter with no stage also runs the `manual` hooks. Today no hook carries a group:
+
+- Local-only hooks: none.
+- CI-only checks: none.
 
 Run the two stages as CI does. The `slidev-build` hook needs `slides/node_modules`:
 
 ```bash
-nix develop --command prek run --all-files
+nix develop --command prek run --all-files --stage pre-commit
 nix develop --command npm ci --prefix slides
-nix develop --command prek run --all-files --hook-stage pre-push
+nix develop --command prek run --all-files --stage pre-push
 ```
 
 ## Further Reading
